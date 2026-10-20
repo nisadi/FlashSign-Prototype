@@ -1,0 +1,14 @@
+{
+  "name": "flash-sign-prototype",
+  "version": "0.1.0",
+  "private": true,
+  "workspaces": [
+    "flash-sign-proto"
+  ],
+  "scripts": {
+    "dev": "npm run dev --prefix flash-sign-proto",
+    "build": "npm run build --prefix flash-sign-proto",
+    "start": "npm run start --prefix flash-sign-proto",
+    "lint": "npm run lint --prefix flash-sign-proto"
+  }
+}

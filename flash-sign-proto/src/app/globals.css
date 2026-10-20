@@ -1,0 +1,147 @@
+@import "tailwindcss";
+
+/* ── Flash Sign Design System ── */
+:root {
+  --ink: #0c1f22;
+  --ink-soft: #1a3539;
+  --flash: #00c2a8;
+  --flash-deep: #009882;
+  --paper: #f3f6f4;
+  --paper-elevated: #ffffff;
+  --mist: #d7e5e1;
+  --line: #c5d4d0;
+  --muted: #5a6f6c;
+  --danger: #c23b3b;
+  --waiting: #c47a12;
+  --background: var(--paper);
+  --foreground: var(--ink);
+  --font-body: "Inter", system-ui, sans-serif;
+  --font-display: "Inter", system-ui, sans-serif;
+
+  /* Sidebar */
+  --sidebar-w: 240px;
+  --sidebar-w-collapsed: 64px;
+
+  /* Radius */
+  --radius: 8px;
+  --radius-lg: 12px;
+  --radius-sm: 4px;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-ink: var(--ink);
+  --color-ink-soft: var(--ink-soft);
+  --color-flash: var(--flash);
+  --color-flash-deep: var(--flash-deep);
+  --color-paper: var(--paper);
+  --color-paper-elevated: var(--paper-elevated);
+  --color-mist: var(--mist);
+  --color-line: var(--line);
+  --color-muted: var(--muted);
+  --color-danger: var(--danger);
+  --color-waiting: var(--waiting);
+  --font-sans: var(--font-body);
+  --font-display: var(--font-display);
+  --radius: var(--radius);
+}
+
+/* ── Keyframes ── */
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes draw-line {
+  from { width: 0; }
+  to   { width: 100%; }
+}
+@keyframes pulse-bar {
+  0%, 100% { opacity: 1; }
+  50%       { opacity: 0.85; }
+}
+@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes slide-in-right {
+  from { transform: translateX(100%); opacity: 0; }
+  to   { transform: translateX(0); opacity: 1; }
+}
+
+/* ── Animation Classes ── */
+.animate-fade-up          { animation: fade-up 0.55s ease-out both; }
+.animate-fade-up-delay-1  { animation: fade-up 0.55s ease-out 0.08s both; }
+.animate-fade-up-delay-2  { animation: fade-up 0.55s ease-out 0.16s both; }
+.animate-draw-line        { animation: draw-line 0.7s ease-out 0.3s both; }
+.animate-pulse-bar        { animation: pulse-bar 2.4s ease-in-out infinite; }
+.animate-slide-in-right   { animation: slide-in-right 0.3s ease-out both; }
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-fade-up,
+  .animate-fade-up-delay-1,
+  .animate-fade-up-delay-2,
+  .animate-draw-line,
+  .animate-pulse-bar,
+  .animate-slide-in-right { animation: none !important; }
+}
+
+/* ── Background Textures ── */
+.paper-grain {
+  background-image:
+    radial-gradient(ellipse 80% 50% at 10% -10%, rgba(0,194,168,0.12), transparent),
+    radial-gradient(ellipse 60% 40% at 90% 0%,   rgba(12,31,34,0.06),  transparent),
+    linear-gradient(180deg, #eef4f1 0%, var(--paper) 40%, #e8efec 100%);
+}
+
+.hero-wash {
+  background:
+    linear-gradient(135deg, #0c1f22 0%, #143439 48%, #0f2c30 100%),
+    radial-gradient(ellipse 70% 80% at 85% 20%, rgba(0,194,168,0.22), transparent);
+  background-blend-mode: normal;
+}
+
+/* ── Base ── */
+*, *::before, *::after { box-sizing: border-box; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* ── Scrollbar ── */
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--line); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--muted); }
+
+/* ── Focus ── */
+:focus-visible {
+  outline: 2px solid var(--flash);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+/* ── Typography helpers ── */
+.text-display { font-family: var(--font-display); }
+
+/* ── Kanban drag ── */
+.kanban-col { min-height: 200px; }
+
+/* ── Status colors ── */
+.status-todo        { background: var(--mist);  color: var(--ink); }
+.status-in-progress { background: #dbeeff;      color: #1a4a7c; }
+.status-review      { background: #fef3e0;      color: #7c4a00; }
+.status-done        { background: #d4f5ee;      color: #0a5c4e; }
+.status-blocked     { background: #fde8e8;      color: #7c1a1a; }
+
+/* ── Priority colors ── */
+.priority-critical  { color: var(--danger); }
+.priority-high      { color: #e05c00; }
+.priority-medium    { color: var(--waiting); }
+.priority-low       { color: var(--muted); }
+
+/* ── Transitions ── */
+.transition-base { transition: all 0.2s ease; }
