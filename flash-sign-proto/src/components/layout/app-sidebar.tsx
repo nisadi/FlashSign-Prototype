@@ -49,7 +49,7 @@ export function AppSidebar() {
       <aside
         className={cn(
           'fixed left-0 top-0 h-full z-30 flex flex-col transition-all duration-300 hero-wash border-r border-ink-soft/50',
-          sidebarCollapsed ? 'w-16' : 'w-60'
+          sidebarCollapsed ? '-translate-x-full lg:translate-x-0 lg:w-16' : 'translate-x-0 w-60'
         )}
         style={{ background: 'linear-gradient(180deg, #0c1f22 0%, #0f2a2e 100%)' }}
       >

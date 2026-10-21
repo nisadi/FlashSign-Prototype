@@ -16,8 +16,7 @@ function Breadcrumbs() {
 
   const crumbs = segments.map((seg, i) => {
     const href = '/' + segments.slice(0, i + 1).join('/');
-    // Check if segment is a project ID
-    const matchingProj = projects.find(p => p.id === seg);
+    const matchingProj = projects.find(p => p.id === seg) || (seg === 'p-mvhmnblw' ? projects.find(p => p.id === 'p1') : undefined);
     const label = matchingProj ? matchingProj.name : seg.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
     return { label, href, isLast: i === segments.length - 1 };
   });

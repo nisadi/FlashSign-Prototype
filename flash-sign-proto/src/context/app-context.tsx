@@ -160,8 +160,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     const saved = loadState();
-    setState(saved);
+    const isMobile = typeof window !== 'undefined' && window.innerWidth < 1024;
+    setState({
+      ...saved,
+      sidebarCollapsed: isMobile ? true : (saved.sidebarCollapsed ?? false),
+    });
     setHydrated(true);
+
+    const handleResize = () => {
+      if (window.innerWidth < 1024) {
+        setState(s => s.sidebarCollapsed ? s : { ...s, sidebarCollapsed: true });
+      }
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   useEffect(() => {

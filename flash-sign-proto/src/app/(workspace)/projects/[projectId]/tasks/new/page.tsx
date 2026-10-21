@@ -118,7 +118,7 @@ export default function CreateTaskPage({
   };
 
   return (
-    <div className="min-h-screen bg-paper pb-16">
+    <div className="min-h-full bg-paper pb-16">
       <ProjectHeaderNav projectId={projectId} activeTab="tasks" />
 
       <div className="max-w-3xl mx-auto px-4 sm:px-6 py-6 animate-fade-up space-y-6">

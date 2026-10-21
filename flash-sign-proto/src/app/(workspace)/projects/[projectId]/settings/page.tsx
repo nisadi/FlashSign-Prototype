@@ -90,7 +90,7 @@ export default function ProjectSettingsPage({
   };
 
   return (
-    <div className="min-h-screen bg-paper pb-16">
+    <div className="min-h-full bg-paper pb-16">
       <ProjectHeaderNav projectId={projectId} activeTab="settings" />
 
       <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-fade-up">
