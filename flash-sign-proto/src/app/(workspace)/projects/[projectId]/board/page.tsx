@@ -56,10 +56,11 @@ export default function KanbanBoardPage({
   // Filter tasks
   const filteredTasks = useMemo(() => {
     return projectTasks.filter((t) => {
+      const taskLabels = t.labels || t.tags || [];
       const matchSearch =
         t.title.toLowerCase().includes(search.toLowerCase()) ||
         t.key.toLowerCase().includes(search.toLowerCase()) ||
-        t.labels.some((l) => l.toLowerCase().includes(search.toLowerCase()));
+        taskLabels.some((l: string) => l.toLowerCase().includes(search.toLowerCase()));
       const matchAssignee = assigneeFilter === 'all' || t.assigneeId === assigneeFilter;
       const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
       return matchSearch && matchAssignee && matchPriority;

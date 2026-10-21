@@ -1,6 +1,6 @@
 'use client';
 
-import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type {
   DemoRole, User, Project, Task, Sprint, Document, ApprovalRequest,
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
@@ -14,7 +14,13 @@ import { ROLE_CONFIGS } from '@/lib/permissions';
 import type { Organization } from '@/types';
 
 // ── State Shape ────────────────────────────────────────────────────────────────
-interface AppState {
+export type CreateProjectInput = Partial<Project> & { name: string };
+export type CreateTaskInput = Partial<Task> & { title: string; projectId: string };
+export type CreateSprintInput = Partial<Sprint> & { name: string; projectId: string };
+export type CreateMilestoneInput = Partial<Milestone> & { name: string; projectId: string };
+export type CreateFileInput = Partial<ProjectFile> & { name: string; projectId: string };
+
+export interface AppState {
   demoRole: DemoRole;
   currentUserId: string;
   org: Organization;
@@ -29,6 +35,7 @@ interface AppState {
   approvals: ApprovalRequest[];
   notifications: Notification[];
   auditLogs: AuditLog[];
+  activities: AuditLog[];
   agentRuns: AgentRun[];
   sidebarCollapsed: boolean;
   recentProjectIds: string[];
@@ -39,29 +46,29 @@ interface AppState {
 interface AppActions {
   setDemoRole: (role: DemoRole) => void;
   // Projects
-  addProject: (project: Project) => void;
+  addProject: (project: CreateProjectInput) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
   deleteProject: (id: string) => void;
   archiveProject: (id: string) => void;
   toggleFavoriteProject: (id: string) => void;
   addRecentProject: (id: string) => void;
   // Tasks
-  addTask: (task: Task) => void;
+  addTask: (task: CreateTaskInput) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   // Sprints
-  addSprint: (sprint: Sprint) => void;
+  addSprint: (sprint: CreateSprintInput) => void;
   updateSprint: (id: string, updates: Partial<Sprint>) => void;
   deleteSprint: (id: string) => void;
   // Milestones
-  addMilestone: (milestone: Milestone) => void;
+  addMilestone: (milestone: CreateMilestoneInput) => void;
   updateMilestone: (id: string, updates: Partial<Milestone>) => void;
   deleteMilestone: (id: string) => void;
   // Files
-  addFile: (file: ProjectFile) => void;
+  addFile: (file: CreateFileInput) => void;
   deleteFile: (id: string) => void;
   // Activity
-  addActivity: (log: AuditLog) => void;
+  addActivity: (log: Partial<AuditLog> & { action: string; resource: string; resourceId: string }) => void;
   // Documents
   addDocument: (doc: Document) => void;
   updateDocument: (id: string, updates: Partial<Document>) => void;
@@ -81,7 +88,7 @@ interface AppActions {
   resetDemoData: () => void;
 }
 
-type AppContextValue = AppState & AppActions;
+export type AppContextValue = AppState & AppActions;
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -103,6 +110,7 @@ function getInitialState(): AppState {
     approvals: MOCK_APPROVALS,
     notifications: MOCK_NOTIFICATIONS,
     auditLogs: MOCK_AUDIT_LOGS,
+    activities: MOCK_AUDIT_LOGS,
     agentRuns: MOCK_AGENT_RUNS,
     sidebarCollapsed: false,
     recentProjectIds: ['p1', 'p2', 'p3'],
@@ -164,7 +172,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     setState(updater);
   }, []);
 
-  const actions: AppActions = {
+  const actions: AppActions = useMemo(() => ({
     setDemoRole: (role) => update(s => ({
       ...s,
       demoRole: role,
@@ -172,11 +180,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })),
 
     // Projects
-    addProject: (project) => update(s => ({
-      ...s,
-      projects: [project, ...s.projects],
-      recentProjectIds: [project.id, ...s.recentProjectIds.filter(id => id !== project.id)],
-    })),
+    addProject: (p) => update(s => {
+      const newProject: Project = {
+        id: p.id || `p-${Date.now()}`,
+        name: p.name,
+        key: p.key || p.name.substring(0, 3).toUpperCase(),
+        description: p.description || '',
+        status: p.status || 'active',
+        health: p.health || 'on_track',
+        ownerId: p.ownerId || s.currentUserId,
+        teamIds: p.teamIds || [],
+        memberIds: p.memberIds || [s.currentUserId],
+        startDate: p.startDate || new Date().toISOString().split('T')[0],
+        endDate: p.endDate || p.dueDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
+        dueDate: p.dueDate || p.endDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
+        progress: p.progress || 0,
+        priority: p.priority || 'medium',
+        tags: p.tags || [],
+        category: p.category,
+        group: p.group,
+        isFavorite: p.isFavorite,
+        isArchived: p.isArchived,
+        accentColor: p.accentColor,
+        goals: p.goals,
+        createdAt: p.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      return {
+        ...s,
+        projects: [newProject, ...s.projects],
+        recentProjectIds: [newProject.id, ...s.recentProjectIds.filter(id => id !== newProject.id)],
+      };
+    }),
     updateProject: (id, updates) => update(s => ({
       ...s,
       projects: s.projects.map(p => p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p),
@@ -197,22 +232,51 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...s,
       projects: s.projects.map(p => p.id === id ? { ...p, isFavorite: !p.isFavorite } : p),
     })),
-    addRecentProject: (id) => update(s => ({
-      ...s,
-      recentProjectIds: [id, ...s.recentProjectIds.filter(pid => pid !== id)].slice(0, 10),
-    })),
+    addRecentProject: (id) => update(s => {
+      if (s.recentProjectIds && s.recentProjectIds[0] === id) return s;
+      return {
+        ...s,
+        recentProjectIds: [id, ...(s.recentProjectIds || []).filter(pid => pid !== id)].slice(0, 10),
+      };
+    }),
 
     // Tasks
-    addTask: (task) => update(s => {
-      const nextTasks = [task, ...s.tasks];
+    addTask: (t) => update(s => {
+      const newTask: Task = {
+        id: t.id || `t-${Date.now()}`,
+        key: t.key || `FS-${s.tasks.length + 1}`,
+        title: t.title,
+        description: t.description || '',
+        type: t.type || 'task',
+        status: t.status || 'todo',
+        priority: t.priority || 'medium',
+        projectId: t.projectId,
+        sprintId: t.sprintId,
+        assigneeId: t.assigneeId,
+        reporterId: t.reporterId || s.currentUserId,
+        parentId: t.parentId,
+        storyPoints: t.storyPoints || t.points,
+        points: t.points || t.storyPoints,
+        startDate: t.startDate,
+        dueDate: t.dueDate,
+        tags: t.tags || t.labels || [],
+        labels: t.labels || t.tags || [],
+        comments: t.comments || [],
+        attachments: t.attachments || [],
+        checklist: t.checklist || [],
+        acceptanceCriteria: t.acceptanceCriteria,
+        createdAt: t.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      const nextTasks = [newTask, ...s.tasks];
       // Recalculate project progress
-      const projectTasks = nextTasks.filter(t => t.projectId === task.projectId);
-      const doneCount = projectTasks.filter(t => t.status === 'done').length;
+      const projectTasks = nextTasks.filter(item => item.projectId === newTask.projectId);
+      const doneCount = projectTasks.filter(item => item.status === 'done').length;
       const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
       return {
         ...s,
         tasks: nextTasks,
-        projects: s.projects.map(p => p.id === task.projectId ? { ...p, progress, updatedAt: new Date().toISOString() } : p),
+        projects: s.projects.map(p => p.id === newTask.projectId ? { ...p, progress, updatedAt: new Date().toISOString() } : p),
       };
     }),
     updateTask: (id, updates) => update(s => {
@@ -252,7 +316,20 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }),
 
     // Sprints
-    addSprint: (sprint) => update(s => ({ ...s, sprints: [...s.sprints, sprint] })),
+    addSprint: (sp) => update(s => {
+      const newSprint: Sprint = {
+        id: sp.id || `sprint-${Date.now()}`,
+        name: sp.name,
+        projectId: sp.projectId,
+        status: sp.status || 'planning',
+        goal: sp.goal || '',
+        startDate: sp.startDate || new Date().toISOString().split('T')[0],
+        endDate: sp.endDate || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+        capacity: sp.capacity || 20,
+        createdAt: sp.createdAt || new Date().toISOString(),
+      };
+      return { ...s, sprints: [...s.sprints, newSprint] };
+    }),
     updateSprint: (id, updates) => update(s => ({
       ...s,
       sprints: s.sprints.map(sp => sp.id === id ? { ...sp, ...updates } : sp),
@@ -264,7 +341,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })),
 
     // Milestones
-    addMilestone: (milestone) => update(s => ({ ...s, milestones: [...s.milestones, milestone] })),
+    addMilestone: (m) => update(s => {
+      const newMilestone: Milestone = {
+        id: m.id || `m-${Date.now()}`,
+        name: m.name,
+        description: m.description || '',
+        projectId: m.projectId,
+        dueDate: m.dueDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        status: m.status || 'pending',
+        progress: m.progress || 0,
+        taskIds: m.taskIds || [],
+      };
+      return { ...s, milestones: [...s.milestones, newMilestone] };
+    }),
     updateMilestone: (id, updates) => update(s => ({
       ...s,
       milestones: s.milestones.map(m => m.id === id ? { ...m, ...updates } : m),
@@ -272,11 +361,39 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteMilestone: (id) => update(s => ({ ...s, milestones: s.milestones.filter(m => m.id !== id) })),
 
     // Files
-    addFile: (file) => update(s => ({ ...s, files: [file, ...s.files] })),
+    addFile: (f) => update(s => {
+      const newFile: ProjectFile = {
+        id: f.id || `file-${Date.now()}`,
+        name: f.name,
+        projectId: f.projectId,
+        size: f.size || '1.2 MB',
+        type: f.type || 'pdf',
+        uploadedBy: f.uploadedBy || s.currentUserId,
+        createdAt: f.createdAt || new Date().toISOString(),
+        taskId: f.taskId,
+      };
+      return { ...s, files: [newFile, ...s.files] };
+    }),
     deleteFile: (id) => update(s => ({ ...s, files: s.files.filter(f => f.id !== id) })),
 
     // Activity
-    addActivity: (log) => update(s => ({ ...s, auditLogs: [log, ...s.auditLogs] })),
+    addActivity: (log) => update(s => {
+      const newLog: AuditLog = {
+        id: log.id || `act-${Date.now()}`,
+        actorId: log.actorId || s.currentUserId,
+        actorName: log.actorName || 'User',
+        action: log.action,
+        resource: log.resource,
+        resourceId: log.resourceId,
+        detail: log.detail,
+        timestamp: log.timestamp || new Date().toISOString(),
+      };
+      return {
+        ...s,
+        auditLogs: [newLog, ...s.auditLogs],
+        activities: [newLog, ...(s.activities || s.auditLogs)],
+      };
+    }),
 
     // Documents
     addDocument: (doc) => update(s => ({ ...s, documents: [...s.documents, doc] })),
@@ -318,9 +435,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       if (typeof window !== 'undefined') localStorage.removeItem(STORAGE_KEY);
       update(() => getInitialState());
     },
-  };
+  }), [update]);
 
-  const value: AppContextValue = { ...state, ...actions };
+  const value: AppContextValue = useMemo(() => ({ ...state, ...actions }), [state, actions]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

@@ -208,7 +208,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <p className="text-[10px] text-muted mt-0.5">{formatDate(m.dueDate)}</p>
-                  <ProgressBar value={m.progress} height={3} className="mt-2" />
+                  <ProgressBar value={m.progress ?? 0} height={3} className="mt-2" />
                 </div>
               ))}
             </div>

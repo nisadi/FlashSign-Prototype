@@ -121,8 +121,8 @@ export function Card({ children, className }: { children: React.ReactNode; class
 
 // ── Button ────────────────────────────────────────────────────────────────────
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'ghost' | 'danger';
-  size?: 'sm' | 'md' | 'lg';
+  variant?: 'primary' | 'secondary' | 'ghost' | 'danger' | 'outline';
+  size?: 'xs' | 'sm' | 'md' | 'lg';
   icon?: React.ElementType;
   loading?: boolean;
 }
@@ -140,10 +140,12 @@ export function Button({
   const variants = {
     primary:   'bg-flash text-ink hover:bg-flash-deep hover:text-white',
     secondary: 'bg-paper-elevated border border-line text-ink hover:bg-mist',
+    outline:   'bg-transparent border border-line text-ink hover:bg-mist',
     ghost:     'text-muted hover:text-ink hover:bg-mist',
     danger:    'bg-danger text-white hover:bg-red-700',
   };
   const sizes = {
+    xs: 'px-2 py-1 text-[11px] gap-1',
     sm: 'px-2.5 py-1.5 text-xs gap-1',
     md: 'px-3.5 py-2 text-sm gap-1.5',
     lg: 'px-5 py-2.5 text-sm gap-2',

@@ -7,7 +7,7 @@ import { PageHeader, Button, EmptyState, ProgressBar } from '@/components/shared
 import { ProjectStatusBadge, HealthBadge, PriorityBadge } from '@/components/shared/badges';
 import { AvatarGroup } from '@/components/shared/avatar';
 import { formatDate } from '@/lib/utils';
-import type { Project } from '@/types';
+import type { Project, ProjectHealth } from '@/types';
 import { canCreateProject } from '@/lib/permissions';
 import {
   Plus, LayoutGrid, List, Search, Filter, FolderKanban,
@@ -220,7 +220,12 @@ function ProjectCardItem({
   const projectTasks = tasks.filter(t => t.projectId === project.id);
   const doneTasks = projectTasks.filter(t => t.status === 'done').length;
 
-  const healthColors = { on_track: 'var(--flash)', at_risk: 'var(--waiting)', off_track: 'var(--danger)' };
+  const healthColors: Record<ProjectHealth, string> = {
+    on_track: 'var(--flash)',
+    at_risk: 'var(--waiting)',
+    off_track: 'var(--danger)',
+    delayed: 'var(--danger)',
+  };
 
   // Calculate days left
   const dueDate = new Date(project.endDate);

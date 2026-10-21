@@ -35,7 +35,7 @@ export function SearchCommand({ isOpen, onClose }: SearchCommandProps) {
   const matchingProjects = q ? projects.filter(p => p.name.toLowerCase().includes(q) || p.key.toLowerCase().includes(q)) : projects.slice(0, 3);
   const matchingTasks = q ? tasks.filter(t => t.title.toLowerCase().includes(q) || t.key.toLowerCase().includes(q)) : tasks.slice(0, 4);
   const matchingMilestones = q ? milestones.filter(m => m.name.toLowerCase().includes(q)) : milestones.slice(0, 2);
-  const matchingSprints = q ? sprints.filter(s => s.name.toLowerCase().includes(q) || s.goal.toLowerCase().includes(q)) : sprints.slice(0, 2);
+  const matchingSprints = q ? sprints.filter(s => s.name.toLowerCase().includes(q) || (s.goal && s.goal.toLowerCase().includes(q))) : sprints.slice(0, 2);
   const matchingUsers = q ? users.filter(u => u.name.toLowerCase().includes(q) || u.title?.toLowerCase().includes(q)) : [];
 
   const hasResults =

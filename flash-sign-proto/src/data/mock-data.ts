@@ -1,7 +1,7 @@
 import type {
   User, Organization, Project, Team, Task, Sprint, Milestone,
   Document, ApprovalRequest, Notification, AuditLog, Integration,
-  AgentRun, DemoRole,
+  AgentRun, DemoRole, ProjectFile,
 } from '@/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────

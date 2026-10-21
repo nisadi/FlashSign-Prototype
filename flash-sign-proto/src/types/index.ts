@@ -42,8 +42,9 @@ export interface Organization {
 
 // ─── Projects ───────────────────────────────────────────────────────────────
 
-export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled';
-export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track';
+export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled' | 'archived';
+export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track' | 'delayed';
+export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
 
 export interface Project {
   id: string;
@@ -57,9 +58,11 @@ export interface Project {
   memberIds: string[];
   startDate: string;
   endDate: string;
+  dueDate?: string;
   progress: number; // 0–100
-  priority: 'low' | 'medium' | 'high' | 'critical';
+  priority: ProjectPriority;
   tags: string[];
+  category?: string;
   isFavorite?: boolean;
   isArchived?: boolean;
   icon?: string;
@@ -115,9 +118,11 @@ export interface Task {
   reporterId: string;
   parentId?: string;
   storyPoints?: number;
+  points?: number;
   startDate?: string;
   dueDate?: string;
   tags: string[];
+  labels?: string[];
   comments: TaskComment[];
   attachments: string[];
   checklist?: TaskChecklistItem[];
@@ -129,7 +134,7 @@ export interface Task {
 export interface ProjectFile {
   id: string;
   name: string;
-  type: 'pdf' | 'doc' | 'figma' | 'archive' | 'image' | 'code';
+  type: 'pdf' | 'doc' | 'figma' | 'archive' | 'image' | 'code' | string;
   size: string;
   projectId: string;
   taskId?: string;
@@ -139,17 +144,17 @@ export interface ProjectFile {
 
 // ─── Sprints ─────────────────────────────────────────────────────────────────
 
-export type SprintStatus = 'planned' | 'active' | 'completed';
+export type SprintStatus = 'planned' | 'planning' | 'active' | 'completed';
 
 export interface Sprint {
   id: string;
   name: string;
   projectId: string;
   status: SprintStatus;
-  goal: string;
+  goal?: string;
   startDate: string;
   endDate: string;
-  capacity: number;
+  capacity?: number;
   createdAt: string;
 }
 
@@ -161,8 +166,9 @@ export interface Milestone {
   name: string;
   description: string;
   dueDate: string;
-  status: 'upcoming' | 'at_risk' | 'completed' | 'missed';
-  progress: number;
+  status: 'upcoming' | 'at_risk' | 'completed' | 'missed' | 'pending' | 'achieved';
+  progress?: number;
+  taskIds?: string[];
 }
 
 // ─── AI Agents ───────────────────────────────────────────────────────────────
@@ -293,7 +299,7 @@ export interface AuditLog {
   resource: string;
   resourceId: string;
   detail?: string;
-  ipAddress: string;
+  ipAddress?: string;
   timestamp: string;
 }
 

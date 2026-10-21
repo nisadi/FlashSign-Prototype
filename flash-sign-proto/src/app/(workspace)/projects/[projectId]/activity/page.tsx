@@ -33,26 +33,27 @@ export default function ProjectActivityPage({
   const project = projects.find((p) => p.id === projectId);
   if (!project) return notFound();
 
-  const projectActivities = activities.filter((a) => a.projectId === projectId);
+  const projectActivities = (activities || []).filter(
+    (a) => a.resourceId === projectId || a.resource.toLowerCase().includes(project.key.toLowerCase()) || a.resource.toLowerCase().includes(project.name.toLowerCase())
+  );
 
   const filteredActivities = projectActivities.filter((a) => {
-    if (typeFilter !== 'all' && a.entityType !== typeFilter) return false;
+    if (typeFilter !== 'all' && (a as any).entityType && (a as any).entityType !== typeFilter) return false;
     return true;
   });
 
-  const getEntityIcon = (entityType: string) => {
-    switch (entityType) {
-      case 'task':
-        return <CheckSquare className="w-3.5 h-3.5 text-flash-deep" />;
-      case 'sprint':
-        return <Zap className="w-3.5 h-3.5 text-amber-500" />;
-      case 'milestone':
-        return <Flag className="w-3.5 h-3.5 text-indigo-500" />;
-      case 'project':
-        return <Sparkles className="w-3.5 h-3.5 text-flash" />;
-      default:
-        return <ActivityIcon className="w-3.5 h-3.5 text-muted" />;
+  const getEntityIcon = (res: string) => {
+    const lower = (res || '').toLowerCase();
+    if (lower.includes('task') || lower.includes('fs-')) {
+      return <CheckSquare className="w-3.5 h-3.5 text-flash-deep" />;
     }
+    if (lower.includes('sprint')) {
+      return <Zap className="w-3.5 h-3.5 text-amber-500" />;
+    }
+    if (lower.includes('milestone')) {
+      return <Flag className="w-3.5 h-3.5 text-indigo-500" />;
+    }
+    return <Sparkles className="w-3.5 h-3.5 text-flash" />;
   };
 
   return (
@@ -101,44 +102,34 @@ export default function ProjectActivityPage({
           <Card className="p-6">
             <div className="relative pl-6 space-y-6 before:absolute before:left-2.5 before:top-3 before:bottom-3 before:w-0.5 before:bg-line">
               {filteredActivities.map((act) => {
-                const actor = users.find((u) => u.id === act.userId);
+                const actor = users.find((u) => u.id === act.actorId || u.id === (act as any).userId);
 
                 return (
                   <div key={act.id} className="relative flex items-start gap-3.5 text-xs group">
                     {/* Event Dot */}
                     <div className="absolute -left-6 mt-1 w-5 h-5 rounded-full bg-paper-elevated border-2 border-flash flex items-center justify-center shrink-0 shadow-xs">
-                      {getEntityIcon(act.entityType)}
+                      {getEntityIcon(act.resource)}
                     </div>
 
                     <div className="flex-1 bg-paper hover:bg-mist/40 p-3.5 rounded-xl border border-line transition-colors">
                       <div className="flex items-center justify-between gap-2 mb-1.5">
                         <div className="flex items-center gap-2">
                           <Avatar user={actor} size="xs" />
-                          <span className="font-bold text-ink">{actor?.name || 'User'}</span>
+                          <span className="font-bold text-ink">{actor?.name || act.actorName || 'User'}</span>
                           <span className="text-muted">{act.action}</span>
                           <span className="font-semibold text-flash-deep font-mono">
-                            {act.entityTitle}
+                            {act.resource || (act as any).entityTitle}
                           </span>
                         </div>
                         <span className="text-[10px] text-muted font-mono shrink-0 flex items-center gap-1">
                           <Clock className="w-3 h-3 text-muted/60" />
-                          {formatDate(act.createdAt)}
+                          {formatDate(act.timestamp || (act as any).createdAt)}
                         </span>
                       </div>
 
-                      {act.metadata && (
+                      {act.detail && (
                         <div className="text-[11px] text-muted font-mono bg-paper-elevated/70 p-2 rounded-lg border border-line/60 mt-1">
-                          {act.metadata.oldStatus && act.metadata.newStatus && (
-                            <span>
-                              Status changed from{' '}
-                              <strong className="text-ink">{act.metadata.oldStatus}</strong> to{' '}
-                              <strong className="text-flash-deep">{act.metadata.newStatus}</strong>
-                            </span>
-                          )}
-                          {act.metadata.points && <span>Effort points: {act.metadata.points}</span>}
-                          {act.metadata.dueDate && (
-                            <span>Target due date: {formatDate(act.metadata.dueDate)}</span>
-                          )}
+                          {act.detail}
                         </div>
                       )}
                     </div>

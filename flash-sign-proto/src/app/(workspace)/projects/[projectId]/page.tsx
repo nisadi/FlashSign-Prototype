@@ -57,7 +57,9 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
   const projectTasks = tasks.filter((t) => t.projectId === projectId);
   const projectSprints = sprints.filter((s) => s.projectId === projectId);
   const projectMilestones = milestones.filter((m) => m.projectId === projectId);
-  const projectActivities = activities.filter((a) => a.projectId === projectId).slice(0, 6);
+  const projectActivities = (activities || []).filter(
+    (a) => a.resourceId === projectId || a.resource.includes(project.key)
+  ).slice(0, 6);
   const members = users.filter((u) => project.memberIds.includes(u.id));
   const owner = users.find((u) => u.id === project.ownerId);
 
@@ -85,7 +87,8 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
       health: 'on_track',
       progress: 0,
       startDate: new Date().toISOString().split('T')[0],
-      dueDate: project.dueDate,
+      endDate: project.endDate || project.dueDate,
+      dueDate: project.dueDate || project.endDate,
       ownerId: project.ownerId,
       memberIds: [...project.memberIds],
       tags: [...project.tags],
@@ -170,7 +173,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
                 <div>
                   <span className="text-muted block">Target Delivery</span>
                   <span className="font-medium text-ink font-mono">
-                    {formatDate(project.dueDate)}
+                    {formatDate(project.dueDate || project.endDate)}
                   </span>
                 </div>
                 <div>
@@ -429,17 +432,17 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
               ) : (
                 <div className="space-y-3">
                   {projectActivities.map((act) => {
-                    const actor = users.find((u) => u.id === act.userId);
+                    const actor = users.find((u) => u.id === act.actorId || u.id === (act as any).userId);
                     return (
                       <div key={act.id} className="flex items-start gap-2.5 text-xs">
                         <Avatar user={actor} size="xs" />
                         <div className="min-w-0 flex-1">
                           <p className="text-ink leading-tight">
-                            <span className="font-medium">{actor?.name || 'User'}</span>{' '}
-                            {act.action} <span className="font-medium text-flash-deep">{act.entityTitle}</span>
+                            <span className="font-medium">{actor?.name || act.actorName || 'User'}</span>{' '}
+                            {act.action} <span className="font-medium text-flash-deep">{act.resource || (act as any).entityTitle}</span>
                           </p>
                           <span className="text-[10px] text-muted block mt-0.5">
-                            {formatDate(act.createdAt)}
+                            {formatDate(act.timestamp || (act as any).createdAt)}
                           </span>
                         </div>
                       </div>

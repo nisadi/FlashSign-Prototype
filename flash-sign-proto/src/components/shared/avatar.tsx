@@ -4,7 +4,7 @@ import { cn } from '@/lib/utils';
 import type { User } from '@/types';
 
 interface AvatarProps {
-  user: Pick<User, 'name' | 'initials' | 'color'>;
+  user?: Pick<User, 'name' | 'initials' | 'color'> | null;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -17,6 +17,21 @@ const SIZE_MAP = {
 };
 
 export function Avatar({ user, size = 'md', className }: AvatarProps) {
+  if (!user) {
+    return (
+      <div
+        className={cn(
+          'rounded-full flex items-center justify-center font-bold text-muted bg-mist shrink-0',
+          SIZE_MAP[size],
+          className
+        )}
+        title="Unassigned"
+      >
+        ?
+      </div>
+    );
+  }
+
   return (
     <div
       className={cn(

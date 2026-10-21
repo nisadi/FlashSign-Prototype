@@ -52,10 +52,11 @@ export default function ProjectTasksListPage({
   const filteredTasks = useMemo(() => {
     return projectTasks
       .filter((t) => {
+        const taskLabels = t.labels || t.tags || [];
         const matchSearch =
           t.title.toLowerCase().includes(search.toLowerCase()) ||
           t.key.toLowerCase().includes(search.toLowerCase()) ||
-          t.labels.some((l) => l.toLowerCase().includes(search.toLowerCase()));
+          taskLabels.some((l: string) => l.toLowerCase().includes(search.toLowerCase()));
         const matchStatus = statusFilter === 'all' || t.status === statusFilter;
         const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
         const matchAssignee = assigneeFilter === 'all' || t.assigneeId === assigneeFilter;
@@ -426,11 +427,11 @@ export default function ProjectTasksListPage({
                           )}
                         </td>
                         <td className="py-3 px-3 font-mono text-muted text-[11px]">
-                          {task.points ? `${task.points} pts` : '—'}
+                          {(task.points || task.storyPoints) ? `${task.points || task.storyPoints} pts` : '—'}
                         </td>
                         <td className="py-3 px-4">
                           <div className="flex items-center gap-1 flex-wrap">
-                            {task.labels.slice(0, 2).map((label) => (
+                            {(task.labels || task.tags || []).slice(0, 2).map((label: string) => (
                               <span
                                 key={label}
                                 className="px-1.5 py-0.5 bg-mist text-muted rounded text-[10px] font-mono"
@@ -438,8 +439,8 @@ export default function ProjectTasksListPage({
                                 {label}
                               </span>
                             ))}
-                            {task.labels.length > 2 && (
-                              <span className="text-[10px] text-muted">+{task.labels.length - 2}</span>
+                            {(task.labels || task.tags || []).length > 2 && (
+                              <span className="text-[10px] text-muted">+{(task.labels || task.tags || []).length - 2}</span>
                             )}
                           </div>
                         </td>

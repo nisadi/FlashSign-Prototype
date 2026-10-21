@@ -118,11 +118,12 @@ export default function PlannerCalendarPage() {
 
     // Project Deadlines
     projects.forEach((p) => {
-      if (p.dueDate) {
+      const deadline = p.dueDate || p.endDate;
+      if (deadline) {
         list.push({
           id: `project-${p.id}`,
           title: `Project Delivery: ${p.name}`,
-          date: p.dueDate,
+          date: deadline,
           type: 'project',
           projectId: p.id,
           color: '#f59e0b',

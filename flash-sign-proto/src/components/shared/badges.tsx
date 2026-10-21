@@ -54,10 +54,11 @@ const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; className: s
   on_hold:   { label: 'On Hold',   className: 'bg-amber-50 text-amber-700 border-amber-200' },
   completed: { label: 'Completed', className: 'bg-gray-100 text-gray-600 border-gray-200' },
   cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
+  archived:  { label: 'Archived',  className: 'bg-gray-100 text-gray-500 border-gray-300' },
 };
 
 export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {
-  const config = PROJECT_STATUS_CONFIG[status];
+  const config = PROJECT_STATUS_CONFIG[status] || { label: status, className: 'bg-gray-100 text-gray-600 border-gray-200' };
   return (
     <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', config.className)}>
       {config.label}
@@ -70,6 +71,7 @@ const HEALTH_CONFIG: Record<ProjectHealth, { label: string; color: string; Icon:
   on_track:  { label: 'On Track',  color: '#00c2a8', Icon: TrendingUp },
   at_risk:   { label: 'At Risk',   color: '#c47a12', Icon: MinusIcon },
   off_track: { label: 'Off Track', color: '#c23b3b', Icon: TrendingDown },
+  delayed:   { label: 'Delayed',   color: '#c23b3b', Icon: TrendingDown },
 };
 
 export function HealthBadge({ health }: { health: ProjectHealth }) {
