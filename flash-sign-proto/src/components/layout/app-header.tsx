@@ -24,14 +24,14 @@ function Breadcrumbs() {
   if (crumbs.length === 0) return null;
 
   return (
-    <nav className="flex items-center gap-1.5 text-xs text-muted" aria-label="Breadcrumb">
+    <nav className="flex items-center gap-1.5 text-xs text-muted min-w-0" aria-label="Breadcrumb">
       {crumbs.map((crumb, i) => (
-        <span key={crumb.href} className="flex items-center gap-1.5">
-          {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-line" />}
+        <span key={crumb.href} className={cn("flex items-center gap-1.5 min-w-0", !crumb.isLast && "hidden sm:flex")}>
+          {i > 0 && <ChevronRight className="w-3.5 h-3.5 text-line shrink-0" />}
           {crumb.isLast ? (
-            <span className="text-ink font-semibold truncate max-w-[200px]">{crumb.label}</span>
+            <span className="text-ink font-semibold truncate max-w-[120px] sm:max-w-[200px]">{crumb.label}</span>
           ) : (
-            <Link href={crumb.href} className="hover:text-ink transition-colors truncate max-w-[150px]">
+            <Link href={crumb.href} className="hover:text-ink transition-colors truncate max-w-[100px] sm:max-w-[150px]">
               {crumb.label}
             </Link>
           )}
@@ -53,10 +53,10 @@ export function AppHeader() {
 
   return (
     <>
-      <header className="h-14 bg-paper-elevated border-b border-line flex items-center px-4 sm:px-6 gap-3 shrink-0 sticky top-0 z-20 shadow-xs">
+      <header className="h-14 bg-paper-elevated border-b border-line flex items-center px-3 sm:px-6 gap-2 sm:gap-3 shrink-0 sticky top-0 z-20 shadow-xs">
         {/* Mobile menu toggle */}
         <button
-          className="lg:hidden p-1.5 rounded-md text-muted hover:text-ink hover:bg-mist transition-colors"
+          className="lg:hidden p-1.5 rounded-md text-muted hover:text-ink hover:bg-mist transition-colors shrink-0"
           onClick={toggleSidebar}
           aria-label="Toggle navigation menu"
         >
@@ -69,14 +69,15 @@ export function AppHeader() {
         </div>
 
         {/* Global Search Bar (opens search command) */}
-        <div className="relative">
+        <div className="relative shrink-0">
           <button
             onClick={() => setSearchOpen(true)}
-            className="flex items-center gap-2 bg-mist/70 hover:bg-mist px-3 py-1.5 rounded-lg text-xs text-muted hover:text-ink transition-all border border-line w-40 sm:w-60 justify-between"
+            className="flex items-center gap-2 bg-mist/70 hover:bg-mist px-2.5 sm:px-3 py-1.5 rounded-lg text-xs text-muted hover:text-ink transition-all border border-line justify-center sm:justify-between sm:w-60"
+            aria-label="Search"
           >
             <div className="flex items-center gap-2 truncate">
               <Search className="w-3.5 h-3.5 shrink-0" />
-              <span className="truncate">Search everywhere...</span>
+              <span className="hidden md:inline truncate">Search everywhere...</span>
             </div>
             <kbd className="hidden sm:inline-block text-[10px] bg-paper-elevated px-1.5 py-0.5 rounded border border-line font-mono">
               ⌘K
