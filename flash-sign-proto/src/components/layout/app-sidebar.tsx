@@ -9,12 +9,13 @@ import {
   Star, Clock, Compass, Plus, Building2,
   UserCheck, Megaphone, CalendarDays, Palmtree, Video, Flag, Bell,
   FileSignature, Folder, ScrollText, Send, Inbox, CheckCheck, FileWarning, Layers, Sliders,
+  ChevronsUpDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, useCurrentUser, useRoleConfig } from '@/context/app-context';
 import { canAccess, ROLE_CONFIGS } from '@/lib/permissions';
 import type { DemoRole } from '@/types';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const MOCK_WORKSPACES = [
   { id: 'ws1', name: 'Acme Digital', plan: 'Enterprise', color: '#00c2a8' },
@@ -24,12 +25,175 @@ const MOCK_WORKSPACES = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, documentItems, contracts, signatureRequests } = useApp();
+  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, documentItems, contracts, signatureRequests, agentRuns } = useApp();
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
   const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
+
+  const pendingReviewsCount = agentRuns?.filter(r => r.status === 'needs_review').length || 0;
+  const actionRequiredSignatures = signatureRequests?.filter(r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed').length || 0;
+
+  interface NavItem {
+    label: string;
+    href: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string | number;
+  }
+
+  interface NavSection {
+    id: string;
+    title: string;
+    icon: React.ComponentType<{ className?: string }>;
+    badge?: string | number;
+    items: NavItem[];
+  }
+
+  const sections: NavSection[] = [
+    {
+      id: 'documents',
+      title: 'Documents',
+      icon: FileText,
+      badge: documentItems?.length,
+      items: [
+        { label: 'Documents Home', href: '/documents', icon: FileText },
+        { label: 'All Documents', href: '/documents/all', icon: Layers },
+        { label: 'My Documents', href: '/documents/mine', icon: UserCheck },
+        { label: 'Shared with Me', href: '/documents/shared', icon: Users },
+        { label: 'Recent Documents', href: '/documents/recent', icon: Clock },
+        { label: 'Favorites', href: '/documents/favorites', icon: Star },
+        { label: 'Templates', href: '/documents/templates', icon: ScrollText },
+        { label: 'Folders', href: '/documents/folders', icon: Folder },
+      ],
+    },
+    {
+      id: 'contracts',
+      title: 'Contracts',
+      icon: Building2,
+      badge: contracts?.length,
+      items: [
+        { label: 'Contracts Overview', href: '/contracts', icon: Building2 },
+        { label: 'All Contracts', href: '/contracts/all', icon: ScrollText },
+        { label: 'Draft Contracts', href: '/contracts/drafts', icon: Clock },
+        { label: 'Pending Review', href: '/contracts/review', icon: Activity },
+        { label: 'Active Contracts', href: '/contracts/active', icon: CheckCircle2 },
+        { label: 'Expiring Soon', href: '/contracts/expiring', icon: FileWarning },
+        { label: 'Completed', href: '/contracts/completed', icon: CheckCheck },
+        { label: 'Archived', href: '/contracts/archived', icon: Folder },
+      ],
+    },
+    {
+      id: 'signatures',
+      title: 'E-Signatures',
+      icon: FileSignature,
+      badge: actionRequiredSignatures > 0 ? actionRequiredSignatures : undefined,
+      items: [
+        { label: 'Signature Dashboard', href: '/signatures', icon: FileSignature },
+        { label: 'All Requests', href: '/signatures/all', icon: Layers },
+        { label: 'Action Required', href: '/signatures/waiting', icon: Inbox, badge: actionRequiredSignatures > 0 ? actionRequiredSignatures : undefined },
+        { label: 'Sent Requests', href: '/signatures/sent', icon: Send },
+        { label: 'Completed', href: '/signatures/completed', icon: CheckCheck },
+        { label: 'Declined', href: '/signatures/declined', icon: FileWarning },
+        { label: 'Expired', href: '/signatures/expired', icon: Clock },
+        { label: 'E-Sign Settings', href: '/signatures/settings', icon: Sliders },
+      ],
+    },
+    {
+      id: 'ai-agents',
+      title: 'AI Coding Agents',
+      icon: Bot,
+      badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
+      items: [
+        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot },
+        { label: 'SRS Story Generator', href: '/ai-agents/story-generator', icon: FileText },
+        { label: 'Task Assignment & IDE', href: '/ai-agents/assign', icon: FolderKanban },
+        { label: 'Provider Settings', href: '/ai-agents/settings', icon: Settings },
+        { label: 'AI Audit Trail', href: '/ai-agents/audit', icon: Activity },
+      ],
+    },
+    {
+      id: 'collaboration',
+      title: 'Collaboration',
+      icon: Users,
+      items: [
+        { label: 'Team Overview', href: '/teams', icon: Users },
+        { label: 'Teams Directory', href: '/teams/directory', icon: Building2 },
+        { label: 'Members', href: '/teams/members', icon: UserCheck },
+        { label: 'Workload', href: '/teams/workload', icon: BarChart3 },
+        { label: 'Team Activity', href: '/teams/activity', icon: Activity },
+        { label: 'Announcements', href: '/teams/announcements', icon: Megaphone },
+      ],
+    },
+    {
+      id: 'planning',
+      title: 'Planning',
+      icon: CalendarDays,
+      items: [
+        { label: 'Planner', href: '/planner', icon: LayoutDashboard },
+        { label: 'Calendar', href: '/planner/calendar', icon: CalendarDays },
+        { label: 'Availability', href: '/planner/availability', icon: Clock },
+        { label: 'Time Off', href: '/planner/time-off', icon: Palmtree },
+        { label: 'Meeting Planner', href: '/planner/meetings', icon: Video },
+        { label: 'Milestones & Deadlines', href: '/planner/milestones', icon: Flag },
+      ],
+    },
+    {
+      id: 'workspace',
+      title: 'Workspace',
+      icon: FolderKanban,
+      items: [
+        { label: 'Projects', href: '/projects', icon: FolderKanban },
+        { label: 'PM Home', href: '/projects/home', icon: LayoutDashboard },
+        { label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare },
+        { label: 'Notifications', href: '/teams/notifications', icon: Bell },
+        { label: 'Settings', href: '/teams/settings', icon: Settings },
+      ],
+    },
+  ];
+
+  // Accordion state: open sections
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
+    const initial: Record<string, boolean> = {
+      documents: false,
+      contracts: false,
+      signatures: false,
+      'ai-agents': false,
+      collaboration: false,
+      planning: false,
+      workspace: false,
+    };
+    if (pathname.startsWith('/documents')) initial.documents = true;
+    else if (pathname.startsWith('/contracts')) initial.contracts = true;
+    else if (pathname.startsWith('/signatures')) initial.signatures = true;
+    else if (pathname.startsWith('/ai-agents')) initial['ai-agents'] = true;
+    else if (pathname.startsWith('/teams')) initial.collaboration = true;
+    else if (pathname.startsWith('/planner')) initial.planning = true;
+    else if (pathname.startsWith('/projects')) initial.workspace = true;
+    else initial.documents = true;
+    return initial;
+  });
+
+  // Automatically expand the section that matches the current route
+  useEffect(() => {
+    sections.forEach(sec => {
+      if (sec.items.some(item => isActive(item.href))) {
+        setOpenSections(prev => ({ ...prev, [sec.id]: true }));
+      }
+    });
+  }, [pathname]);
+
+  const toggleSection = (id: string) => {
+    setOpenSections(prev => ({ ...prev, [id]: !prev[id] }));
+  };
+
+  const allOpen = Object.values(openSections).every(Boolean);
+  const toggleAllSections = () => {
+    const nextState = !allOpen;
+    const updated: Record<string, boolean> = {};
+    sections.forEach(s => { updated[s.id] = nextState; });
+    setOpenSections(updated);
+  };
 
   const isActive = (href: string) => {
     if (href === '/projects') return pathname === '/projects';
@@ -164,646 +328,144 @@ export function AppSidebar() {
           </div>
         )}
 
-        {/* Navigation Items */}
-        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-          {/* Documents Section */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                Documents
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/documents"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Documents Home"
-                >
-                  <FileText className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Documents Home</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/all"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/all') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="All Documents"
-                >
-                  <Layers className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>All Documents</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/mine"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/mine') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="My Documents"
-                >
-                  <UserCheck className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>My Documents</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/shared"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/shared') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Shared with Me"
-                >
-                  <Users className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Shared with Me</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/recent"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/recent') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Recent Documents"
-                >
-                  <Clock className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Recent Documents</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/favorites"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/favorites') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Favorites"
-                >
-                  <Star className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Favorites</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/templates"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/templates') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Templates"
-                >
-                  <ScrollText className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Templates</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/documents/folders"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/documents/folders') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Folders"
-                >
-                  <Folder className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Folders</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
+        {/* Navigation Items (Collapsible Accordion Dropdowns) */}
+        <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1.5 custom-scrollbar">
+          {/* Quick Header Toggle */}
+          {!sidebarCollapsed && (
+            <div className="flex items-center justify-between px-2 mb-2 text-[10px] text-white/40 uppercase tracking-wider font-semibold">
+              <span>Navigation</span>
+              <button
+                type="button"
+                onClick={toggleAllSections}
+                className="text-[10px] text-white/50 hover:text-white flex items-center gap-1 transition-colors px-1.5 py-0.5 rounded hover:bg-white/5"
+                title={allOpen ? 'Collapse all dropdowns' : 'Expand all dropdowns'}
+              >
+                <ChevronsUpDown className="w-3 h-3 text-flash/70" />
+                <span className="normal-case">{allOpen ? 'Collapse all' : 'Expand all'}</span>
+              </button>
+            </div>
+          )}
 
-          {/* Contracts Section */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                Contracts
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/contracts"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Contracts Overview"
-                >
-                  <Building2 className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Contracts Overview</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/all"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/all') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="All Contracts"
-                >
-                  <ScrollText className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>All Contracts</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/drafts"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/drafts') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Draft Contracts"
-                >
-                  <Clock className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Draft Contracts</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/review"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/review') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Pending Review"
-                >
-                  <Activity className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Pending Review</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/active"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/active') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Active Contracts"
-                >
-                  <CheckCircle2 className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Active Contracts</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/expiring"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/expiring') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Expiring Contracts"
-                >
-                  <FileWarning className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Expiring Soon</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/completed"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/completed') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Completed Contracts"
-                >
-                  <CheckCheck className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Completed</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/contracts/archived"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/contracts/archived') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Archived Contracts"
-                >
-                  <Folder className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Archived</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
+          {/* Expanded Sidebar: Accordion Dropdown Sections */}
+          {!sidebarCollapsed ? (
+            sections.map(section => {
+              const isOpen = !!openSections[section.id];
+              const hasActiveChild = section.items.some(item => isActive(item.href));
+              const SectionIcon = section.icon;
 
-          {/* Electronic Signatures Section */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                E-Signatures
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/signatures"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Signature Requests"
-                >
-                  <FileSignature className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Signature Dashboard</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/all"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/all') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="All Signature Requests"
-                >
-                  <Layers className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>All Requests</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/waiting"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/waiting') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Waiting for My Signature"
-                >
-                  <Inbox className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Action Required</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/sent"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/sent') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Sent for Signature"
-                >
-                  <Send className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Sent Requests</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/completed"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/completed') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Completed Signatures"
-                >
-                  <CheckCheck className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Completed</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/declined"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/declined') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Declined Requests"
-                >
-                  <FileWarning className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Declined</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/expired"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/expired') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Expired Requests"
-                >
-                  <Clock className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Expired</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/signatures/settings"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/signatures/settings') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Settings"
-                >
-                  <Sliders className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>E-Sign Settings</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
+              return (
+                <div key={section.id} className="rounded-lg transition-colors">
+                  {/* Dropdown Section Header Button */}
+                  <button
+                    type="button"
+                    onClick={() => toggleSection(section.id)}
+                    className={cn(
+                      'w-full flex items-center justify-between px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all group select-none',
+                      hasActiveChild
+                        ? 'text-white bg-white/10 shadow-xs'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    )}
+                    aria-expanded={isOpen}
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <SectionIcon
+                        className={cn(
+                          'w-4 h-4 shrink-0 transition-colors',
+                          hasActiveChild ? 'text-flash' : 'text-white/40 group-hover:text-flash'
+                        )}
+                      />
+                      <span className="truncate text-xs">{section.title}</span>
+                      {section.badge !== undefined && (
+                        <span
+                          className={cn(
+                            'text-[10px] font-mono px-1.5 py-0.2 rounded-full font-bold',
+                            typeof section.badge === 'number' && section.badge > 0
+                              ? 'bg-flash/20 text-flash'
+                              : 'bg-white/10 text-white/60'
+                          )}
+                        >
+                          {section.badge}
+                        </span>
+                      )}
+                    </div>
 
-          {/* Collaboration Group */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                Collaboration
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/teams"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Team Overview"
-                >
-                  <Users className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Team Overview</span>}
-                </Link>
-              </li>
+                    <ChevronDown
+                      className={cn(
+                        'w-3.5 h-3.5 text-white/40 group-hover:text-white/80 shrink-0 transition-transform duration-200',
+                        isOpen ? 'rotate-0 text-white/70' : '-rotate-90'
+                      )}
+                    />
+                  </button>
 
-              <li>
-                <Link
-                  href="/teams/directory"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/directory') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
+                  {/* Dropdown Options */}
+                  {isOpen && (
+                    <ul className="mt-1 space-y-0.5 ml-3 pl-2.5 border-l border-white/10 animate-fade-in">
+                      {section.items.map(item => {
+                        const active = isActive(item.href);
+                        const ItemIcon = item.icon;
+                        return (
+                          <li key={item.href}>
+                            <Link
+                              href={item.href}
+                              className={cn(
+                                'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all justify-between group',
+                                active
+                                  ? 'bg-flash/15 text-flash font-semibold shadow-xs'
+                                  : 'text-white/70 hover:text-white hover:bg-white/5'
+                              )}
+                              title={item.label}
+                            >
+                              <div className="flex items-center gap-2.5 min-w-0">
+                                <ItemIcon
+                                  className={cn(
+                                    'w-3.5 h-3.5 shrink-0 transition-colors',
+                                    active ? 'text-flash' : 'text-white/40 group-hover:text-white/80'
+                                  )}
+                                />
+                                <span className="truncate">{item.label}</span>
+                              </div>
+                              {item.badge !== undefined && (
+                                <span className="text-[10px] bg-waiting/20 text-waiting font-bold px-1.5 py-0.5 rounded-full shrink-0">
+                                  {item.badge}
+                                </span>
+                              )}
+                            </Link>
+                          </li>
+                        );
+                      })}
+                    </ul>
                   )}
-                  title="Teams Directory"
-                >
-                  <Building2 className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Teams</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/teams/members"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/members') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Members"
-                >
-                  <UserCheck className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Members</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/teams/workload"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/workload') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Workload"
-                >
-                  <BarChart3 className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Workload</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/teams/activity"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/activity') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Team Activity"
-                >
-                  <Activity className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Team Activity</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/teams/announcements"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/announcements') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Announcements"
-                >
-                  <Megaphone className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Announcements</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Planning Group */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                Planning
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/planner"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/planner') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Planner"
-                >
-                  <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Planner</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/planner/calendar"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/planner/calendar') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Calendar"
-                >
-                  <CalendarDays className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Calendar</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/planner/availability"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/planner/availability') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Availability"
-                >
-                  <Clock className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Availability</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/planner/time-off"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/planner/time-off') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Time Off"
-                >
-                  <Palmtree className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Time Off</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/planner/meetings"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/planner/meetings') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Meeting Planner"
-                >
-                  <Video className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Meeting Planner</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/planner/milestones"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/planner/milestones') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Milestones & Deadlines"
-                >
-                  <Flag className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Milestones & Deadlines</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Workspace Group */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
-                Workspace
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/projects"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Projects"
-                >
-                  <FolderKanban className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Projects</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/projects/my-tasks"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects/my-tasks') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="My Tasks"
-                >
-                  <CheckSquare className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>My Tasks</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/teams/notifications"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/notifications') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Notifications"
-                >
-                  <Bell className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Notifications</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/teams/settings"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams/settings') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Settings"
-                >
-                  <Settings className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Settings</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
+                </div>
+              );
+            })
+          ) : (
+            /* Collapsed Sidebar: Clean Icon-Only Section Launchers */
+            <div className="space-y-2 py-1">
+              {sections.map(section => {
+                const hasActive = section.items.some(item => isActive(item.href));
+                const SectionIcon = section.icon;
+                return (
+                  <div key={section.id} className="relative group flex justify-center">
+                    <Link
+                      href={section.items[0]?.href || '#'}
+                      className={cn(
+                        'w-10 h-10 rounded-xl flex items-center justify-center transition-all',
+                        hasActive
+                          ? 'bg-flash/20 text-flash font-bold shadow-sm'
+                          : 'text-white/60 hover:text-white hover:bg-white/10'
+                      )}
+                      title={section.title}
+                    >
+                      <SectionIcon className="w-4 h-4" />
+                    </Link>
+                    {section.badge !== undefined && typeof section.badge === 'number' && section.badge > 0 && (
+                      <span className="absolute top-1 right-2 w-2 h-2 rounded-full bg-flash animate-pulse" />
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
         </nav>
 
         {/* Footer */}

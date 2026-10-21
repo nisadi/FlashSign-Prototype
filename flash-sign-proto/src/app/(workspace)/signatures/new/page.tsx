@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, Suspense } from 'react';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
@@ -36,7 +36,7 @@ interface SignerForm {
   required: boolean;
 }
 
-export default function RequestSignatureWizardPage() {
+function WizardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const preselectedContractId = searchParams?.get('contractId') || '';
@@ -690,5 +690,13 @@ export default function RequestSignatureWizardPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function RequestSignatureWizardPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-muted">Loading wizard...</div>}>
+      <WizardContent />
+    </Suspense>
   );
 }
