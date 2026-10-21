@@ -95,7 +95,7 @@ export default function KanbanBoardPage({
   };
 
   return (
-    <div className="min-h-screen bg-paper flex flex-col pb-12">
+    <div className="min-h-full bg-paper flex flex-col pb-12">
       <ProjectHeaderNav projectId={projectId} activeTab="board" />
 
       <div className="flex-1 flex flex-col px-4 sm:px-6 pt-4 max-w-[1600px] mx-auto w-full">

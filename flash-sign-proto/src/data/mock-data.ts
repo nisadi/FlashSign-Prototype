@@ -73,6 +73,14 @@ export const MOCK_PROJECTS: Project[] = [
     createdAt: d(-60), updatedAt: d(-1),
   },
   {
+    id: 'p-mvhmnblw', name: 'Flash Sign v2.0', key: 'FSV2', description: 'Next-generation e-signature platform with AI-assisted document preparation.',
+    status: 'active', health: 'on_track', ownerId: 'u2', teamIds: ['t1', 't2', 't3'], memberIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
+    startDate: d(-60), endDate: d(30), progress: 68, priority: 'critical', tags: ['platform', 'core'],
+    isFavorite: true, isArchived: false, group: 'Core Platform', accentColor: '#00c2a8',
+    goals: ['Launch v2 public beta by end of month', 'Reach <1s document render latency', 'Complete eIDAS compliance checks'],
+    createdAt: d(-60), updatedAt: d(-1),
+  },
+  {
     id: 'p2', name: 'ACME Corp Integration', key: 'ACME', description: 'Custom API integration and white-label portal for ACME Corporation.',
     status: 'active', health: 'at_risk', ownerId: 'u2', teamIds: ['t1', 't4'], memberIds: ['u2', 'u4', 'u14', 'u9'],
     startDate: d(-30), endDate: d(14), progress: 42, priority: 'high', tags: ['client', 'integration'],

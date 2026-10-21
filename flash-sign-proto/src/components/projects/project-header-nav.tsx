@@ -87,7 +87,7 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
   ];
 
   return (
-    <div className="border-b border-line bg-paper-elevated/70 backdrop-blur-sm sticky top-14 z-20">
+    <div className="border-b border-line bg-paper-elevated sticky top-0 z-10 shadow-2xs">
       {/* Top row */}
       <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3">

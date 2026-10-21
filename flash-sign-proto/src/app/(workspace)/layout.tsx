@@ -10,17 +10,17 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
   const { sidebarCollapsed } = useApp();
 
   return (
-    <div className="flex h-full min-h-screen bg-paper">
+    <div className="flex h-screen overflow-hidden bg-paper">
       <AppSidebar />
       {/* Main content shifts based on sidebar width */}
       <div
         className={cn(
-          'flex flex-col flex-1 min-w-0 transition-all duration-300',
+          'flex flex-col flex-1 min-w-0 h-screen overflow-hidden transition-all duration-300',
           sidebarCollapsed ? 'lg:ml-16' : 'lg:ml-60'
         )}
       >
         <AppHeader />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto min-w-0">
           {children}
         </main>
       </div>

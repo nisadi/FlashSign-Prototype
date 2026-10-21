@@ -70,7 +70,7 @@ export default function ProjectTeamPage({
   };
 
   return (
-    <div className="min-h-screen bg-paper pb-16">
+    <div className="min-h-full bg-paper pb-16">
       <ProjectHeaderNav projectId={projectId} activeTab="team" />
 
       <div className="max-w-7xl mx-auto px-4 sm:px-6 py-6 space-y-6 animate-fade-up">
