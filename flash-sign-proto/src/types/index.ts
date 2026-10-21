@@ -25,6 +25,13 @@ export interface User {
   title?: string;
   color: string;
   isActive: boolean;
+  teamIds?: string[];
+  projectIds?: string[];
+  timeZone?: string;
+  workingHours?: string;
+  skills?: string[];
+  availability?: 'available' | 'busy' | 'focus_time' | 'out_of_office';
+  weeklyCapacity?: number;
   createdAt: string;
 }
 
@@ -82,6 +89,12 @@ export interface Team {
   leadId: string;
   memberIds: string[];
   color: string;
+  department?: string;
+  category?: string;
+  goals?: string[];
+  status?: 'active' | 'archived';
+  projectIds?: string[];
+  icon?: string;
   createdAt: string;
 }
 
@@ -317,3 +330,6 @@ export interface Integration {
   logoUrl?: string;
   description: string;
 }
+
+export * from './collaboration';
+

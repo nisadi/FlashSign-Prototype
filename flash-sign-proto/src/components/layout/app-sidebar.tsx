@@ -7,6 +7,7 @@ import {
   Activity, Bot, FileText, CheckCircle2, BarChart3, Settings,
   ChevronDown, PanelLeftClose, PanelLeftOpen, Zap,
   Star, Clock, Compass, Plus, Building2,
+  UserCheck, Megaphone, CalendarDays, Palmtree, Video, Flag, Bell,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, useCurrentUser, useRoleConfig } from '@/context/app-context';
@@ -30,9 +31,9 @@ export function AppSidebar() {
   const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
 
   const isActive = (href: string) => {
-    if (href === '/projects') {
-      return pathname === '/projects';
-    }
+    if (href === '/projects') return pathname === '/projects';
+    if (href === '/teams') return pathname === '/teams';
+    if (href === '/planner') return pathname === '/planner';
     return pathname === href || pathname.startsWith(href + '/');
   };
 
@@ -161,29 +162,214 @@ export function AppSidebar() {
 
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
-          {/* Main Group */}
+          {/* Collaboration Group */}
           <div>
             {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-                Project Management
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                Collaboration
               </p>
             )}
             <ul className="space-y-0.5">
               <li>
                 <Link
-                  href="/projects/home"
+                  href="/teams"
                   className={cn(
                     'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects/home') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    isActive('/teams') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
                     sidebarCollapsed && 'justify-center'
                   )}
-                  title="PM Home"
+                  title="Team Overview"
                 >
-                  <LayoutDashboard className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>PM Home</span>}
+                  <Users className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Team Overview</span>}
                 </Link>
               </li>
 
+              <li>
+                <Link
+                  href="/teams/directory"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/teams/directory') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Teams Directory"
+                >
+                  <Building2 className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Teams</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/teams/members"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/teams/members') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Members"
+                >
+                  <UserCheck className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Members</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/teams/workload"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/teams/workload') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Workload"
+                >
+                  <BarChart3 className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Workload</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/teams/activity"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/teams/activity') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Team Activity"
+                >
+                  <Activity className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Team Activity</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/teams/announcements"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/teams/announcements') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Announcements"
+                >
+                  <Megaphone className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Announcements</span>}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Planning Group */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                Planning
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  href="/planner"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/planner') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Planner"
+                >
+                  <LayoutDashboard className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Planner</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/planner/calendar"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/planner/calendar') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Calendar"
+                >
+                  <CalendarDays className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Calendar</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/planner/availability"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/planner/availability') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Availability"
+                >
+                  <Clock className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Availability</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/planner/time-off"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/planner/time-off') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Time Off"
+                >
+                  <Palmtree className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Time Off</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/planner/meetings"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/planner/meetings') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Meeting Planner"
+                >
+                  <Video className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Meeting Planner</span>}
+                </Link>
+              </li>
+
+              <li>
+                <Link
+                  href="/planner/milestones"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/planner/milestones') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Milestones & Deadlines"
+                >
+                  <Flag className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Milestones & Deadlines</span>}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Workspace Group */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                Workspace
+              </p>
+            )}
+            <ul className="space-y-0.5">
               <li>
                 <Link
                   href="/projects"
@@ -192,10 +378,10 @@ export function AppSidebar() {
                     isActive('/projects') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
                     sidebarCollapsed && 'justify-center'
                   )}
-                  title="All Projects"
+                  title="Projects"
                 >
                   <FolderKanban className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>All Projects</span>}
+                  {!sidebarCollapsed && <span>Projects</span>}
                 </Link>
               </li>
 
@@ -216,161 +402,31 @@ export function AppSidebar() {
 
               <li>
                 <Link
-                  href="/projects/planner"
+                  href="/teams/notifications"
                   className={cn(
                     'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects/planner') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    isActive('/teams/notifications') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
                     sidebarCollapsed && 'justify-center'
                   )}
-                  title="Planner & Calendar"
+                  title="Notifications"
                 >
-                  <Calendar className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Planner / Calendar</span>}
+                  <Bell className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Notifications</span>}
                 </Link>
               </li>
 
               <li>
                 <Link
-                  href="/projects/roadmap"
+                  href="/teams/settings"
                   className={cn(
                     'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects/roadmap') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    isActive('/teams/settings') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
                     sidebarCollapsed && 'justify-center'
                   )}
-                  title="Roadmap"
+                  title="Settings"
                 >
-                  <Compass className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Roadmap</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Quick Filter Views */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-                Views & Shortcuts
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/projects/favorites"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects/favorites') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Favorites"
-                >
-                  <Star className="w-4 h-4 shrink-0 text-amber-400" />
-                  {!sidebarCollapsed && <span>Favorites</span>}
-                </Link>
-              </li>
-
-              <li>
-                <Link
-                  href="/projects/recent"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/projects/recent') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                  title="Recent Projects"
-                >
-                  <Clock className="w-4 h-4 shrink-0 text-blue-400" />
-                  {!sidebarCollapsed && <span>Recent Projects</span>}
-                </Link>
-              </li>
-            </ul>
-          </div>
-
-          {/* Project Shortcuts */}
-          {!sidebarCollapsed && (
-            <div>
-              <div className="flex items-center justify-between px-2 mb-1">
-                <p className="text-[10px] font-semibold uppercase tracking-widest text-white/30">
-                  Projects
-                </p>
-                <Link
-                  href="/projects/new"
-                  className="p-0.5 rounded text-white/40 hover:text-white hover:bg-white/10 transition-colors"
-                  title="Create Project"
-                >
-                  <Plus className="w-3.5 h-3.5" />
-                </Link>
-              </div>
-
-              <ul className="space-y-0.5">
-                {projects.slice(0, 5).map(proj => (
-                  <li key={proj.id}>
-                    <Link
-                      href={`/projects/${proj.id}`}
-                      className={cn(
-                        'flex items-center gap-2 px-2.5 py-1 rounded-md text-xs transition-all truncate',
-                        pathname.startsWith(`/projects/${proj.id}`)
-                          ? 'bg-flash/15 text-flash font-medium'
-                          : 'text-white/60 hover:text-white hover:bg-white/5'
-                      )}
-                    >
-                      <div
-                        className="w-2 h-2 rounded-full shrink-0"
-                        style={{ backgroundColor: proj.accentColor || '#00c2a8' }}
-                      />
-                      <span className="truncate">{proj.name}</span>
-                    </Link>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-
-          {/* Cross-module Links */}
-          <div>
-            {!sidebarCollapsed && (
-              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/30">
-                Workspace Modules
-              </p>
-            )}
-            <ul className="space-y-0.5">
-              <li>
-                <Link
-                  href="/teams"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/teams') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                >
-                  <Users className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Teams</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/activity"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/activity') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                >
-                  <Activity className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Activity Feed</span>}
-                </Link>
-              </li>
-              <li>
-                <Link
-                  href="/reports"
-                  className={cn(
-                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
-                    isActive('/reports') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
-                    sidebarCollapsed && 'justify-center'
-                  )}
-                >
-                  <BarChart3 className="w-4 h-4 shrink-0" />
-                  {!sidebarCollapsed && <span>Organization Reports</span>}
+                  <Settings className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Settings</span>}
                 </Link>
               </li>
             </ul>
