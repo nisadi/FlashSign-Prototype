@@ -16,6 +16,15 @@ import {
   MOCK_CALENDAR_EVENTS, MOCK_TIME_OFF, MOCK_MEETINGS, MOCK_ANNOUNCEMENTS,
   MOCK_COLLABORATION_SETTINGS,
 } from '@/data/mock-collaboration';
+import {
+  MOCK_DOCUMENT_ITEMS, MOCK_FOLDERS, MOCK_TEMPLATES, MOCK_CONTRACTS,
+  MOCK_SIGNATURE_REQUESTS,
+} from '@/data/mock-documents';
+import type {
+  DocumentItem, DocumentFolder, DocumentTemplate, Contract,
+  SignatureRequest, SignatureSigner, SignatureField, AuditEvent,
+  DocumentComment, ContractReviewComment,
+} from '@/types/documents';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import type { Organization } from '@/types';
 
@@ -44,6 +53,11 @@ export interface AppState {
   teams: Team[];
   files: ProjectFile[];
   documents: Document[];
+  documentItems: DocumentItem[];
+  documentFolders: DocumentFolder[];
+  documentTemplates: DocumentTemplate[];
+  contracts: Contract[];
+  signatureRequests: SignatureRequest[];
   approvals: ApprovalRequest[];
   notifications: Notification[];
   auditLogs: AuditLog[];
@@ -122,6 +136,40 @@ interface AppActions {
   // Documents
   addDocument: (doc: Document) => void;
   updateDocument: (id: string, updates: Partial<Document>) => void;
+  // Document Items
+  addDocumentItem: (doc: Partial<DocumentItem> & { title: string; content?: string }) => string;
+  updateDocumentItem: (id: string, updates: Partial<DocumentItem>) => void;
+  deleteDocumentItem: (id: string) => void;
+  toggleFavoriteDocument: (id: string) => void;
+  moveDocumentToFolder: (id: string, folderId: string | null) => void;
+  duplicateDocument: (id: string) => void;
+  archiveDocumentItem: (id: string) => void;
+  addDocumentComment: (docId: string, text: string) => void;
+  // Folders
+  addFolder: (folder: { name: string; parentId?: string | null }) => void;
+  updateFolder: (id: string, name: string) => void;
+  deleteFolder: (id: string) => void;
+  // Templates
+  addTemplate: (tpl: Partial<DocumentTemplate> & { title: string; category: any; content: string }) => void;
+  updateTemplate: (id: string, updates: Partial<DocumentTemplate>) => void;
+  toggleFavoriteTemplate: (id: string) => void;
+  // Contracts
+  addContract: (contract: Partial<Contract> & { title: string; counterparty: string; contractType: any }) => string;
+  updateContract: (id: string, updates: Partial<Contract>) => void;
+  deleteContract: (id: string) => void;
+  archiveContract: (id: string) => void;
+  submitContractForReview: (contractId: string, reviewerId?: string) => void;
+  addContractReviewComment: (contractId: string, commentOrText: string | { authorId?: string; authorName?: string; content?: string; text?: string; actionRequested?: 'changes' | 'approved' }, actionRequested?: 'changes' | 'approved') => void;
+  markContractReviewed: (contractId: string, status?: 'approved' | 'changes_requested') => void;
+  // Electronic Signatures
+  addSignatureRequest: (req: Partial<SignatureRequest> & { title: string; signers: SignatureSigner[] }) => string;
+  updateSignatureRequest: (id: string, updates: Partial<SignatureRequest>) => void;
+  cancelSignatureRequest: (id: string) => void;
+  duplicateSignatureRequest: (id: string) => void;
+  sendSignatureReminder: (requestId: string, signerId?: string) => void;
+  signDocumentSimulated: (requestId: string, signerId: string, signatureValue: string) => void;
+  declineSignatureRequest: (requestId: string, signerId: string, reason: string) => void;
+  updateSignatureFields: (requestId: string, fields: SignatureField[]) => void;
   // Approvals
   updateApproval: (id: string, updates: Partial<ApprovalRequest>) => void;
   // Agent Runs
@@ -157,6 +205,11 @@ function getInitialState(): AppState {
     teams: MOCK_TEAMS,
     files: MOCK_PROJECT_FILES,
     documents: MOCK_DOCUMENTS,
+    documentItems: MOCK_DOCUMENT_ITEMS,
+    documentFolders: MOCK_FOLDERS,
+    documentTemplates: MOCK_TEMPLATES,
+    contracts: MOCK_CONTRACTS,
+    signatureRequests: MOCK_SIGNATURE_REQUESTS,
     approvals: MOCK_APPROVALS,
     notifications: MOCK_NOTIFICATIONS,
     auditLogs: MOCK_AUDIT_LOGS,
@@ -996,6 +1049,606 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       documents: s.documents.map(d => d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d),
     })),
 
+    // Document Items
+    addDocumentItem: (doc) => {
+      const newId = doc.id || `doc-${Date.now()}`;
+      update(s => {
+        const user = s.users.find(u => u.id === s.currentUserId);
+        const newItem: DocumentItem = {
+          id: newId,
+          title: doc.title,
+          description: doc.description || '',
+          type: doc.type || 'agreement',
+          status: doc.status || 'draft',
+          ownerId: doc.ownerId || s.currentUserId,
+          folderId: doc.folderId || null,
+          relatedProjectId: doc.relatedProjectId,
+          relatedContractId: doc.relatedContractId,
+          content: doc.content || '# ' + doc.title + '\n\nDraft content initialized.',
+          fileSize: doc.fileSize || '1.2 MB',
+          pages: doc.pages || 1,
+          isFavorite: doc.isFavorite ?? false,
+          isShared: doc.isShared ?? false,
+          sharedWithUserIds: doc.sharedWithUserIds || [],
+          accessType: doc.accessType || 'editor',
+          versions: doc.versions || [
+            {
+              id: `v1.0-${Date.now()}`,
+              versionNumber: 1,
+              modifiedBy: user?.name || 'User',
+              modifiedDate: new Date().toISOString().split('T')[0],
+              changeSummary: 'Initial document created.',
+              content: doc.content || '# ' + doc.title,
+            },
+          ],
+          comments: doc.comments || [],
+          lastOpenedAt: new Date().toISOString(),
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const log: AuditLog = {
+          id: `act-${Date.now()}`,
+          actorId: s.currentUserId,
+          actorName: user?.name || 'User',
+          action: 'created document',
+          resource: 'Document',
+          resourceId: newId,
+          detail: `"${newItem.title}"`,
+          timestamp: new Date().toISOString(),
+        };
+        return {
+          ...s,
+          documentItems: [newItem, ...s.documentItems],
+          auditLogs: [log, ...s.auditLogs],
+          activities: [log, ...s.activities],
+        };
+      });
+      return newId;
+    },
+    updateDocumentItem: (id, updates) => update(s => ({
+      ...s,
+      documentItems: s.documentItems.map(d =>
+        d.id === id ? { ...d, ...updates, updatedAt: new Date().toISOString() } : d
+      ),
+    })),
+    deleteDocumentItem: (id) => update(s => ({
+      ...s,
+      documentItems: s.documentItems.filter(d => d.id !== id),
+    })),
+    toggleFavoriteDocument: (id) => update(s => ({
+      ...s,
+      documentItems: s.documentItems.map(d =>
+        d.id === id ? { ...d, isFavorite: !d.isFavorite } : d
+      ),
+    })),
+    moveDocumentToFolder: (id, folderId) => update(s => ({
+      ...s,
+      documentItems: s.documentItems.map(d =>
+        d.id === id ? { ...d, folderId, updatedAt: new Date().toISOString() } : d
+      ),
+    })),
+    duplicateDocument: (id) => update(s => {
+      const orig = s.documentItems.find(d => d.id === id);
+      if (!orig) return s;
+      const cloneId = `doc-${Date.now()}`;
+      const clone: DocumentItem = {
+        ...orig,
+        id: cloneId,
+        title: `Copy of ${orig.title}`,
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      return { ...s, documentItems: [clone, ...s.documentItems] };
+    }),
+    archiveDocumentItem: (id) => update(s => ({
+      ...s,
+      documentItems: s.documentItems.map(d =>
+        d.id === id ? { ...d, status: 'archived', updatedAt: new Date().toISOString() } : d
+      ),
+    })),
+    addDocumentComment: (docId, text) => update(s => {
+      const user = s.users.find(u => u.id === s.currentUserId);
+      const newComment: DocumentComment = {
+        id: `cm-${Date.now()}`,
+        authorId: s.currentUserId,
+        authorName: user?.name || 'User',
+        text,
+        createdAt: new Date().toISOString(),
+        status: 'open',
+      };
+      return {
+        ...s,
+        documentItems: s.documentItems.map(d =>
+          d.id === docId ? { ...d, comments: [...(d.comments || []), newComment] } : d
+        ),
+      };
+    }),
+
+    // Folders
+    addFolder: (folder) => update(s => {
+      const newFolder: DocumentFolder = {
+        id: `f-${Date.now()}`,
+        name: folder.name,
+        parentId: folder.parentId || null,
+        ownerId: s.currentUserId,
+        documentCount: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      return { ...s, documentFolders: [...s.documentFolders, newFolder] };
+    }),
+    updateFolder: (id, name) => update(s => ({
+      ...s,
+      documentFolders: s.documentFolders.map(f =>
+        f.id === id ? { ...f, name, updatedAt: new Date().toISOString() } : f
+      ),
+    })),
+    deleteFolder: (id) => update(s => ({
+      ...s,
+      documentFolders: s.documentFolders.filter(f => f.id !== id),
+    })),
+
+    // Templates
+    addTemplate: (tpl) => update(s => {
+      const newTpl: DocumentTemplate = {
+        id: tpl.id || `tpl-${Date.now()}`,
+        title: tpl.title,
+        description: tpl.description || '',
+        category: tpl.category || 'general',
+        type: tpl.type || 'agreement',
+        content: tpl.content,
+        placeholders: tpl.placeholders || [],
+        isFavorite: tpl.isFavorite ?? false,
+        lastUpdated: new Date().toISOString().split('T')[0],
+      };
+      return { ...s, documentTemplates: [newTpl, ...s.documentTemplates] };
+    }),
+    updateTemplate: (id, updates) => update(s => ({
+      ...s,
+      documentTemplates: s.documentTemplates.map(t =>
+        t.id === id ? { ...t, ...updates, lastUpdated: new Date().toISOString().split('T')[0] } : t
+      ),
+    })),
+    toggleFavoriteTemplate: (id) => update(s => ({
+      ...s,
+      documentTemplates: s.documentTemplates.map(t =>
+        t.id === id ? { ...t, isFavorite: !t.isFavorite } : t
+      ),
+    })),
+
+    // Contracts
+    addContract: (contract) => {
+      const newId = contract.id || `cnt-${Date.now()}`;
+      update(s => {
+        const user = s.users.find(u => u.id === s.currentUserId);
+        const newContract: Contract = {
+          id: newId,
+          title: contract.title,
+          contractType: contract.contractType || 'agreement',
+          counterparty: contract.counterparty,
+          ownerId: contract.ownerId || s.currentUserId,
+          ownerName: contract.ownerName || user?.name || 'User',
+          relatedProjectId: contract.relatedProjectId,
+          documentId: contract.documentId,
+          effectiveDate: contract.effectiveDate || new Date().toISOString().split('T')[0],
+          expiryDate: contract.expiryDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
+          renewalType: contract.renewalType || 'manual',
+          contractValue: contract.contractValue || contract.value || 0,
+          value: contract.value || contract.contractValue || 0,
+          paymentTerms: contract.paymentTerms || 'Net 30 days',
+          specialConditions: contract.specialConditions,
+          description: contract.description,
+          status: contract.status || 'draft',
+          reviewerId: contract.reviewerId,
+          signatureRequestId: contract.signatureRequestId,
+          reviewComments: contract.reviewComments || [],
+          activity: contract.activity || [
+            {
+              id: `ca-${Date.now()}`,
+              action: 'Contract record created',
+              actor: user?.name || 'User',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        const log: AuditLog = {
+          id: `act-${Date.now()}`,
+          actorId: s.currentUserId,
+          actorName: user?.name || 'User',
+          action: 'created contract',
+          resource: 'Contract',
+          resourceId: newId,
+          detail: `"${newContract.title}" with ${newContract.counterparty}`,
+          timestamp: new Date().toISOString(),
+        };
+        return {
+          ...s,
+          contracts: [newContract, ...s.contracts],
+          auditLogs: [log, ...s.auditLogs],
+          activities: [log, ...s.activities],
+        };
+      });
+      return newId;
+    },
+    updateContract: (id, updates) => update(s => ({
+      ...s,
+      contracts: s.contracts.map(c =>
+        c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
+      ),
+    })),
+    deleteContract: (id) => update(s => ({
+      ...s,
+      contracts: s.contracts.filter(c => c.id !== id),
+    })),
+    archiveContract: (id) => update(s => ({
+      ...s,
+      contracts: s.contracts.map(c =>
+        c.id === id ? { ...c, status: 'archived', updatedAt: new Date().toISOString() } : c
+      ),
+    })),
+    submitContractForReview: (contractId, reviewerId) => update(s => {
+      const user = s.users.find(u => u.id === s.currentUserId);
+      return {
+        ...s,
+        contracts: s.contracts.map(c => {
+          if (c.id === contractId) {
+            return {
+              ...c,
+              status: 'pending_review',
+              reviewerId: reviewerId || c.reviewerId,
+              updatedAt: new Date().toISOString(),
+              activity: [
+                ...(c.activity || []),
+                {
+                  id: `ca-${Date.now()}`,
+                  action: 'Submitted for internal review',
+                  actor: user?.name || 'User',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            };
+          }
+          return c;
+        }),
+      };
+    }),
+    addContractReviewComment: (contractId, commentOrText, actionRequested) => update(s => {
+      const user = s.users.find(u => u.id === s.currentUserId);
+      const isObj = typeof commentOrText === 'object' && commentOrText !== null;
+      const textVal = isObj ? (commentOrText.text || commentOrText.content || '') : commentOrText;
+      const authorIdVal = (isObj && commentOrText.authorId) ? commentOrText.authorId : s.currentUserId;
+      const authorNameVal = (isObj && commentOrText.authorName) ? commentOrText.authorName : (user?.name || 'User');
+      const actionVal = (isObj && commentOrText.actionRequested) ? commentOrText.actionRequested : actionRequested;
+
+      const newComment: ContractReviewComment = {
+        id: `rc-${Date.now()}`,
+        authorId: authorIdVal,
+        authorName: authorNameVal,
+        text: textVal,
+        content: textVal,
+        createdAt: new Date().toISOString(),
+        actionRequested: actionVal,
+      };
+      return {
+        ...s,
+        contracts: s.contracts.map(c => {
+          if (c.id === contractId) {
+            return {
+              ...c,
+              reviewComments: [...(c.reviewComments || []), newComment],
+              updatedAt: new Date().toISOString(),
+            };
+          }
+          return c;
+        }),
+      };
+    }),
+    markContractReviewed: (contractId, status = 'approved') => update(s => {
+      const user = s.users.find(u => u.id === s.currentUserId);
+      const nextStatus = status === 'approved' ? 'awaiting_signature' : 'draft';
+      return {
+        ...s,
+        contracts: s.contracts.map(c => {
+          if (c.id === contractId) {
+            return {
+              ...c,
+              status: nextStatus,
+              updatedAt: new Date().toISOString(),
+              activity: [
+                ...(c.activity || []),
+                {
+                  id: `ca-${Date.now()}`,
+                  action: status === 'approved' ? 'Approved internal review' : 'Changes requested during review',
+                  actor: user?.name || 'User',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            };
+          }
+          return c;
+        }),
+      };
+    }),
+
+    // Electronic Signatures
+    addSignatureRequest: (req) => {
+      const newId = req.id || `sig-${Date.now()}`;
+      update(s => {
+        const user = s.users.find(u => u.id === s.currentUserId);
+        const newReq: SignatureRequest = {
+          id: newId,
+          documentId: req.documentId,
+          contractId: req.contractId,
+          title: req.title,
+          senderId: req.senderId || s.currentUserId,
+          signers: req.signers,
+          signingOrder: req.signingOrder || 'sequential',
+          status: 'sent',
+          createdAt: new Date().toISOString(),
+          sentAt: new Date().toISOString(),
+          expiresAt: req.expiresAt || new Date(Date.now() + 14 * 86400000).toISOString().split('T')[0],
+          message: req.message || 'Please review and execute this document via Flash Sign simulated e-signature.',
+          reminderIntervalDays: req.reminderIntervalDays || 3,
+          fields: req.fields || [],
+          events: [
+            {
+              id: `ev-${Date.now()}`,
+              requestId: newId,
+              documentId: req.documentId,
+              eventName: 'Signature Request Created & Dispatched',
+              actorName: user?.name || 'User',
+              actorEmail: user?.email || '',
+              description: `Simulated electronic signature request dispatched to ${req.signers.length} signers.`,
+              category: 'creation',
+              timestamp: new Date().toISOString(),
+            },
+          ],
+        };
+
+        // If linked to contract, update contract status
+        const updatedContracts = s.contracts.map(c => {
+          if (c.id === req.contractId || (req.documentId && c.documentId === req.documentId)) {
+            return { ...c, status: 'awaiting_signature' as const, signatureRequestId: newId };
+          }
+          return c;
+        });
+
+        // Update document status
+        const updatedDocs = s.documentItems.map(d => {
+          if (d.id === req.documentId) {
+            return { ...d, status: 'pending' as const };
+          }
+          return d;
+        });
+
+        const log: AuditLog = {
+          id: `act-${Date.now()}`,
+          actorId: s.currentUserId,
+          actorName: user?.name || 'User',
+          action: 'sent signature request',
+          resource: 'SignatureRequest',
+          resourceId: newId,
+          detail: `"${newReq.title}"`,
+          timestamp: new Date().toISOString(),
+        };
+
+        return {
+          ...s,
+          signatureRequests: [newReq, ...s.signatureRequests],
+          contracts: updatedContracts,
+          documentItems: updatedDocs,
+          auditLogs: [log, ...s.auditLogs],
+          activities: [log, ...s.activities],
+        };
+      });
+      return newId;
+    },
+    updateSignatureRequest: (id, updates) => update(s => ({
+      ...s,
+      signatureRequests: s.signatureRequests.map(r => r.id === id ? { ...r, ...updates } : r),
+    })),
+    cancelSignatureRequest: (id) => update(s => {
+      const user = s.users.find(u => u.id === s.currentUserId);
+      return {
+        ...s,
+        signatureRequests: s.signatureRequests.map(r => {
+          if (r.id === id) {
+            return {
+              ...r,
+              status: 'cancelled',
+              events: [
+                ...(r.events || []),
+                {
+                  id: `ev-${Date.now()}`,
+                  requestId: id,
+                  eventName: 'Signature Request Cancelled',
+                  actorName: user?.name || 'User',
+                  description: 'Request was cancelled by the sender.',
+                  category: 'status',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            };
+          }
+          return r;
+        }),
+      };
+    }),
+    duplicateSignatureRequest: (id) => update(s => {
+      const orig = s.signatureRequests.find(r => r.id === id);
+      if (!orig) return s;
+      const cloneId = `sig-${Date.now()}`;
+      const clone: SignatureRequest = {
+        ...orig,
+        id: cloneId,
+        title: `Copy of ${orig.title}`,
+        status: 'draft',
+        createdAt: new Date().toISOString(),
+        sentAt: undefined,
+        completedAt: undefined,
+        signers: orig.signers.map(s => ({ ...s, status: 'pending', signedAt: undefined, viewedAt: undefined })),
+        events: [],
+      };
+      return { ...s, signatureRequests: [clone, ...s.signatureRequests] };
+    }),
+    sendSignatureReminder: (requestId, signerId) => update(s => {
+      const user = s.users.find(u => u.id === s.currentUserId);
+      return {
+        ...s,
+        signatureRequests: s.signatureRequests.map(r => {
+          if (r.id === requestId) {
+            const targetSigner = signerId ? r.signers.find(x => x.id === signerId)?.name : 'All pending signers';
+            return {
+              ...r,
+              events: [
+                ...(r.events || []),
+                {
+                  id: `ev-${Date.now()}`,
+                  requestId,
+                  eventName: 'Simulated Reminder Sent',
+                  actorName: user?.name || 'User',
+                  description: `Simulated signature reminder pinged for: ${targetSigner}.`,
+                  category: 'delivery',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            };
+          }
+          return r;
+        }),
+      };
+    }),
+    signDocumentSimulated: (requestId, signerId, signatureValue) => update(s => {
+      let reqTitle = '';
+      let isAllCompleted = false;
+      let linkedContractId: string | undefined;
+      let linkedDocumentId: string | undefined;
+
+      const updatedRequests = s.signatureRequests.map(r => {
+        if (r.id !== requestId) return r;
+        reqTitle = r.title;
+        linkedContractId = r.contractId;
+        linkedDocumentId = r.documentId;
+
+        const updatedSigners = r.signers.map(sgn => {
+          if (sgn.id === signerId || sgn.email === signerId) {
+            return {
+              ...sgn,
+              status: 'signed' as const,
+              signedAt: new Date().toISOString(),
+              signatureValue,
+            };
+          }
+          return sgn;
+        });
+
+        // Determine if all required signers have signed
+        const allSigned = updatedSigners
+          .filter(sgn => sgn.required)
+          .every(sgn => sgn.status === 'signed');
+
+        isAllCompleted = allSigned;
+
+        const signerObj = r.signers.find(x => x.id === signerId || x.email === signerId);
+        const newEvent: AuditEvent = {
+          id: `ev-${Date.now()}`,
+          requestId,
+          documentId: r.documentId,
+          eventName: 'Demo Signature Executed',
+          actorName: signerObj?.name || 'Signer',
+          actorEmail: signerObj?.email,
+          relatedSigner: signerObj?.name,
+          description: `Simulated electronic signature recorded for "${signerObj?.name}". (Demo only, non-binding)`,
+          category: 'signing',
+          timestamp: new Date().toISOString(),
+        };
+
+        const completionEvent: AuditEvent | null = allSigned
+          ? {
+              id: `ev-comp-${Date.now()}`,
+              requestId,
+              documentId: r.documentId,
+              eventName: 'Workflow Completed',
+              actorName: 'Flash Sign Execution Protocol',
+              description: 'All required signers have completed the simulated signature process.',
+              category: 'status',
+              timestamp: new Date().toISOString(),
+            }
+          : null;
+
+        return {
+          ...r,
+          signers: updatedSigners,
+          status: allSigned ? ('completed' as const) : ('partially_signed' as const),
+          completedAt: allSigned ? new Date().toISOString() : undefined,
+          events: completionEvent ? [...(r.events || []), newEvent, completionEvent] : [...(r.events || []), newEvent],
+        };
+      });
+
+      // If all completed, also update linked contract to active and document to signed!
+      const updatedContracts = s.contracts.map(c => {
+        if (isAllCompleted && (c.id === linkedContractId || c.signatureRequestId === requestId)) {
+          return { ...c, status: 'active' as const, updatedAt: new Date().toISOString() };
+        }
+        return c;
+      });
+
+      const updatedDocs = s.documentItems.map(d => {
+        if (isAllCompleted && d.id === linkedDocumentId) {
+          return { ...d, status: 'signed' as const, updatedAt: new Date().toISOString() };
+        }
+        return d;
+      });
+
+      return {
+        ...s,
+        signatureRequests: updatedRequests,
+        contracts: updatedContracts,
+        documentItems: updatedDocs,
+      };
+    }),
+    declineSignatureRequest: (requestId, signerId, reason) => update(s => {
+      return {
+        ...s,
+        signatureRequests: s.signatureRequests.map(r => {
+          if (r.id === requestId) {
+            const signerObj = r.signers.find(x => x.id === signerId || x.email === signerId);
+            return {
+              ...r,
+              status: 'declined',
+              signers: r.signers.map(sgn =>
+                sgn.id === signerId || sgn.email === signerId
+                  ? { ...sgn, status: 'declined' as const, declinedAt: new Date().toISOString(), declineReason: reason }
+                  : sgn
+              ),
+              events: [
+                ...(r.events || []),
+                {
+                  id: `ev-${Date.now()}`,
+                  requestId,
+                  eventName: 'Signature Declined',
+                  actorName: signerObj?.name || 'Signer',
+                  description: `Signer declined with reason: "${reason}".`,
+                  category: 'status',
+                  timestamp: new Date().toISOString(),
+                },
+              ],
+            };
+          }
+          return r;
+        }),
+      };
+    }),
+    updateSignatureFields: (requestId, fields) => update(s => ({
+      ...s,
+      signatureRequests: s.signatureRequests.map(r =>
+        r.id === requestId ? { ...r, fields } : r
+      ),
+    })),
+
     // Approvals
     updateApproval: (id, updates) => update(s => ({
       ...s,
@@ -1111,3 +1764,22 @@ export function useCollaborationSettings() {
   return useApp().collaborationSettings;
 }
 
+export function useDocumentItems() {
+  return useApp().documentItems;
+}
+
+export function useDocumentFolders() {
+  return useApp().documentFolders;
+}
+
+export function useDocumentTemplates() {
+  return useApp().documentTemplates;
+}
+
+export function useContracts() {
+  return useApp().contracts;
+}
+
+export function useSignatureRequests() {
+  return useApp().signatureRequests;
+}

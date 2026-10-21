@@ -8,6 +8,7 @@ import {
   ChevronDown, PanelLeftClose, PanelLeftOpen, Zap,
   Star, Clock, Compass, Plus, Building2,
   UserCheck, Megaphone, CalendarDays, Palmtree, Video, Flag, Bell,
+  FileSignature, Folder, ScrollText, Send, Inbox, CheckCheck, FileWarning, Layers, Sliders,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, useCurrentUser, useRoleConfig } from '@/context/app-context';
@@ -23,7 +24,7 @@ const MOCK_WORKSPACES = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects } = useApp();
+  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, documentItems, contracts, signatureRequests } = useApp();
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
@@ -34,6 +35,9 @@ export function AppSidebar() {
     if (href === '/projects') return pathname === '/projects';
     if (href === '/teams') return pathname === '/teams';
     if (href === '/planner') return pathname === '/planner';
+    if (href === '/documents') return pathname === '/documents';
+    if (href === '/contracts') return pathname === '/contracts';
+    if (href === '/signatures') return pathname === '/signatures';
     return pathname === href || pathname.startsWith(href + '/');
   };
 
@@ -162,6 +166,375 @@ export function AppSidebar() {
 
         {/* Navigation Items */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-4">
+          {/* Documents Section */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                Documents
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  href="/documents"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Documents Home"
+                >
+                  <FileText className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Documents Home</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/all"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/all') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="All Documents"
+                >
+                  <Layers className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>All Documents</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/mine"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/mine') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="My Documents"
+                >
+                  <UserCheck className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>My Documents</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/shared"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/shared') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Shared with Me"
+                >
+                  <Users className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Shared with Me</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/recent"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/recent') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Recent Documents"
+                >
+                  <Clock className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Recent Documents</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/favorites"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/favorites') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Favorites"
+                >
+                  <Star className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Favorites</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/templates"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/templates') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Templates"
+                >
+                  <ScrollText className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Templates</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/documents/folders"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/documents/folders') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Folders"
+                >
+                  <Folder className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Folders</span>}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Contracts Section */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                Contracts
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  href="/contracts"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Contracts Overview"
+                >
+                  <Building2 className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Contracts Overview</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/all"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/all') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="All Contracts"
+                >
+                  <ScrollText className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>All Contracts</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/drafts"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/drafts') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Draft Contracts"
+                >
+                  <Clock className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Draft Contracts</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/review"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/review') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Pending Review"
+                >
+                  <Activity className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Pending Review</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/active"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/active') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Active Contracts"
+                >
+                  <CheckCircle2 className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Active Contracts</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/expiring"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/expiring') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Expiring Contracts"
+                >
+                  <FileWarning className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Expiring Soon</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/completed"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/completed') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Completed Contracts"
+                >
+                  <CheckCheck className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Completed</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/contracts/archived"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/contracts/archived') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Archived Contracts"
+                >
+                  <Folder className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Archived</span>}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
+          {/* Electronic Signatures Section */}
+          <div>
+            {!sidebarCollapsed && (
+              <p className="px-2 mb-1 text-[10px] font-semibold uppercase tracking-widest text-white/40">
+                E-Signatures
+              </p>
+            )}
+            <ul className="space-y-0.5">
+              <li>
+                <Link
+                  href="/signatures"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Signature Requests"
+                >
+                  <FileSignature className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Signature Dashboard</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/all"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/all') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="All Signature Requests"
+                >
+                  <Layers className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>All Requests</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/waiting"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/waiting') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Waiting for My Signature"
+                >
+                  <Inbox className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Action Required</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/sent"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/sent') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Sent for Signature"
+                >
+                  <Send className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Sent Requests</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/completed"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/completed') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Completed Signatures"
+                >
+                  <CheckCheck className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Completed</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/declined"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/declined') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Declined Requests"
+                >
+                  <FileWarning className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Declined</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/expired"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/expired') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Expired Requests"
+                >
+                  <Clock className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>Expired</span>}
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/signatures/settings"
+                  className={cn(
+                    'flex items-center gap-2.5 px-2.5 py-1.5 rounded-md text-xs transition-all',
+                    isActive('/signatures/settings') ? 'bg-flash/15 text-flash font-semibold' : 'text-white/70 hover:text-white hover:bg-white/5',
+                    sidebarCollapsed && 'justify-center'
+                  )}
+                  title="Settings"
+                >
+                  <Sliders className="w-4 h-4 shrink-0" />
+                  {!sidebarCollapsed && <span>E-Sign Settings</span>}
+                </Link>
+              </li>
+            </ul>
+          </div>
+
           {/* Collaboration Group */}
           <div>
             {!sidebarCollapsed && (

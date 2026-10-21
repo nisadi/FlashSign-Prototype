@@ -332,4 +332,4 @@ export interface Integration {
 }
 
 export * from './collaboration';
-
+export * from './documents';
