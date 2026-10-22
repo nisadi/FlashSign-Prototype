@@ -21,7 +21,7 @@ export default function CompletedContractsPage() {
   const [searchQuery, setSearchQuery] = useState('');
 
   const completedContracts = useMemo(() => {
-    return contracts.filter(c => c.status === 'completed' || c.status === 'active');
+    return contracts.filter(c => c.status === 'completed');
   }, [contracts]);
 
   const filteredContracts = useMemo(() => {

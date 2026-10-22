@@ -65,7 +65,7 @@ export default function ContractsOverviewPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-muted mb-1 font-medium">
-              <Link href="/documents" className="hover:text-ink transition-colors">Documents</Link>
+              <Link href="/agreements" className="hover:text-ink transition-colors">Agreements</Link>
               <span>/</span>
               <span className="text-ink font-semibold">Contracts</span>
             </div>
@@ -129,7 +129,7 @@ export default function ContractsOverviewPage() {
           </Link>
 
           <Link
-            href="/signatures/waiting"
+            href="/contracts/awaiting"
             className="p-4 rounded-xl border border-amber-200 bg-amber-50/25 hover:border-amber-400 hover:shadow-xs transition-all text-left"
           >
             <span className="text-xs font-semibold text-amber-800 block">Awaiting Signature</span>

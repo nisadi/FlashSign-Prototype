@@ -69,13 +69,13 @@ export const ROLE_CONFIGS: Record<DemoRole, RoleConfig> = {
     id: 'document_manager', label: 'Document Manager', description: 'Agreements, signatures, and approval workflows.',
     color: '#ffa726',
     navGroups: ['dashboard', 'documents', 'approvals', 'reports'],
-    defaultPath: '/documents',
+    defaultPath: '/agreements',
   },
   client: {
     id: 'client', label: 'Client', description: 'View shared documents and sign agreements.',
     color: '#8d6e63',
     navGroups: ['documents'],
-    defaultPath: '/documents',
+    defaultPath: '/agreements',
   },
   auditor: {
     id: 'auditor', label: 'Auditor', description: 'Read-only access to audit records and document history.',

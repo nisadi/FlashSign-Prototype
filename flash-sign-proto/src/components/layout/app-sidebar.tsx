@@ -4,11 +4,11 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import {
   LayoutDashboard, FolderKanban, CheckSquare, Calendar, Users,
-  Activity, Bot, FileText, CheckCircle2, BarChart3, Settings,
+  Activity, Bot, FileText, BarChart3, Settings,
   ChevronDown, PanelLeftClose, PanelLeftOpen, Zap,
-  Star, Clock, Compass, Plus, Building2,
+  Clock, Compass, Plus, Building2, House,
   UserCheck, Megaphone, CalendarDays, Palmtree, Video, Flag, Bell,
-  FileSignature, Folder, ScrollText, Send, Inbox, CheckCheck, FileWarning, Layers, Sliders,
+  FileSignature, ScrollText, Inbox, Sliders,
   ChevronsUpDown,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
@@ -25,7 +25,7 @@ const MOCK_WORKSPACES = [
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, documentItems, contracts, signatureRequests, agentRuns } = useApp();
+  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, signatureRequests, agentRuns } = useApp();
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
@@ -40,6 +40,8 @@ export function AppSidebar() {
     href: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string | number;
+    /** Overrides the default href-based match, e.g. to cover a whole route prefix. */
+    activeWhen?: (pathname: string) => boolean;
   }
 
   interface NavSection {
@@ -52,77 +54,43 @@ export function AppSidebar() {
 
   const sections: NavSection[] = [
     {
-      id: 'documents',
-      title: 'Documents',
-      icon: FileText,
-      badge: documentItems?.length,
+      id: 'workspace',
+      title: 'Workspace',
+      icon: FolderKanban,
       items: [
-        { label: 'Documents Home', href: '/documents', icon: FileText },
-        { label: 'All Documents', href: '/documents/all', icon: Layers },
-        { label: 'My Documents', href: '/documents/mine', icon: UserCheck },
-        { label: 'Shared with Me', href: '/documents/shared', icon: Users },
-        { label: 'Recent Documents', href: '/documents/recent', icon: Clock },
-        { label: 'Favorites', href: '/documents/favorites', icon: Star },
-        { label: 'Templates', href: '/documents/templates', icon: ScrollText },
-        { label: 'Folders', href: '/documents/folders', icon: Folder },
+        { label: 'Dashboard', href: '/projects/home', icon: LayoutDashboard },
+        { label: 'Projects', href: '/projects', icon: FolderKanban },
+        { label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare },
+        { label: 'Notifications', href: '/teams/notifications', icon: Bell },
+        { label: 'Settings', href: '/teams/settings', icon: Settings },
       ],
     },
     {
-      id: 'contracts',
-      title: 'Contracts',
-      icon: Building2,
-      badge: contracts?.length,
-      items: [
-        { label: 'Contracts Overview', href: '/contracts', icon: Building2 },
-        { label: 'All Contracts', href: '/contracts/all', icon: ScrollText },
-        { label: 'Draft Contracts', href: '/contracts/drafts', icon: Clock },
-        { label: 'Pending Review', href: '/contracts/review', icon: Activity },
-        { label: 'Active Contracts', href: '/contracts/active', icon: CheckCircle2 },
-        { label: 'Expiring Soon', href: '/contracts/expiring', icon: FileWarning },
-        { label: 'Completed', href: '/contracts/completed', icon: CheckCheck },
-        { label: 'Archived', href: '/contracts/archived', icon: Folder },
-      ],
-    },
-    {
-      id: 'signatures',
-      title: 'E-Signatures',
+      // Documents, contracts and e-signatures share one section; the pages
+      // behind each item carry their own top tabs (AgreementsTabs).
+      id: 'agreements',
+      title: 'Agreements',
       icon: FileSignature,
       badge: actionRequiredSignatures > 0 ? actionRequiredSignatures : undefined,
       items: [
-        { label: 'Signature Dashboard', href: '/signatures', icon: FileSignature },
-        { label: 'All Requests', href: '/signatures/all', icon: Layers },
-        { label: 'Action Required', href: '/signatures/waiting', icon: Inbox, badge: actionRequiredSignatures > 0 ? actionRequiredSignatures : undefined },
-        { label: 'Sent Requests', href: '/signatures/sent', icon: Send },
-        { label: 'Completed', href: '/signatures/completed', icon: CheckCheck },
-        { label: 'Declined', href: '/signatures/declined', icon: FileWarning },
-        { label: 'Expired', href: '/signatures/expired', icon: Clock },
-        { label: 'E-Sign Settings', href: '/signatures/settings', icon: Sliders },
-      ],
-    },
-    {
-      id: 'ai-agents',
-      title: 'AI Coding Agents',
-      icon: Bot,
-      badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
-      items: [
-        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot },
-        { label: 'SRS Story Generator', href: '/ai-agents/story-generator', icon: FileText },
-        { label: 'Task Assignment & IDE', href: '/ai-agents/assign', icon: FolderKanban },
-        { label: 'Provider Settings', href: '/ai-agents/settings', icon: Settings },
-        { label: 'AI Audit Trail', href: '/ai-agents/audit', icon: Activity },
-      ],
-    },
-    {
-      id: 'collaboration',
-      title: 'Collaboration',
-      icon: Users,
-      items: [
-        { label: 'Team Overview', href: '/teams', icon: Users },
-        { label: 'Teams Directory', href: '/teams/directory', icon: Building2 },
-        { label: 'Members', href: '/teams/members', icon: UserCheck },
-        { label: 'Workload', href: '/teams/workload', icon: BarChart3 },
-        { label: 'Team Activity', href: '/teams/activity', icon: Activity },
-        { label: 'Announcements', href: '/teams/announcements', icon: Megaphone },
+        { label: 'Home', href: '/agreements', icon: House },
+        {
+          label: 'Inbox',
+          href: '/signatures/all',
+          icon: Inbox,
+          badge: actionRequiredSignatures > 0 ? actionRequiredSignatures : undefined,
+          activeWhen: path => path.startsWith('/signatures') && !path.startsWith('/signatures/settings'),
+        },
+        {
+          label: 'Documents',
+          href: '/documents/all',
+          icon: FileText,
+          activeWhen: path => path.startsWith('/documents') && !path.startsWith('/documents/templates'),
+        },
+        { label: 'Contracts', href: '/contracts', icon: Building2, activeWhen: path => path.startsWith('/contracts') },
+        { label: 'Templates', href: '/documents/templates', icon: ScrollText },
+        { label: 'Reports', href: '/agreements/reports', icon: BarChart3 },
+        { label: 'Settings', href: '/signatures/settings', icon: Sliders },
       ],
     },
     {
@@ -139,45 +107,65 @@ export function AppSidebar() {
       ],
     },
     {
-      id: 'workspace',
-      title: 'Workspace',
-      icon: FolderKanban,
+      id: 'collaboration',
+      title: 'Collaboration',
+      icon: Users,
       items: [
-        { label: 'Projects', href: '/projects', icon: FolderKanban },
-        { label: 'PM Home', href: '/projects/home', icon: LayoutDashboard },
-        { label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare },
-        { label: 'Notifications', href: '/teams/notifications', icon: Bell },
-        { label: 'Settings', href: '/teams/settings', icon: Settings },
+        { label: 'Team Overview', href: '/teams', icon: Users },
+        { label: 'Teams Directory', href: '/teams/directory', icon: Building2 },
+        { label: 'Members', href: '/teams/members', icon: UserCheck },
+        { label: 'Workload', href: '/teams/workload', icon: BarChart3 },
+        { label: 'Team Activity', href: '/teams/activity', icon: Activity },
+        { label: 'Announcements', href: '/teams/announcements', icon: Megaphone },
+      ],
+    },
+    {
+      id: 'ai-agents',
+      title: 'AI Coding Agents',
+      icon: Bot,
+      badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
+      items: [
+        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot },
+        { label: 'SRS Story Generator', href: '/ai-agents/story-generator', icon: FileText },
+        { label: 'Task Assignment & IDE', href: '/ai-agents/assign', icon: FolderKanban },
+        { label: 'Provider Settings', href: '/ai-agents/settings', icon: Settings },
+        { label: 'AI Audit Trail', href: '/ai-agents/audit', icon: Activity },
       ],
     },
   ];
 
+  const isActive = (item: NavItem) => {
+    if (item.activeWhen) return item.activeWhen(pathname);
+    const { href } = item;
+    if (href === '/projects') return pathname === '/projects';
+    if (href === '/teams') return pathname === '/teams';
+    if (href === '/planner') return pathname === '/planner';
+    if (href === '/agreements') return pathname === '/agreements';
+    return pathname === href || pathname.startsWith(href + '/');
+  };
+
   // Accordion state: open sections
   const [openSections, setOpenSections] = useState<Record<string, boolean>>(() => {
     const initial: Record<string, boolean> = {
-      documents: false,
-      contracts: false,
-      signatures: false,
-      'ai-agents': false,
-      collaboration: false,
-      planning: false,
       workspace: false,
+      agreements: false,
+      planning: false,
+      collaboration: false,
+      'ai-agents': false,
     };
-    if (pathname.startsWith('/documents')) initial.documents = true;
-    else if (pathname.startsWith('/contracts')) initial.contracts = true;
-    else if (pathname.startsWith('/signatures')) initial.signatures = true;
+    if (['/agreements', '/documents', '/contracts', '/signatures'].some(p => pathname.startsWith(p))) initial.agreements = true;
     else if (pathname.startsWith('/ai-agents')) initial['ai-agents'] = true;
     else if (pathname.startsWith('/teams')) initial.collaboration = true;
     else if (pathname.startsWith('/planner')) initial.planning = true;
     else if (pathname.startsWith('/projects')) initial.workspace = true;
-    else initial.documents = true;
+    else initial.workspace = true;
     return initial;
   });
 
   // Automatically expand the section that matches the current route
   useEffect(() => {
     sections.forEach(sec => {
-      if (sec.items.some(item => isActive(item.href))) {
+      if (sec.items.some(item => isActive(item))) {
         setOpenSections(prev => ({ ...prev, [sec.id]: true }));
       }
     });
@@ -193,16 +181,6 @@ export function AppSidebar() {
     const updated: Record<string, boolean> = {};
     sections.forEach(s => { updated[s.id] = nextState; });
     setOpenSections(updated);
-  };
-
-  const isActive = (href: string) => {
-    if (href === '/projects') return pathname === '/projects';
-    if (href === '/teams') return pathname === '/teams';
-    if (href === '/planner') return pathname === '/planner';
-    if (href === '/documents') return pathname === '/documents';
-    if (href === '/contracts') return pathname === '/contracts';
-    if (href === '/signatures') return pathname === '/signatures';
-    return pathname === href || pathname.startsWith(href + '/');
   };
 
   return (
@@ -350,7 +328,7 @@ export function AppSidebar() {
           {!sidebarCollapsed ? (
             sections.map(section => {
               const isOpen = !!openSections[section.id];
-              const hasActiveChild = section.items.some(item => isActive(item.href));
+              const hasActiveChild = section.items.some(item => isActive(item));
               const SectionIcon = section.icon;
 
               return (
@@ -401,7 +379,7 @@ export function AppSidebar() {
                   {isOpen && (
                     <ul className="mt-1 space-y-0.5 ml-3 pl-2.5 border-l border-white/10 animate-fade-in">
                       {section.items.map(item => {
-                        const active = isActive(item.href);
+                        const active = isActive(item);
                         const ItemIcon = item.icon;
                         return (
                           <li key={item.href}>
@@ -442,7 +420,7 @@ export function AppSidebar() {
             /* Collapsed Sidebar: Clean Icon-Only Section Launchers */
             <div className="space-y-2 py-1">
               {sections.map(section => {
-                const hasActive = section.items.some(item => isActive(item.href));
+                const hasActive = section.items.some(item => isActive(item));
                 const SectionIcon = section.icon;
                 return (
                   <div key={section.id} className="relative group flex justify-center">

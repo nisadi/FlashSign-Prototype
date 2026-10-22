@@ -28,7 +28,7 @@ export default function ExpiringContractsPage() {
 
   const expiringContractsWithMetrics = useMemo(() => {
     return contracts
-      .filter(c => c.status === 'active' || c.status === 'expired')
+      .filter(c => c.status === 'active' || c.status === 'expiring' || c.status === 'expired')
       .map(c => {
         let daysRemaining: number | null = null;
         let isExpired = false;
