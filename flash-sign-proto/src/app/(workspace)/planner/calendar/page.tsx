@@ -1,7 +1,8 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, Suspense } from 'react';
 import Link from 'next/link';
+import { useSearchParams } from 'next/navigation';
 import {
   Calendar as CalendarIcon, Clock, ChevronLeft, ChevronRight,
   Plus, Video, Palmtree, Flag, CheckSquare, Users, Building2,
@@ -11,19 +12,27 @@ import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge, MeetingStatusBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateCalendarEventDialog } from '@/components/collaboration/create-calendar-event-dialog';
+import { CreateMeetingDialog } from '@/components/collaboration/create-meeting-dialog';
 import { MeetingDetailDrawer } from '@/components/collaboration/meeting-detail-drawer';
 import type { CalendarEvent, Meeting } from '@/types';
 
-export default function FullCalendarPage() {
+const CATEGORIES = ['meeting', 'task_deadline', 'milestone', 'time_off', 'team_event'];
+
+function FullCalendarView() {
   const { calendarEvents, meetings, deleteCalendarEvent, users, teams, projects } = useApp();
+  // Links such as ?category=time_off open the calendar pre-filtered
+  const categoryParam = useSearchParams().get('category');
 
   const [currentDate, setCurrentDate] = useState(new Date('2026-10-21'));
   const [viewMode, setViewMode] = useState<'month' | 'week' | 'day' | 'agenda'>('month');
-  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [categoryFilter, setCategoryFilter] = useState(
+    categoryParam && CATEGORIES.includes(categoryParam) ? categoryParam : 'all'
+  );
   const [teamFilter, setTeamFilter] = useState('all');
   const [memberFilter, setMemberFilter] = useState('all');
 
   const [createEventOpen, setCreateEventOpen] = useState(false);
+  const [createMeetingOpen, setCreateMeetingOpen] = useState(false);
   const [eventToEdit, setEventToEdit] = useState<CalendarEvent | null>(null);
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
 
@@ -162,6 +171,13 @@ export default function FullCalendarPage() {
           </div>
 
           <div className="flex items-center gap-2">
+            <button
+              onClick={() => setCreateMeetingOpen(true)}
+              className="flex items-center gap-1.5 px-4 py-2 bg-paper-elevated border border-line hover:bg-mist text-ink font-bold rounded-lg shadow-xs transition-colors text-xs"
+            >
+              <Video className="w-4 h-4" />
+              <span>Schedule Meeting</span>
+            </button>
             <button
               onClick={() => {
                 setEventToEdit(null);
@@ -458,10 +474,23 @@ export default function FullCalendarPage() {
         eventToEdit={eventToEdit}
       />
 
+      <CreateMeetingDialog
+        open={createMeetingOpen}
+        onOpenChange={setCreateMeetingOpen}
+      />
+
       <MeetingDetailDrawer
         meeting={selectedMeeting}
         onClose={() => setSelectedMeeting(null)}
       />
     </div>
+  );
+}
+
+export default function FullCalendarPage() {
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-muted">Loading calendar...</div>}>
+      <FullCalendarView />
+    </Suspense>
   );
 }

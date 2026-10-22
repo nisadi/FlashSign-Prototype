@@ -762,7 +762,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         type: 'system',
         isRead: false,
         createdAt: new Date().toISOString(),
-        link: '/planner/time-off',
+        link: '/planner/availability',
       };
       return {
         ...s,
@@ -798,7 +798,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         type: 'system',
         isRead: false,
         createdAt: new Date().toISOString(),
-        link: '/planner/time-off',
+        link: '/planner/availability',
       };
       // Synchronize with calendar event
       const calendarEvent: CalendarEvent = {
@@ -842,7 +842,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         type: 'system',
         isRead: false,
         createdAt: new Date().toISOString(),
-        link: '/planner/time-off',
+        link: '/planner/availability',
       };
       return {
         ...s,

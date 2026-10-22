@@ -112,7 +112,7 @@ export default function MeetingPlannerPage() {
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
           <div>
             <div className="flex items-center gap-2 text-xs text-muted mb-1 font-medium">
-              <Link href="/planner" className="hover:text-ink transition-colors">Planning</Link>
+              <Link href="/planner/calendar" className="hover:text-ink transition-colors">Planning</Link>
               <span>/</span>
               <span className="text-ink font-semibold">Meetings</span>
             </div>

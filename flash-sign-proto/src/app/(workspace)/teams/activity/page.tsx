@@ -187,7 +187,7 @@ export default function TeamActivityPage() {
                         </Link>
                       ) : act.resource?.toLowerCase().includes('time') ? (
                         <Link
-                          href="/planner/time-off"
+                          href="/planner/availability"
                           className="font-semibold text-flash-deep hover:underline flex items-center gap-1 text-[11px]"
                         >
                           <span>Time Off</span>

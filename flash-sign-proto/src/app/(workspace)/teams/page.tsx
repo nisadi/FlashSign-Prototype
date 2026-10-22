@@ -197,7 +197,7 @@ export default function TeamOverviewDashboard() {
           </Link>
 
           <Link
-            href="/planner/time-off"
+            href="/planner/availability"
             className="p-4 rounded-xl bg-paper-elevated border border-line shadow-2xs hover:border-flash/60 hover:shadow-xs transition-all group"
           >
             <div className="flex items-center justify-between text-muted mb-2">
@@ -483,7 +483,7 @@ export default function TeamOverviewDashboard() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-ink">Upcoming Milestones</h3>
                 <Link
-                  href="/planner/milestones"
+                  href="/planner/calendar?category=milestone"
                   className="text-xs font-semibold text-flash-deep hover:text-ink transition-colors"
                 >
                   View All
@@ -515,7 +515,7 @@ export default function TeamOverviewDashboard() {
               <div className="flex items-center justify-between">
                 <h3 className="text-sm font-bold text-ink">Upcoming Absences</h3>
                 <Link
-                  href="/planner/time-off"
+                  href="/planner/availability"
                   className="text-xs font-semibold text-flash-deep hover:text-ink transition-colors"
                 >
                   Time Off

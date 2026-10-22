@@ -6,8 +6,8 @@ import {
   LayoutDashboard, FolderKanban, CheckSquare, Calendar, Users,
   Activity, Bot, FileText, BarChart3, Settings,
   ChevronDown, PanelLeftClose, PanelLeftOpen, Zap,
-  Clock, Compass, Plus, Building2, House,
-  UserCheck, Megaphone, CalendarDays, Palmtree, Video, Flag, Bell,
+  Compass, Plus, Building2, House,
+  UserCheck, Megaphone, CalendarDays, Bell,
   FileSignature, ScrollText, Inbox, Sliders,
   ChevronsUpDown,
 } from 'lucide-react';
@@ -49,6 +49,8 @@ export function AppSidebar() {
     title: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string | number;
+    /** Render the section as a single link to items[0] instead of a dropdown. */
+    direct?: boolean;
     items: NavItem[];
   }
 
@@ -94,16 +96,13 @@ export function AppSidebar() {
       ],
     },
     {
+      // One page: the calendar, with a Meetings tab on top (planner/layout.tsx)
       id: 'planning',
       title: 'Planning',
       icon: CalendarDays,
+      direct: true,
       items: [
-        { label: 'Planner', href: '/planner', icon: LayoutDashboard },
-        { label: 'Calendar', href: '/planner/calendar', icon: CalendarDays },
-        { label: 'Availability', href: '/planner/availability', icon: Clock },
-        { label: 'Time Off', href: '/planner/time-off', icon: Palmtree },
-        { label: 'Meeting Planner', href: '/planner/meetings', icon: Video },
-        { label: 'Milestones & Deadlines', href: '/planner/milestones', icon: Flag },
+        { label: 'Planning', href: '/planner/calendar', icon: CalendarDays, activeWhen: path => path.startsWith('/planner') },
       ],
     },
     {
@@ -139,7 +138,6 @@ export function AppSidebar() {
     const { href } = item;
     if (href === '/projects') return pathname === '/projects';
     if (href === '/teams') return pathname === '/teams';
-    if (href === '/planner') return pathname === '/planner';
     if (href === '/agreements') return pathname === '/agreements';
     return pathname === href || pathname.startsWith(href + '/');
   };
@@ -330,6 +328,30 @@ export function AppSidebar() {
               const isOpen = !!openSections[section.id];
               const hasActiveChild = section.items.some(item => isActive(item));
               const SectionIcon = section.icon;
+
+              if (section.direct) {
+                return (
+                  <Link
+                    key={section.id}
+                    href={section.items[0].href}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all group select-none',
+                      hasActiveChild
+                        ? 'text-white bg-white/10 shadow-xs'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    )}
+                    aria-current={hasActiveChild ? 'page' : undefined}
+                  >
+                    <SectionIcon
+                      className={cn(
+                        'w-4 h-4 shrink-0 transition-colors',
+                        hasActiveChild ? 'text-flash' : 'text-white/40 group-hover:text-flash'
+                      )}
+                    />
+                    <span className="truncate text-xs">{section.title}</span>
+                  </Link>
+                );
+              }
 
               return (
                 <div key={section.id} className="rounded-lg transition-colors">
