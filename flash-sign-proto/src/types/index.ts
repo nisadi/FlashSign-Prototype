@@ -32,6 +32,10 @@ export interface User {
   skills?: string[];
   availability?: 'available' | 'busy' | 'focus_time' | 'out_of_office';
   weeklyCapacity?: number;
+  /** Profile details edited in Settings > Profile */
+  company?: string;
+  phone?: string;
+  address?: string;
   createdAt: string;
 }
 

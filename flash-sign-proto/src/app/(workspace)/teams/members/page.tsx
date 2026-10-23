@@ -13,6 +13,7 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import type { User, AvailabilityStatus } from '@/types';
+import { FEATURES } from '@/lib/features';
 
 export default function MembersDirectoryPage() {
   const router = useRouter();
@@ -84,7 +85,7 @@ export default function MembersDirectoryPage() {
               Team Members Directory
             </h1>
             <p className="text-xs sm:text-sm text-muted mt-0.5">
-              Explore profiles, active task allocations, working hours, and availability statuses across squads.
+              Explore profiles, active task allocations, working hours, and availability statuses.
             </p>
           </div>
 
@@ -132,18 +133,20 @@ export default function MembersDirectoryPage() {
             </select>
 
             {/* Team */}
-            <select
-              value={teamFilter}
-              onChange={e => setTeamFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-            >
-              <option value="all">All Squads</option>
-              {teams.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            {FEATURES.teams && (
+              <select
+                value={teamFilter}
+                onChange={e => setTeamFilter(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+              >
+                <option value="all">All Squads</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Availability */}
             <select
@@ -276,6 +279,7 @@ export default function MembersDirectoryPage() {
                     </div>
 
                     {/* Squad Badges */}
+                    {FEATURES.teams && (
                     <div className="space-y-1">
                       <span className="text-[10px] text-muted font-medium">Assigned Squads:</span>
                       <div className="flex flex-wrap gap-1">
@@ -293,6 +297,7 @@ export default function MembersDirectoryPage() {
                         )}
                       </div>
                     </div>
+                    )}
 
                     {/* Skills pills */}
                     {member.skills && member.skills.length > 0 && (
@@ -343,7 +348,7 @@ export default function MembersDirectoryPage() {
                   <tr>
                     <th className="py-3 px-4">Member</th>
                     <th className="py-3 px-4">Department</th>
-                    <th className="py-3 px-4">Squads</th>
+                    {FEATURES.teams && <th className="py-3 px-4">Squads</th>}
                     <th className="py-3 px-4">Availability</th>
                     <th className="py-3 px-4">Active Tasks</th>
                     <th className="py-3 px-4">Time Zone</th>
@@ -374,11 +379,13 @@ export default function MembersDirectoryPage() {
                           <p className="font-semibold text-ink">{member.title || member.role}</p>
                           <p className="text-[10px] text-muted">{member.department}</p>
                         </td>
-                        <td className="py-3 px-4">
-                          <span className="font-medium text-ink">
-                            {memberTeams.map(t => t.name).join(', ') || 'None'}
-                          </span>
-                        </td>
+                        {FEATURES.teams && (
+                          <td className="py-3 px-4">
+                            <span className="font-medium text-ink">
+                              {memberTeams.map(t => t.name).join(', ') || 'None'}
+                            </span>
+                          </td>
+                        )}
                         <td className="py-3 px-4">
                           {member.availability && <AvailabilityBadge status={member.availability} size="sm" />}
                         </td>

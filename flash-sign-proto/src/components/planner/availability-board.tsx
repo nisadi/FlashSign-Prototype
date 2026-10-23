@@ -16,6 +16,7 @@ import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { AvailabilityStatus } from '@/types/collaboration';
+import { FEATURES } from '@/lib/features';
 
 /** Team availability: status summary, weekly schedule grid and member detail modal. */
 export function AvailabilityBoard() {
@@ -253,33 +254,38 @@ export function AvailabilityBoard() {
         </div>
 
         {/* Secondary Filters */}
+        {(FEATURES.teams || selectedStatus !== 'all') && (
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line/40 text-xs">
-          <span className="text-muted font-medium flex items-center gap-1 mr-1">
-            <Filter className="w-3.5 h-3.5" /> Filter Squad:
-          </span>
-          <button
-            onClick={() => setSelectedTeamId('all')}
-            className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-              selectedTeamId === 'all'
-                ? 'bg-ink text-white'
-                : 'bg-paper text-muted hover:text-ink border border-line/60'
-            }`}
-          >
-            All Squads
-          </button>
-          {teams.map(t => (
-            <button
-              key={t.id}
-              onClick={() => setSelectedTeamId(t.id)}
-              className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                selectedTeamId === t.id
-                  ? 'bg-ink text-white'
-                  : 'bg-paper text-muted hover:text-ink border border-line/60'
-              }`}
-            >
-              {t.name}
-            </button>
-          ))}
+          {FEATURES.teams && (
+            <>
+              <span className="text-muted font-medium flex items-center gap-1 mr-1">
+                <Filter className="w-3.5 h-3.5" /> Filter Squad:
+              </span>
+              <button
+                onClick={() => setSelectedTeamId('all')}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                  selectedTeamId === 'all'
+                    ? 'bg-ink text-white'
+                    : 'bg-paper text-muted hover:text-ink border border-line/60'
+                }`}
+              >
+                All Squads
+              </button>
+              {teams.map(t => (
+                <button
+                  key={t.id}
+                  onClick={() => setSelectedTeamId(t.id)}
+                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
+                    selectedTeamId === t.id
+                      ? 'bg-ink text-white'
+                      : 'bg-paper text-muted hover:text-ink border border-line/60'
+                  }`}
+                >
+                  {t.name}
+                </button>
+              ))}
+            </>
+          )}
 
           {selectedStatus !== 'all' && (
             <button
@@ -290,6 +296,7 @@ export function AvailabilityBoard() {
             </button>
           )}
         </div>
+        )}
       </div>
 
       {/* Availability Schedule Grid */}
@@ -323,7 +330,7 @@ export function AvailabilityBoard() {
                 </tr>
               ) : (
                 filteredMembers.map(member => {
-                  const memberTeams = teams.filter(t => (member.teamIds || []).includes(t.id));
+                  const memberTeams = FEATURES.teams ? teams.filter(t => (member.teamIds || []).includes(t.id)) : [];
                   return (
                     <tr key={member.id} className="hover:bg-paper/40 transition-colors">
                       {/* Member Profile Info */}

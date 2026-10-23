@@ -11,6 +11,7 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { ReassignTaskDialog } from '@/components/collaboration/reassign-task-dialog';
 import type { Task, User } from '@/types';
+import { FEATURES } from '@/lib/features';
 
 export default function WorkloadOverviewPage() {
   const { users, teams, projects, tasks } = useApp();
@@ -97,7 +98,7 @@ export default function WorkloadOverviewPage() {
               Team Workload & Capacity
             </h1>
             <p className="text-xs sm:text-sm text-muted mt-0.5">
-              Monitor engineer allocations, prevent burnout, and rebalance tasks across squads with real-time recalculations.
+              Monitor engineer allocations, prevent burnout, and rebalance tasks across members with real-time recalculations.
             </p>
           </div>
 
@@ -179,18 +180,20 @@ export default function WorkloadOverviewPage() {
             </div>
 
             {/* Squad Filter */}
-            <select
-              value={selectedTeam}
-              onChange={e => setSelectedTeam(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-            >
-              <option value="all">All Squads</option>
-              {teams.map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                </option>
-              ))}
-            </select>
+            {FEATURES.teams && (
+              <select
+                value={selectedTeam}
+                onChange={e => setSelectedTeam(e.target.value)}
+                className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+              >
+                <option value="all">All Squads</option>
+                {teams.map(t => (
+                  <option key={t.id} value={t.id}>
+                    {t.name}
+                  </option>
+                ))}
+              </select>
+            )}
 
             {/* Project Filter */}
             <select

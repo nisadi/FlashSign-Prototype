@@ -5,6 +5,7 @@ import { X, Video, Calendar, Clock, Copy, Check, Users, Ban, Edit3, ExternalLink
 import { useApp } from '@/context/app-context';
 import type { Meeting } from '@/types';
 import { MeetingStatusBadge, AvailabilityBadge } from './collaboration-badges';
+import { FEATURES } from '@/lib/features';
 
 interface MeetingDetailDrawerProps {
   meeting: Meeting | null;
@@ -126,11 +127,13 @@ export function MeetingDetailDrawer({
           )}
 
           {/* Context: Team & Project */}
-          <div className="grid grid-cols-2 gap-3">
-            <div className="p-3 rounded-xl bg-paper border border-line">
-              <p className="text-[10px] text-muted font-medium">Team</p>
-              <p className="font-semibold text-ink mt-0.5">{team?.name || 'General / Cross-functional'}</p>
-            </div>
+          <div className={`grid ${FEATURES.teams ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
+            {FEATURES.teams && (
+              <div className="p-3 rounded-xl bg-paper border border-line">
+                <p className="text-[10px] text-muted font-medium">Team</p>
+                <p className="font-semibold text-ink mt-0.5">{team?.name || 'General / Cross-functional'}</p>
+              </div>
+            )}
             <div className="p-3 rounded-xl bg-paper border border-line">
               <p className="text-[10px] text-muted font-medium">Related Project</p>
               <p className="font-semibold text-ink mt-0.5">{project?.name || 'Workspace Level'}</p>

@@ -39,29 +39,8 @@ export default function UsersSettingsPage() {
 
   return (
     <div className="p-6 max-w-4xl mx-auto">
+      {/* The Settings tabs above replace this page's old side menu */}
       <div className="flex items-center gap-4 mb-6">
-        {/* Settings sidebar nav */}
-        <nav className="hidden lg:flex flex-col gap-1 w-44 shrink-0">
-          {[
-            { label: 'Users', href: '/settings/users', active: true },
-            { label: 'Roles', href: '/settings/roles' },
-            { label: 'Organization', href: '/settings/organization' },
-            { label: 'Integrations', href: '/settings/integrations' },
-            { label: 'Audit Logs', href: '/settings/audit-logs' },
-            { label: 'Profile', href: '/settings/profile' },
-          ].map(item => (
-            <a
-              key={item.href}
-              href={item.href}
-              className={`px-3 py-2 rounded-lg text-sm transition-colors ${
-                item.active ? 'bg-flash/10 text-flash font-medium' : 'text-muted hover:text-ink hover:bg-mist'
-              }`}
-            >
-              {item.label}
-            </a>
-          ))}
-        </nav>
-
         <div className="flex-1">
           <PageHeader
             title="Users & Invitations"

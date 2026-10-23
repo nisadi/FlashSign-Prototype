@@ -13,7 +13,7 @@ interface CreateAnnouncementDialogProps {
 }
 
 const AUDIENCE_OPTIONS = [
-  { id: 'all', label: 'Entire Organization (All Teams)' },
+  { id: 'all', label: 'Entire Organization' },
   { id: 'engineering', label: 'Engineering' },
   { id: 'design', label: 'Product Design' },
   { id: 'operations', label: 'Operations & DevOps' },

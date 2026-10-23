@@ -14,6 +14,7 @@ import {
 import { cn } from '@/lib/utils';
 import { useApp, useCurrentUser, useRoleConfig } from '@/context/app-context';
 import { canAccess, ROLE_CONFIGS } from '@/lib/permissions';
+import { FEATURES } from '@/lib/features';
 import type { DemoRole } from '@/types';
 import { useState, useEffect } from 'react';
 
@@ -51,6 +52,8 @@ export function AppSidebar() {
     title: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string | number;
+    /** Render the section as a single link to items[0] instead of a dropdown. */
+    direct?: boolean;
     items: NavItem[];
   }
 
@@ -65,8 +68,8 @@ export function AppSidebar() {
         { label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare },
         // One page: the calendar, with Meetings and Availability tabs on top (planner/layout.tsx)
         { label: 'Planning', href: '/planner/calendar', icon: CalendarDays, activeWhen: path => path.startsWith('/planner') },
-        { label: 'Notifications', href: '/teams/notifications', icon: Bell },
-        { label: 'Settings', href: '/teams/settings', icon: Settings },
+        // Notifications is hidden from the sidebar; the bell in the top bar opens them. Uncomment to restore.
+        // { label: 'Notifications', href: '/teams/notifications', icon: Bell },
       ],
     },
     {
@@ -101,15 +104,26 @@ export function AppSidebar() {
     },
     {
       id: 'collaboration',
-      title: 'Collaboration',
+      title: 'Teams',
       icon: Users,
       items: [
-        { label: 'Team Overview', href: '/teams', icon: Users },
-        { label: 'Teams Directory', href: '/teams/directory', icon: Building2 },
+        // The workload, announcements and activity boards open from Analytics, so they highlight it
+        {
+          label: 'Analytics',
+          href: '/teams',
+          icon: BarChart3,
+          activeWhen: path =>
+            path === '/teams' ||
+            ['/teams/workload', '/teams/announcements', '/teams/activity'].some(p => path.startsWith(p)),
+        },
+        ...(FEATURES.teams ? [{ label: 'Teams Directory', href: '/teams/directory', icon: Building2 }] : []),
         { label: 'Members', href: '/teams/members', icon: UserCheck },
-        { label: 'Workload', href: '/teams/workload', icon: BarChart3 },
-        { label: 'Team Activity', href: '/teams/activity', icon: Activity },
-        { label: 'Announcements', href: '/teams/announcements', icon: Megaphone },
+        // Workload is hidden from the sidebar; it's reached from Analytics. Uncomment to restore.
+        // { label: 'Workload', href: '/teams/workload', icon: BarChart3 },
+        // Team Activity is hidden from the sidebar; it's reached from Analytics ("View Feed"). Uncomment to restore.
+        // { label: 'Team Activity', href: '/teams/activity', icon: Activity },
+        // Announcements is hidden from the sidebar; it's reached from Analytics. Uncomment to restore.
+        // { label: 'Announcements', href: '/teams/announcements', icon: Megaphone },
       ],
     },
     {
@@ -123,6 +137,21 @@ export function AppSidebar() {
         { label: 'Task Assignment & IDE', href: '/ai-agents/assign', icon: FolderKanban },
         { label: 'Provider Settings', href: '/ai-agents/settings', icon: Settings },
         { label: 'AI Audit Trail', href: '/ai-agents/audit', icon: Activity },
+      ],
+    },
+    {
+      // App-wide settings; signing defaults stay under Agreements > Settings
+      id: 'settings',
+      title: 'Settings',
+      icon: Settings,
+      direct: true,
+      items: [
+        {
+          label: 'Settings',
+          href: '/settings/profile',
+          icon: Settings,
+          activeWhen: path => path.startsWith('/settings'),
+        },
       ],
     },
   ];
@@ -322,6 +351,30 @@ export function AppSidebar() {
               const isOpen = !!openSections[section.id];
               const hasActiveChild = section.items.some(item => isActive(item));
               const SectionIcon = section.icon;
+
+              if (section.direct) {
+                return (
+                  <Link
+                    key={section.id}
+                    href={section.items[0].href}
+                    className={cn(
+                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all group select-none',
+                      hasActiveChild
+                        ? 'text-white bg-white/10 shadow-xs'
+                        : 'text-white/60 hover:text-white hover:bg-white/5'
+                    )}
+                    aria-current={hasActiveChild ? 'page' : undefined}
+                  >
+                    <SectionIcon
+                      className={cn(
+                        'w-4 h-4 shrink-0 transition-colors',
+                        hasActiveChild ? 'text-flash' : 'text-white/40 group-hover:text-flash'
+                      )}
+                    />
+                    <span className="truncate text-xs">{section.title}</span>
+                  </Link>
+                );
+              }
 
               return (
                 <div key={section.id} className="rounded-lg transition-colors">

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, Calendar as CalendarIcon, Clock, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { CalendarEvent, EventCategory } from '@/types';
+import { FEATURES } from '@/lib/features';
 
 interface CreateCalendarEventDialogProps {
   open: boolean;
@@ -244,22 +245,24 @@ export function CreateCalendarEventDialog({
           </div>
 
           {/* Team and Project */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-ink mb-1">Related Team</label>
-              <select
-                value={teamId}
-                onChange={e => setTeamId(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              >
-                <option value="">None</option>
-                {teams.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            </div>
+          <div className={`grid grid-cols-1 ${FEATURES.teams ? 'sm:grid-cols-2' : ''} gap-3`}>
+            {FEATURES.teams && (
+              <div>
+                <label className="block font-semibold text-ink mb-1">Related Team</label>
+                <select
+                  value={teamId}
+                  onChange={e => setTeamId(e.target.value)}
+                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+                >
+                  <option value="">None</option>
+                  {teams.map(t => (
+                    <option key={t.id} value={t.id}>
+                      {t.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
 
             <div>
               <label className="block font-semibold text-ink mb-1">Related Project</label>

@@ -24,7 +24,9 @@ import type {
   DocumentItem, DocumentFolder, DocumentTemplate, Contract,
   SignatureRequest, SignatureSigner, SignatureField, AuditEvent,
   DocumentComment, ContractReviewComment,
+  SavedSignature, SigningDefaults, CompanySeal,
 } from '@/types/documents';
+import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import type { Organization } from '@/types';
 
@@ -68,6 +70,9 @@ export interface AppState {
   meetings: Meeting[];
   announcements: Announcement[];
   collaborationSettings: CollaborationSettings;
+  savedSignatures: SavedSignature[];
+  signingDefaults: SigningDefaults;
+  companySeals: CompanySeal[];
   sidebarCollapsed: boolean;
   recentProjectIds: string[];
   activeTaskDrawerId: string | null;
@@ -128,6 +133,13 @@ interface AppActions {
   deleteAnnouncement: (id: string) => void;
   // Collaboration Settings
   updateCollaborationSettings: (updates: Partial<CollaborationSettings>) => void;
+  // Saved signatures, signing defaults & company seals
+  saveSignature: (signature: SavedSignature) => void;
+  deleteSignature: (userId: string) => void;
+  updateSigningDefaults: (updates: Partial<SigningDefaults>) => void;
+  addCompanySeal: (seal: Omit<CompanySeal, 'id' | 'createdAt' | 'usageCount'>) => void;
+  updateCompanySeal: (id: string, updates: Partial<CompanySeal>) => void;
+  deleteCompanySeal: (id: string) => void;
   // Files
   addFile: (file: CreateFileInput) => void;
   deleteFile: (id: string) => void;
@@ -167,7 +179,7 @@ interface AppActions {
   cancelSignatureRequest: (id: string) => void;
   duplicateSignatureRequest: (id: string) => void;
   sendSignatureReminder: (requestId: string, signerId?: string) => void;
-  signDocumentSimulated: (requestId: string, signerId: string, signatureValue: string) => void;
+  signDocumentSimulated: (requestId: string, signerId: string, signatureValue: string, seal?: { id: string; name: string }) => void;
   declineSignatureRequest: (requestId: string, signerId: string, reason: string) => void;
   updateSignatureFields: (requestId: string, fields: SignatureField[]) => void;
   // Approvals
@@ -220,6 +232,9 @@ function getInitialState(): AppState {
     meetings: MOCK_MEETINGS,
     announcements: MOCK_ANNOUNCEMENTS,
     collaborationSettings: MOCK_COLLABORATION_SETTINGS,
+    savedSignatures: [],
+    signingDefaults: DEFAULT_SIGNING_DEFAULTS,
+    companySeals: MOCK_COMPANY_SEALS,
     sidebarCollapsed: false,
     recentProjectIds: ['p1', 'p2', 'p3'],
     activeTaskDrawerId: null,
@@ -259,6 +274,9 @@ function saveState(state: AppState): void {
       meetings: state.meetings,
       announcements: state.announcements,
       collaborationSettings: state.collaborationSettings,
+      savedSignatures: state.savedSignatures,
+      signingDefaults: state.signingDefaults,
+      companySeals: state.companySeals,
       agentRuns: state.agentRuns,
       sidebarCollapsed: state.sidebarCollapsed,
       recentProjectIds: state.recentProjectIds,
@@ -1042,6 +1060,37 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       collaborationSettings: { ...s.collaborationSettings, ...updates },
     })),
 
+    // Saved signatures (one per person, replaced on save)
+    saveSignature: (signature) => update(s => ({
+      ...s,
+      savedSignatures: [...s.savedSignatures.filter(sig => sig.userId !== signature.userId), signature],
+    })),
+    deleteSignature: (userId) => update(s => ({
+      ...s,
+      savedSignatures: s.savedSignatures.filter(sig => sig.userId !== userId),
+    })),
+
+    // Signing defaults & company seals
+    updateSigningDefaults: (updates) => update(s => ({
+      ...s,
+      signingDefaults: { ...s.signingDefaults, ...updates },
+    })),
+    addCompanySeal: (seal) => update(s => ({
+      ...s,
+      companySeals: [
+        ...s.companySeals,
+        { ...seal, id: `seal-${Date.now()}`, createdAt: new Date().toISOString(), usageCount: 0 },
+      ],
+    })),
+    updateCompanySeal: (id, updates) => update(s => ({
+      ...s,
+      companySeals: s.companySeals.map(seal => (seal.id === id ? { ...seal, ...updates } : seal)),
+    })),
+    deleteCompanySeal: (id) => update(s => ({
+      ...s,
+      companySeals: s.companySeals.filter(seal => seal.id !== id),
+    })),
+
     // Documents
     addDocument: (doc) => update(s => ({ ...s, documents: [...s.documents, doc] })),
     updateDocument: (id, updates) => update(s => ({
@@ -1521,7 +1570,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }),
       };
     }),
-    signDocumentSimulated: (requestId, signerId, signatureValue) => update(s => {
+    signDocumentSimulated: (requestId, signerId, signatureValue, seal) => update(s => {
       let reqTitle = '';
       let isAllCompleted = false;
       let linkedContractId: string | undefined;
@@ -1566,6 +1615,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           timestamp: new Date().toISOString(),
         };
 
+        const sealEvent: AuditEvent | null = seal
+          ? {
+              id: `ev-seal-${Date.now()}`,
+              requestId,
+              documentId: r.documentId,
+              eventName: 'Company Seal Applied',
+              actorName: signerObj?.name || 'Signer',
+              actorEmail: signerObj?.email,
+              relatedSigner: signerObj?.name,
+              description: `"${seal.name}" applied by ${signerObj?.name || 'signer'}.`,
+              category: 'signing',
+              timestamp: new Date().toISOString(),
+            }
+          : null;
+
         const completionEvent: AuditEvent | null = allSigned
           ? {
               id: `ev-comp-${Date.now()}`,
@@ -1584,7 +1648,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           signers: updatedSigners,
           status: allSigned ? ('completed' as const) : ('partially_signed' as const),
           completedAt: allSigned ? new Date().toISOString() : undefined,
-          events: completionEvent ? [...(r.events || []), newEvent, completionEvent] : [...(r.events || []), newEvent],
+          events: [
+            ...(r.events || []),
+            newEvent,
+            ...(sealEvent ? [sealEvent] : []),
+            ...(completionEvent ? [completionEvent] : []),
+          ],
         };
       });
 
@@ -1603,11 +1672,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return d;
       });
 
+      const now = new Date().toISOString();
       return {
         ...s,
         signatureRequests: updatedRequests,
         contracts: updatedContracts,
         documentItems: updatedDocs,
+        companySeals: seal
+          ? s.companySeals.map(cs => (cs.id === seal.id ? { ...cs, usageCount: cs.usageCount + 1, lastUsedAt: now } : cs))
+          : s.companySeals,
       };
     }),
     declineSignatureRequest: (requestId, signerId, reason) => update(s => {

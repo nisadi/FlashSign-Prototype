@@ -8,7 +8,7 @@ import { useApp } from '@/context/app-context';
 import type { AnnouncementPriority } from '@/types';
 
 const AUDIENCE_OPTIONS = [
-  { id: 'all', label: 'Entire Organization (All Squads)' },
+  { id: 'all', label: 'Entire Organization' },
   { id: 'engineering', label: 'Engineering' },
   { id: 'design', label: 'Product Design' },
   { id: 'operations', label: 'Operations & DevOps' },

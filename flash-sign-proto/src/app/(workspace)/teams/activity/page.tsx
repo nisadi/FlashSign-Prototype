@@ -8,6 +8,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
+import { FEATURES } from '@/lib/features';
 
 const CATEGORIES = [
   { id: 'all', label: 'All Activities' },
@@ -17,7 +18,7 @@ const CATEGORIES = [
   { id: 'time_off', label: 'Time Off' },
   { id: 'announcement', label: 'Announcements' },
   { id: 'task', label: 'Tasks & Projects' },
-];
+].filter(cat => FEATURES.teams || cat.id !== 'team');
 
 export default function TeamActivityPage() {
   const { activities, users, teams } = useApp();
@@ -29,6 +30,9 @@ export default function TeamActivityPage() {
 
   const filteredActivities = useMemo(() => {
     return activities.filter(act => {
+      // Team events are hidden along with the rest of the Teams feature
+      if (!FEATURES.teams && act.resource?.toLowerCase() === 'team') return false;
+
       const matchesSearch =
         act.action.toLowerCase().includes(search.toLowerCase()) ||
         act.actorName.toLowerCase().includes(search.toLowerCase()) ||
@@ -74,7 +78,7 @@ export default function TeamActivityPage() {
             Team Activity Feed
           </h1>
           <p className="text-xs sm:text-sm text-muted mt-0.5">
-            Audit logs and chronological event stream for team member actions, meetings, time-off requests, and squad changes.
+            Audit logs and chronological event stream for team member actions, meetings, time-off requests, and announcements.
           </p>
         </div>
 

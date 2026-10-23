@@ -13,6 +13,7 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import type { AvailabilityStatus, Task } from '@/types';
+import { FEATURES } from '@/lib/features';
 
 export default function MemberProfilePage() {
   const params = useParams();
@@ -316,6 +317,7 @@ export default function MemberProfilePage() {
             </div>
 
             {/* Assigned Squads */}
+            {FEATURES.teams && (
             <div className="bg-paper-elevated border border-line rounded-xl shadow-xs p-5 space-y-3">
               <h3 className="text-sm font-bold text-ink">Assigned Squads</h3>
               <div className="space-y-2">
@@ -334,6 +336,7 @@ export default function MemberProfilePage() {
                 ))}
               </div>
             </div>
+            )}
 
             {/* Skills & Expertise */}
             {member.skills && member.skills.length > 0 && (

@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { User, DemoRole, AvailabilityStatus } from '@/types';
+import { FEATURES } from '@/lib/features';
 
 interface CreateMemberDialogProps {
   open: boolean;
@@ -369,6 +370,7 @@ export function CreateMemberDialog({
           </div>
 
           {/* Team Assignments */}
+          {FEATURES.teams && (
           <div>
             <label className="block font-semibold text-ink mb-1.5">
               Assigned Teams ({selectedTeamIds.length})
@@ -395,6 +397,7 @@ export function CreateMemberDialog({
               })}
             </div>
           </div>
+          )}
 
           {/* Project Assignments */}
           <div>

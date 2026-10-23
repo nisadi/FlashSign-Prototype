@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { DemoRole, AvailabilityStatus } from '@/types';
+import { FEATURES } from '@/lib/features';
 
 const DEPARTMENTS = [
   'Engineering',
@@ -148,7 +149,7 @@ export default function AddMemberPage() {
             Add Team Member
           </h1>
           <p className="text-xs sm:text-sm text-muted mt-1">
-            Provision a new member profile with role assignments, squad memberships, working hours, and initial capacity.
+            Provision a new member profile with role assignments, working hours, and initial capacity.
           </p>
         </div>
 
@@ -320,6 +321,7 @@ export default function AddMemberPage() {
             </div>
 
             {/* Squads */}
+            {FEATURES.teams && (
             <div>
               <label className="block font-semibold text-ink mb-1.5">
                 Assign to Teams ({selectedTeamIds.length})
@@ -346,6 +348,7 @@ export default function AddMemberPage() {
                 })}
               </div>
             </div>
+            )}
 
             {/* Skills */}
             <div>

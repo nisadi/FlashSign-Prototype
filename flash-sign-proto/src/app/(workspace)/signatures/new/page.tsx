@@ -24,7 +24,8 @@ import {
   ShieldAlert
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
-import { SignatureSigner, SignatureField, SigningOrder } from '@/types/documents';
+import { SignatureSigner, SignatureField, SigningOrder, ReminderFrequency } from '@/types/documents';
+import { REMINDER_OPTIONS, EXPIRY_PRESETS, reminderIntervalDays } from '@/lib/signing-options';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 
 interface SignerForm {
@@ -46,7 +47,8 @@ function WizardContent() {
     documentItems,
     contracts,
     addSignatureRequest,
-    updateContract
+    updateContract,
+    signingDefaults
   } = useApp();
   const currentUser = useCurrentUser();
 
@@ -58,7 +60,7 @@ function WizardContent() {
   const [requestTitle, setRequestTitle] = useState('');
 
   // Step 2: Signers
-  const [signingOrder, setSigningOrder] = useState<SigningOrder>('sequential');
+  const [signingOrder, setSigningOrder] = useState<SigningOrder>(signingDefaults.signingOrder);
   const [signers, setSigners] = useState<SignerForm[]>([
     {
       id: 'sig-1',
@@ -127,9 +129,19 @@ function WizardContent() {
   ]);
 
   // Step 4: Settings & Message
-  const [message, setMessage] = useState('Please review and execute the attached agreement via Flash Sign digital signing.');
-  const [expiresInDays, setExpiresInDays] = useState(14);
-  const [reminderSchedule, setReminderSchedule] = useState('daily_3days');
+  const [message, setMessage] = useState(signingDefaults.message);
+  const [expiresInDays, setExpiresInDays] = useState(signingDefaults.expireDays);
+  const [reminderSchedule, setReminderSchedule] = useState<ReminderFrequency>(signingDefaults.reminderFrequency);
+
+  // Start from Agreements > Settings; the saved values arrive once the store has loaded
+  const [defaultsApplied, setDefaultsApplied] = useState(signingDefaults);
+  if (defaultsApplied !== signingDefaults) {
+    setDefaultsApplied(signingDefaults);
+    setSigningOrder(signingDefaults.signingOrder);
+    setMessage(signingDefaults.message);
+    setExpiresInDays(signingDefaults.expireDays);
+    setReminderSchedule(signingDefaults.reminderFrequency);
+  }
 
   // Pre-fill title if contract or document is selected
   useEffect(() => {
@@ -248,6 +260,7 @@ function WizardContent() {
       status: 'sent',
       message: message.trim(),
       expiresAt: expDate.toISOString(),
+      reminderIntervalDays: reminderIntervalDays(reminderSchedule),
       signers: convertedSigners,
       fields: fields,
       events: [
@@ -589,26 +602,28 @@ function WizardContent() {
                     onChange={(e) => setExpiresInDays(parseInt(e.target.value))}
                     className="w-full px-3.5 py-2.5 bg-paper border border-line rounded-lg text-sm text-ink focus:outline-none focus:border-flash"
                   >
-                    <option value={7}>Expires in 7 days</option>
-                    <option value={14}>Expires in 14 days</option>
-                    <option value={30}>Expires in 30 days</option>
-                    <option value={60}>Expires in 60 days</option>
+                    {[...new Set([...EXPIRY_PRESETS, expiresInDays])].sort((a, b) => a - b).map(days => (
+                      <option key={days} value={days}>
+                        Expires in {days} days{days === signingDefaults.expireDays ? ' (default)' : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
 
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-muted block mb-1.5">
-                    Simulated Reminder Schedule
+                    Remind Signers
                   </label>
                   <select
                     value={reminderSchedule}
-                    onChange={(e) => setReminderSchedule(e.target.value)}
+                    onChange={(e) => setReminderSchedule(e.target.value as ReminderFrequency)}
                     className="w-full px-3.5 py-2.5 bg-paper border border-line rounded-lg text-sm text-ink focus:outline-none focus:border-flash"
                   >
-                    <option value="daily_3days">Daily starting 3 days before expiration</option>
-                    <option value="every_3days">Every 3 days</option>
-                    <option value="weekly">Weekly reminders</option>
-                    <option value="manual_only">Manual reminders only</option>
+                    {REMINDER_OPTIONS.map(o => (
+                      <option key={o.value} value={o.value}>
+                        {o.label}{o.value === signingDefaults.reminderFrequency ? ' (default)' : ''}
+                      </option>
+                    ))}
                   </select>
                 </div>
               </div>
@@ -637,6 +652,10 @@ function WizardContent() {
               <div className="flex justify-between border-b border-line pb-2">
                 <span className="text-muted">Expiration Window:</span>
                 <strong className="text-ink">{expiresInDays} days</strong>
+              </div>
+              <div className="flex justify-between border-b border-line pb-2">
+                <span className="text-muted">Reminders:</span>
+                <strong className="text-ink">{REMINDER_OPTIONS.find(o => o.value === reminderSchedule)?.label}</strong>
               </div>
               <div className="flex justify-between">
                 <span className="text-muted">Message to Recipients:</span>

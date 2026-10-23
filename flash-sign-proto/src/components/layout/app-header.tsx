@@ -9,6 +9,11 @@ import { useApp, useCurrentUser, useNotifications } from '@/context/app-context'
 import { QuickCreateDialog } from '@/components/shared/quick-create-dialog';
 import { SearchCommand } from '@/components/shared/search-command';
 
+// Pages whose title differs from their URL segment (applied when the page is the current one)
+const PAGE_TITLES: Record<string, string> = {
+  '/teams': 'Team Analytics',
+};
+
 function Breadcrumbs() {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
@@ -16,9 +21,11 @@ function Breadcrumbs() {
 
   const crumbs = segments.map((seg, i) => {
     const href = '/' + segments.slice(0, i + 1).join('/');
+    const isLast = i === segments.length - 1;
     const matchingProj = projects.find(p => p.id === seg) || (seg === 'p-mvhmnblw' ? projects.find(p => p.id === 'p1') : undefined);
-    const label = matchingProj ? matchingProj.name : seg.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-    return { label, href, isLast: i === segments.length - 1 };
+    const label = (isLast && PAGE_TITLES[href])
+      || (matchingProj ? matchingProj.name : seg.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
+    return { label, href, isLast };
   });
 
   if (crumbs.length === 0) return null;
@@ -133,6 +140,14 @@ export function AppHeader() {
                   ))
                 )}
               </div>
+              {/* The full list replaces the old sidebar Notifications link */}
+              <Link
+                href="/teams/notifications"
+                onClick={() => setNotifOpen(false)}
+                className="block p-2.5 border-t border-line bg-paper text-center text-xs font-semibold text-flash-deep hover:bg-mist/40 transition-colors"
+              >
+                View all notifications
+              </Link>
             </div>
           )}
         </div>

@@ -18,6 +18,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
+import { FEATURES } from '@/lib/features';
 
 export default function NewMeetingPage() {
   const router = useRouter();
@@ -140,7 +141,7 @@ export default function NewMeetingPage() {
             Schedule New Meeting
           </h1>
           <p className="text-sm text-muted mt-1">
-            Create an interactive squad sync, sprint demo, or 1:1 session with automated conflict warnings and calendar synchronization.
+            Create an interactive team sync, sprint demo, or 1:1 session with automated conflict warnings and calendar synchronization.
           </p>
         </div>
 
@@ -338,22 +339,24 @@ export default function NewMeetingPage() {
             </div>
 
             {/* Squad & Project Association */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-1.5">
-                <label className="text-xs font-semibold text-ink uppercase tracking-wider block">
-                  Related Squad (Optional)
-                </label>
-                <select
-                  value={teamId}
-                  onChange={e => setTeamId(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-flash"
-                >
-                  <option value="">None / Cross-functional</option>
-                  {teams.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
+            <div className={`grid grid-cols-1 ${FEATURES.teams ? 'sm:grid-cols-2' : ''} gap-4`}>
+              {FEATURES.teams && (
+                <div className="space-y-1.5">
+                  <label className="text-xs font-semibold text-ink uppercase tracking-wider block">
+                    Related Squad (Optional)
+                  </label>
+                  <select
+                    value={teamId}
+                    onChange={e => setTeamId(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-flash"
+                  >
+                    <option value="">None / Cross-functional</option>
+                    {teams.map(t => (
+                      <option key={t.id} value={t.id}>{t.name}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-ink uppercase tracking-wider block">

@@ -97,4 +97,6 @@ export interface CollaborationSettings {
   emailNotifications: boolean;
   desktopNotifications: boolean;
   weeklyDigest: boolean;
+  /** Per-event notification choices (Settings > Notifications); missing keys count as on */
+  notificationEvents?: Record<string, boolean>;
 }

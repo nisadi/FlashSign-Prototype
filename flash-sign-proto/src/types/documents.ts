@@ -265,3 +265,54 @@ export interface SignatureRequest {
   fields: SignatureField[];
   events?: AuditEvent[];
 }
+
+// ─── Saved Signatures, Signing Defaults & Company Seals ─────────────────────
+
+export type SignatureSource = 'type' | 'draw' | 'upload';
+
+/** Typed-signature font styles (same four as Flash Sign) */
+export type SignatureStyle = 'formal' | 'script' | 'bold' | 'elegant';
+
+/** One signature + initials per person, managed in Settings > My Signature */
+export interface SavedSignature {
+  userId: string;
+  name: string;
+  initials: string;
+  source: SignatureSource;
+  /** Used when source is 'type' */
+  styleId?: SignatureStyle;
+  /** PNG/JPEG data URLs when source is 'draw' or 'upload' */
+  signatureImage?: string;
+  initialsImage?: string;
+  updatedAt: string;
+}
+
+export type ReminderFrequency = 'daily' | 'every_2_days' | 'every_3_days' | 'weekly' | 'never';
+
+/** Organisation-wide defaults for new signature requests (Agreements > Settings) */
+export interface SigningDefaults {
+  expireDays: number;
+  reminderFrequency: ReminderFrequency;
+  signingOrder: SigningOrder;
+  emailSubject: string;
+  message: string;
+  allowedSignatureMethods: SignatureSource[];
+  /** Saved for later: no warning is sent yet */
+  expiryWarningDays: number;
+}
+
+/** An approved company seal/stamp image that permitted roles may apply when signing */
+export interface CompanySeal {
+  id: string;
+  name: string;
+  description?: string;
+  /** PNG/SVG/JPEG data URL */
+  image: string;
+  /** App roles allowed to apply this seal (DemoRole ids) */
+  allowedRoles: string[];
+  isActive: boolean;
+  createdBy: string;
+  createdAt: string;
+  usageCount: number;
+  lastUsedAt?: string;
+}

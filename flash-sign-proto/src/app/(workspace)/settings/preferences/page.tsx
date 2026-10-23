@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import {
-  Settings, Clock, Calendar, Bell, Check, RotateCcw,
+  Clock, Calendar, Check, RotateCcw,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { CollaborationSettings } from '@/types';
@@ -17,7 +17,7 @@ const TIMEZONES = [
   'Asia/Tokyo (JST)',
 ];
 
-export default function CollaborationSettingsPage() {
+export default function PreferencesSettingsPage() {
   const { collaborationSettings, updateCollaborationSettings, resetDemoData } = useApp();
 
   const [settings, setSettings] = useState<CollaborationSettings>(collaborationSettings);
@@ -32,20 +32,12 @@ export default function CollaborationSettingsPage() {
 
   return (
     <div className="min-h-full bg-paper pb-16">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-3xl mx-auto space-y-6">
+      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
         {/* Header */}
         <div>
-          <div className="flex items-center gap-2">
-            <span className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold bg-flash/15 text-flash-deep border border-flash/30">
-              Preferences
-            </span>
-            <span className="text-xs text-muted">User & Organization Settings</span>
-          </div>
-          <h1 className="text-2xl sm:text-3xl font-extrabold text-ink mt-1 tracking-tight">
-            Collaboration & Planning Preferences
-          </h1>
-          <p className="text-xs sm:text-sm text-muted mt-0.5">
-            Customize calendar default layouts, working hour thresholds, week start day, and notification rules.
+          <h1 className="text-2xl font-bold text-ink tracking-tight">Preferences</h1>
+          <p className="text-sm text-muted mt-0.5">
+            Calendar and planning defaults, working hours, time zone and workload limits.
           </p>
         </div>
 
@@ -55,7 +47,7 @@ export default function CollaborationSettingsPage() {
             {saved && (
               <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 flex items-center gap-2 font-medium">
                 <Check className="w-4 h-4 shrink-0" />
-                <span>Collaboration preferences saved to client state and localStorage!</span>
+                <span>Preferences saved.</span>
               </div>
             )}
 
@@ -197,70 +189,6 @@ export default function CollaborationSettingsPage() {
                 <p className="text-[11px] text-muted mt-1">
                   Flag team members as "At Capacity" when assigned tasks exceed this baseline limit.
                 </p>
-              </div>
-            </div>
-
-            {/* Notification Preferences */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-ink flex items-center gap-2 border-b border-line pb-2">
-                <Bell className="w-4 h-4 text-flash-deep" />
-                <span>Demo Notifications & Summaries</span>
-              </h3>
-
-              <div className="space-y-2.5">
-                <label className="flex items-center justify-between p-3 rounded-lg bg-paper border border-line cursor-pointer">
-                  <div>
-                    <p className="font-semibold text-ink">In-App Assignment Notifications</p>
-                    <p className="text-muted text-[11px]">Notify when tasks, sprints, or reviews are assigned</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={settings.desktopNotifications}
-                    onChange={e =>
-                      setSettings(prev => ({
-                        ...prev,
-                        desktopNotifications: e.target.checked,
-                      }))
-                    }
-                    className="rounded accent-flash text-flash"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-3 rounded-lg bg-paper border border-line cursor-pointer">
-                  <div>
-                    <p className="font-semibold text-ink">Meeting Schedule Conflict Warnings</p>
-                    <p className="text-muted text-[11px]">Alert when participants have overlapping calendar blocks</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={settings.emailNotifications}
-                    onChange={e =>
-                      setSettings(prev => ({
-                        ...prev,
-                        emailNotifications: e.target.checked,
-                      }))
-                    }
-                    className="rounded accent-flash text-flash"
-                  />
-                </label>
-
-                <label className="flex items-center justify-between p-3 rounded-lg bg-paper border border-line cursor-pointer">
-                  <div>
-                    <p className="font-semibold text-ink">Weekly Team Workload Digest</p>
-                    <p className="text-muted text-[11px]">Summary of completed goals and team capacity</p>
-                  </div>
-                  <input
-                    type="checkbox"
-                    checked={settings.weeklyDigest}
-                    onChange={e =>
-                      setSettings(prev => ({
-                        ...prev,
-                        weeklyDigest: e.target.checked,
-                      }))
-                    }
-                    className="rounded accent-flash text-flash"
-                  />
-                </label>
               </div>
             </div>
 

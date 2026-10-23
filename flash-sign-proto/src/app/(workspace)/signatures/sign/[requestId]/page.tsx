@@ -3,21 +3,12 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
-import {
-  FileCheck2,
-  PenTool,
-  Calendar,
-  CheckCircle2,
-  XCircle,
-  AlertTriangle,
-  ArrowLeft,
-  ShieldCheck,
-  Type,
-  Check,
-  Sparkles
-} from 'lucide-react';
+import { PenTool, Check, Stamp, RefreshCw, Undo2 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
+import { SignatureEditor, isCompleteDraft, initialsFromName } from '@/components/signature/signature-editor';
+import { SignatureMark, type SignatureDraft } from '@/components/signature/signature-mark';
+import { cn } from '@/lib/utils';
 
 export default function DemoSigningExperiencePage() {
   const params = useParams();
@@ -29,7 +20,13 @@ export default function DemoSigningExperiencePage() {
     signDocumentSimulated,
     declineSignatureRequest,
     documentItems,
-    contracts
+    contracts,
+    users,
+    savedSignatures,
+    saveSignature,
+    signingDefaults,
+    companySeals,
+    demoRole
   } = useApp();
   const currentUser = useCurrentUser();
 
@@ -67,27 +64,48 @@ export default function DemoSigningExperiencePage() {
     return request?.signers.find(s => s.id === activeSignerId) || pendingSigners[0];
   }, [request, activeSignerId, pendingSigners]);
 
-  // Signing inputs
-  const [typedSignature, setTypedSignature] = useState(activeSigner?.name || 'Alex Morgan');
-  const [initials, setInitials] = useState('AM');
-  const [fontStyle, setFontStyle] = useState<'font-serif' | 'font-mono' | 'italic'>('italic');
+  // The account behind the active signer (matched by email), and their saved signature
+  const signerUser = users.find(u => u.email === activeSigner?.email);
+  const isSelf = !!signerUser && signerUser.id === currentUser?.id;
+  const savedSignature = savedSignatures.find(sig => sig.userId === signerUser?.id);
+
+  // Seals the signed-in user's role may apply (only when signing as themselves)
+  const availableSeals = isSelf
+    ? companySeals.filter(seal => seal.isActive && seal.allowedRoles.includes(demoRole))
+    : [];
+
+  // Signing inputs: start from the saved signature; "Change signature" edits a copy for this document
+  const [draft, setDraft] = useState<SignatureDraft | null>(null);
+  const [changing, setChanging] = useState(false);
+  const [saveAsDefault, setSaveAsDefault] = useState(false);
+  const [sealId, setSealId] = useState<string>('');
   const [agreedTerms, setAgreedTerms] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [declineReason, setDeclineReason] = useState('');
   const [showDeclineModal, setShowDeclineModal] = useState(false);
 
-  // Update typed name when switching signers
-  React.useEffect(() => {
-    if (activeSigner) {
-      setTypedSignature(activeSigner.name);
-      const initialsLetters = activeSigner.name
-        .split(' ')
-        .map(n => n[0])
-        .join('')
-        .toUpperCase();
-      setInitials(initialsLetters || 'FS');
+  // Reset the signature when switching signers (or once their saved signature has loaded)
+  const signatureKey = `${activeSigner?.id}|${savedSignature?.updatedAt ?? ''}`;
+  const [preparedFor, setPreparedFor] = useState<string | null>(null);
+  if (activeSigner && preparedFor !== signatureKey) {
+    setPreparedFor(signatureKey);
+    if (savedSignature) {
+      setDraft(savedSignature);
+      setChanging(false);
+      setSaveAsDefault(false);
+    } else {
+      setDraft({
+        name: activeSigner.name,
+        initials: initialsFromName(activeSigner.name),
+        source: signingDefaults.allowedSignatureMethods[0] ?? 'type',
+        styleId: 'script',
+      });
+      setChanging(true);
+      // First signature: keep it for next time, if the signer has an account here
+      setSaveAsDefault(!!signerUser);
     }
-  }, [activeSigner]);
+    setSealId('');
+  }
 
   if (!request) {
     return (
@@ -108,13 +126,25 @@ export default function DemoSigningExperiencePage() {
     day: 'numeric'
   });
 
-  const canSubmit = typedSignature.trim().length > 1 && agreedTerms && !isSubmitting;
+  const selectedSeal = availableSeals.find(seal => seal.id === sealId);
+  const canSubmit = !!draft && isCompleteDraft(draft) && agreedTerms && !isSubmitting;
 
   const handleFinishSigning = () => {
-    if (!canSubmit || !activeSigner) return;
+    if (!canSubmit || !activeSigner || !draft) return;
     setIsSubmitting(true);
 
-    signDocumentSimulated(request.id, activeSigner.id, `Typed: ${typedSignature.trim()}`);
+    if (saveAsDefault && signerUser) {
+      saveSignature({ ...draft, userId: signerUser.id, updatedAt: new Date().toISOString() });
+    }
+    const signatureValue = draft.source === 'type'
+      ? `Typed (${draft.styleId ?? 'script'}): ${draft.name.trim()}`
+      : draft.signatureImage ?? '';
+    signDocumentSimulated(
+      request.id,
+      activeSigner.id,
+      signatureValue,
+      selectedSeal ? { id: selectedSeal.id, name: selectedSeal.name } : undefined
+    );
 
     setTimeout(() => {
       router.push(`/signatures/${request.id}/complete`);
@@ -220,56 +250,115 @@ export default function DemoSigningExperiencePage() {
               Signer Execution Section
             </h3>
 
-            {/* Signature Input Panel */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted block">
-                  Your Full Legal Name *
-                </label>
-                <input
-                  type="text"
-                  value={typedSignature}
-                  onChange={(e) => setTypedSignature(e.target.value)}
-                  placeholder="Type name to sign..."
-                  className="w-full px-3.5 py-2.5 bg-paper border border-line rounded-lg text-sm text-ink font-semibold focus:outline-none focus:ring-2 focus:ring-flash/30 focus:border-flash"
-                />
+            {/* Your signature: saved one by default, changeable for this document */}
+            <div className="space-y-3 font-sans">
+              <div className="flex items-center justify-between gap-3">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted">Your signature</span>
+                {!changing && draft && (
+                  <button
+                    type="button"
+                    onClick={() => { setChanging(true); setSaveAsDefault(false); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-paper hover:bg-mist text-xs font-semibold text-ink"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Change signature
+                  </button>
+                )}
+                {changing && savedSignature && (
+                  <button
+                    type="button"
+                    onClick={() => { setDraft(savedSignature); setChanging(false); setSaveAsDefault(false); }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line bg-paper hover:bg-mist text-xs font-semibold text-ink"
+                  >
+                    <Undo2 className="w-3.5 h-3.5" /> Use my saved signature
+                  </button>
+                )}
               </div>
 
-              <div className="space-y-2">
-                <label className="text-xs font-bold uppercase tracking-wider text-muted block">
-                  Signature Font Style
-                </label>
-                <div className="flex gap-2">
-                  {[
-                    { id: 'italic', label: 'Cursive Script' },
-                    { id: 'font-serif', label: 'Classic Serif' },
-                    { id: 'font-mono', label: 'Modern Sans' }
-                  ].map(f => (
+              {changing && draft ? (
+                <div className="p-4 rounded-xl border border-line bg-paper space-y-3">
+                  {!savedSignature && (
+                    <p className="text-xs text-muted">
+                      {signerUser ? 'You haven’t saved a signature yet. Create one to sign this document.' : 'Create a signature to sign this document.'}
+                    </p>
+                  )}
+                  <SignatureEditor value={draft} onChange={setDraft} allowedMethods={signingDefaults.allowedSignatureMethods} />
+                  {signerUser && (
+                    <label className="flex items-center gap-2 text-xs text-ink cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={saveAsDefault}
+                        onChange={e => setSaveAsDefault(e.target.checked)}
+                        className="w-4 h-4 accent-flash"
+                      />
+                      {savedSignature ? 'Also replace my saved signature with this one' : 'Save this as my signature for next time'}
+                    </label>
+                  )}
+                </div>
+              ) : (
+                <p className="text-xs text-muted">
+                  Using your saved signature from{' '}
+                  <Link href="/settings/signature" className="font-semibold text-flash-deep hover:underline">Settings › My Signature</Link>.
+                  Changing it here only affects this document unless you choose to save it.
+                </p>
+              )}
+            </div>
+
+            {/* Company seal (optional, role-restricted) */}
+            {availableSeals.length > 0 && (
+              <div className="space-y-2 font-sans">
+                <span className="text-xs font-bold uppercase tracking-wider text-muted flex items-center gap-1.5">
+                  <Stamp className="w-3.5 h-3.5" /> Company seal (optional)
+                </span>
+                <div className="flex flex-wrap gap-2" role="radiogroup" aria-label="Company seal">
+                  {[{ id: '', name: 'No seal', image: '' }, ...availableSeals].map(seal => (
                     <button
-                      key={f.id}
+                      key={seal.id || 'none'}
                       type="button"
-                      onClick={() => setFontStyle(f.id as any)}
-                      className={`flex-1 py-2 rounded-lg border text-xs font-medium transition-colors ${
-                        fontStyle === f.id ? 'bg-ink text-paper-elevated border-ink' : 'bg-paper text-muted border-line'
-                      }`}
+                      role="radio"
+                      aria-checked={sealId === seal.id}
+                      onClick={() => setSealId(seal.id)}
+                      className={cn(
+                        'flex items-center gap-2 px-3 py-2 rounded-lg border text-xs font-semibold transition-colors',
+                        sealId === seal.id ? 'border-flash bg-flash/5 ring-1 ring-flash text-ink' : 'border-line bg-paper text-muted hover:text-ink'
+                      )}
                     >
-                      {f.label}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      {seal.image && <img src={seal.image} alt="" className="w-8 h-8 object-contain" />}
+                      {seal.name}
                     </button>
                   ))}
                 </div>
+                <p className="text-xs text-muted">Applying a seal is recorded in this request&apos;s audit trail.</p>
               </div>
-            </div>
+            )}
 
-            {/* Live Signature Preview Card */}
-            <div className="p-6 bg-paper rounded-xl border border-line text-center space-y-2">
-              <span className="text-[10px] font-bold text-muted uppercase tracking-widest block">
-                GENERATED SIMULATED SIGNATURE
+            {/* Signature block as it will appear on the document */}
+            <div className="p-6 bg-paper rounded-xl border border-line font-sans">
+              <span className="text-[10px] font-bold text-muted uppercase tracking-widest block mb-3">
+                Signature block preview
               </span>
-              <div className={`text-3xl text-flash-deep py-3 select-none ${fontStyle}`}>
-                {typedSignature.trim() || 'Your Signature Here'}
-              </div>
-              <div className="text-[11px] text-muted font-mono">
-                Verified Signer: {activeSigner?.email} • Hash: #SIM-{Math.abs(typedSignature.split('').reduce((a, b) => a + b.charCodeAt(0), 0))}
+              <div className="flex items-end justify-between gap-6 flex-wrap">
+                <div className="min-w-0">
+                  <div className="min-h-14 flex items-end border-b border-ink/40 pb-1 pr-8">
+                    {draft && isCompleteDraft(draft)
+                      ? <SignatureMark signature={draft} size="lg" />
+                      : <span className="text-sm text-muted">Your signature will appear here</span>}
+                  </div>
+                  <p className="text-xs text-ink mt-1.5 font-semibold">{activeSigner?.name}</p>
+                  <p className="text-[11px] text-muted">{activeSigner?.email} · {currentDate}</p>
+                </div>
+                {draft && isCompleteDraft(draft) && (
+                  <div className="text-center">
+                    <div className="min-h-10 flex items-end justify-center border-b border-ink/40 pb-1 px-4">
+                      <SignatureMark signature={draft} variant="initials" size="md" />
+                    </div>
+                    <p className="text-[11px] text-muted mt-1.5">Initials</p>
+                  </div>
+                )}
+                {selectedSeal && (
+                  // eslint-disable-next-line @next/next/no-img-element
+                  <img src={selectedSeal.image} alt={selectedSeal.name} className="w-24 h-24 object-contain opacity-90 -rotate-6" />
+                )}
               </div>
             </div>
 
