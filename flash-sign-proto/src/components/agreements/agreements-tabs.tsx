@@ -3,7 +3,7 @@
 import { useApp } from '@/context/app-context';
 import { SectionTabs, type SectionTab } from '@/components/shared/section-tabs';
 
-export type AgreementsTabGroup = 'inbox' | 'documents' | 'contracts';
+export type AgreementsTabGroup = 'inbox' | 'documents';
 
 function useTabGroups(): Record<AgreementsTabGroup, SectionTab[]> {
   const { signatureRequests } = useApp();
@@ -35,31 +35,18 @@ function useTabGroups(): Record<AgreementsTabGroup, SectionTab[]> {
       { label: 'Recent', href: '/documents/recent' },
       { label: 'Favorites', href: '/documents/favorites' },
       { label: 'Folders', href: '/documents/folders' },
-    ],
-    contracts: [
-      { label: 'Overview', href: '/contracts' },
-      { label: 'All Contracts', href: '/contracts/all' },
       {
-        label: 'In Progress',
-        href: '/contracts/drafts',
+        // Contracts live inside Documents; each lifecycle stage is a chip
+        label: 'Contracts',
+        href: '/contracts',
         subTabs: [
+          { label: 'Overview', href: '/contracts' },
+          { label: 'All', href: '/contracts/all' },
           { label: 'Drafts', href: '/contracts/drafts' },
           { label: 'In Review', href: '/contracts/review' },
           { label: 'Awaiting Signature', href: '/contracts/awaiting' },
-        ],
-      },
-      {
-        label: 'Active',
-        href: '/contracts/active',
-        subTabs: [
           { label: 'Active', href: '/contracts/active' },
           { label: 'Expiring Soon', href: '/contracts/expiring' },
-        ],
-      },
-      {
-        label: 'Closed',
-        href: '/contracts/completed',
-        subTabs: [
           { label: 'Completed', href: '/contracts/completed' },
           { label: 'Archived', href: '/contracts/archived' },
         ],

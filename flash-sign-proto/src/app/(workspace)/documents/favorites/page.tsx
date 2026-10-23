@@ -13,10 +13,10 @@ import {
   ArrowRight
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
-import { DocumentStatusBadge, DocumentTypeBadge, ContractStatusBadge } from '@/components/documents/document-badges';
+import { DocumentStatusBadge, DocumentTypeBadge } from '@/components/documents/document-badges';
 
 export default function FavoritesPage() {
-  const { documentItems, contracts, users, toggleFavoriteDocument } = useApp();
+  const { documentItems, users, toggleFavoriteDocument } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
 
   const favoriteDocs = useMemo(() => {
@@ -44,7 +44,7 @@ export default function FavoritesPage() {
               Starred & Key Agreements ({favoriteDocs.length})
             </h1>
             <p className="text-sm text-muted mt-1">
-              Quick access to mission-critical contracts, customer MSAs, and frequently referenced agreements.
+              Quick access to customer MSAs and frequently referenced agreements.
             </p>
           </div>
         </div>
@@ -69,7 +69,7 @@ export default function FavoritesPage() {
             <Star className="w-8 h-8 text-muted/40 mx-auto mb-2" />
             <h3 className="text-sm font-bold text-ink">No favorite agreements yet</h3>
             <p className="text-xs text-muted mt-1 max-w-xs mx-auto">
-              Click the star icon on any document or contract card to pin it here for quick access.
+              Click the star icon on any document to pin it here for quick access.
             </p>
             <Link
               href="/documents/all"

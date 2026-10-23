@@ -65,7 +65,7 @@ export default function WaitingForMySignaturePage() {
               <div>
                 <h1 className="text-2xl font-bold text-ink">Waiting for My Signature</h1>
                 <p className="text-sm text-muted">
-                  Documents and contracts requiring your digital signature or approval
+                  Documents requiring your digital signature or approval
                 </p>
               </div>
             </div>

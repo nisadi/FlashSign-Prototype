@@ -113,7 +113,7 @@ export function UploadDemoDialog({
             </div>
             <div>
               <h3 className="text-lg font-bold text-ink">Upload Demo Document</h3>
-              <p className="text-xs text-muted">Add a PDF, Word DOCX, or contract into your local library.</p>
+              <p className="text-xs text-muted">Add a PDF, Word DOCX, or agreement into your local library.</p>
             </div>
           </div>
           <button
@@ -254,7 +254,7 @@ export function UploadDemoDialog({
               onChange={e => setProjectId(e.target.value)}
               className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-flash"
             >
-              <option value="">None / Standalone Contract</option>
+              <option value="">None / Standalone Document</option>
               {projects.map(p => (
                 <option key={p.id} value={p.id}>{p.name}</option>
               ))}

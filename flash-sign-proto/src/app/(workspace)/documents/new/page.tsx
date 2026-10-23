@@ -93,7 +93,7 @@ export default function NewDocumentPage() {
             Create Document
           </h1>
           <p className="text-sm text-muted mt-1">
-            Author agreements from scratch, customize approved legal templates, or register imported contracts.
+            Author agreements from scratch, customize approved legal templates, or register imported agreements.
           </p>
         </div>
 

@@ -122,7 +122,7 @@ export default function AllDocumentsPage() {
               All Documents
             </h1>
             <p className="text-sm text-muted mt-1">
-              Browse, search, organize into folders, and manage enterprise contracts and draft agreements.
+              Browse, search, organize into folders, and manage agreements, drafts, and signed documents.
             </p>
           </div>
 
@@ -475,7 +475,7 @@ export default function AllDocumentsPage() {
                         {doc.title}
                       </Link>
                       <p className="text-xs text-muted line-clamp-2 mt-1">
-                        {doc.description || 'Enterprise contract record ready for review and signing.'}
+                        {doc.description || 'Document ready for review and signing.'}
                       </p>
                     </div>
                   </div>

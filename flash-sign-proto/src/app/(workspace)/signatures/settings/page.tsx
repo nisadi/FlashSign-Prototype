@@ -176,7 +176,7 @@ export default function SignatureSettingsPage() {
                   onChange={(e) => setRequireAllSigners(e.target.checked)}
                   className="w-4 h-4 accent-flash"
                 />
-                <span className="text-ink font-medium">Require all participants to complete signature before marking contract Active</span>
+                <span className="text-ink font-medium">Require all participants to complete signature before marking the document Signed</span>
               </label>
               <label className="flex items-center gap-2.5 cursor-pointer">
                 <input

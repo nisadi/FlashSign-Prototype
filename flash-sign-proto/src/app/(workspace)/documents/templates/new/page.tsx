@@ -81,7 +81,7 @@ export default function NewTemplatePage() {
             Create Document Template
           </h1>
           <p className="text-sm text-muted mt-1">
-            Build a reusable contract blueprint with dynamic variable slots.
+            Build a reusable document blueprint with dynamic variable slots.
           </p>
         </div>
 

@@ -60,7 +60,7 @@ export default function DocumentTemplatesPage() {
             </div>
             <h1 className="text-2xl sm:text-3xl font-bold text-ink tracking-tight flex items-center gap-3">
               <ScrollText className="w-7 h-7 text-purple-600" />
-              Document & Contract Templates ({documentTemplates.length})
+              Document Templates ({documentTemplates.length})
             </h1>
             <p className="text-sm text-muted mt-1">
               Standardized agreement blueprints with interactive placeholder variables ready for instant drafting.

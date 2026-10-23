@@ -70,7 +70,7 @@ export default function MyDocumentsPage() {
               My Documents ({myDocuments.length})
             </h1>
             <p className="text-sm text-muted mt-1">
-              Documents and contracts authored by you as {currentUser?.name || 'Current User'}.
+              Documents authored by you as {currentUser?.name || 'Current User'}.
             </p>
           </div>
 

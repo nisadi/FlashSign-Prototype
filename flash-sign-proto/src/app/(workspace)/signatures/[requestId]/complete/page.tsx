@@ -71,7 +71,7 @@ export default function SignatureCompletionPage() {
             </h1>
             <p className="text-sm text-muted max-w-md mx-auto">
               {isAllComplete
-                ? 'All designated parties have executed this simulated package. Associated contract records have been updated to Active.'
+                ? 'All designated parties have executed this simulated package. The linked document has been marked as Signed.'
                 : `Your signature was recorded at ${nowFormatted}. The remaining signatories will continue the execution flow.`}
             </p>
           </div>

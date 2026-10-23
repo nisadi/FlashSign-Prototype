@@ -17,11 +17,12 @@ import { canAccess, ROLE_CONFIGS } from '@/lib/permissions';
 import type { DemoRole } from '@/types';
 import { useState, useEffect } from 'react';
 
-const MOCK_WORKSPACES = [
-  { id: 'ws1', name: 'Acme Digital', plan: 'Enterprise', color: '#00c2a8' },
-  { id: 'ws2', name: 'Northstar Studio', plan: 'Pro', color: '#3b82f6' },
-  { id: 'ws3', name: 'Vertex Labs', plan: 'Startup', color: '#8b5cf6' },
-];
+// Workspace selector is hidden (see the commented-out block in the JSX)
+// const MOCK_WORKSPACES = [
+//   { id: 'ws1', name: 'Acme Digital', plan: 'Enterprise', color: '#00c2a8' },
+//   { id: 'ws2', name: 'Northstar Studio', plan: 'Pro', color: '#3b82f6' },
+//   { id: 'ws3', name: 'Vertex Labs', plan: 'Startup', color: '#8b5cf6' },
+// ];
 
 export function AppSidebar() {
   const pathname = usePathname();
@@ -29,8 +30,9 @@ export function AppSidebar() {
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
-  const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
-  const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
+  // Workspace selector is hidden (see the commented-out block in the JSX)
+  // const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
+  // const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
 
   const pendingReviewsCount = agentRuns?.filter(r => r.status === 'needs_review').length || 0;
   const actionRequiredSignatures = signatureRequests?.filter(r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed').length || 0;
@@ -49,8 +51,6 @@ export function AppSidebar() {
     title: string;
     icon: React.ComponentType<{ className?: string }>;
     badge?: string | number;
-    /** Render the section as a single link to items[0] instead of a dropdown. */
-    direct?: boolean;
     items: NavItem[];
   }
 
@@ -63,6 +63,8 @@ export function AppSidebar() {
         { label: 'Dashboard', href: '/projects/home', icon: LayoutDashboard },
         { label: 'Projects', href: '/projects', icon: FolderKanban },
         { label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare },
+        // One page: the calendar, with Meetings and Availability tabs on top (planner/layout.tsx)
+        { label: 'Planning', href: '/planner/calendar', icon: CalendarDays, activeWhen: path => path.startsWith('/planner') },
         { label: 'Notifications', href: '/teams/notifications', icon: Bell },
         { label: 'Settings', href: '/teams/settings', icon: Settings },
       ],
@@ -87,22 +89,14 @@ export function AppSidebar() {
           label: 'Documents',
           href: '/documents/all',
           icon: FileText,
-          activeWhen: path => path.startsWith('/documents') && !path.startsWith('/documents/templates'),
+          // Contracts are a tab inside Documents
+          activeWhen: path =>
+            (path.startsWith('/documents') && !path.startsWith('/documents/templates')) ||
+            path.startsWith('/contracts'),
         },
-        { label: 'Contracts', href: '/contracts', icon: Building2, activeWhen: path => path.startsWith('/contracts') },
         { label: 'Templates', href: '/documents/templates', icon: ScrollText },
         { label: 'Reports', href: '/agreements/reports', icon: BarChart3 },
         { label: 'Settings', href: '/signatures/settings', icon: Sliders },
-      ],
-    },
-    {
-      // One page: the calendar, with a Meetings tab on top (planner/layout.tsx)
-      id: 'planning',
-      title: 'Planning',
-      icon: CalendarDays,
-      direct: true,
-      items: [
-        { label: 'Planning', href: '/planner/calendar', icon: CalendarDays, activeWhen: path => path.startsWith('/planner') },
       ],
     },
     {
@@ -147,15 +141,12 @@ export function AppSidebar() {
     const initial: Record<string, boolean> = {
       workspace: false,
       agreements: false,
-      planning: false,
       collaboration: false,
       'ai-agents': false,
     };
     if (['/agreements', '/documents', '/contracts', '/signatures'].some(p => pathname.startsWith(p))) initial.agreements = true;
     else if (pathname.startsWith('/ai-agents')) initial['ai-agents'] = true;
     else if (pathname.startsWith('/teams')) initial.collaboration = true;
-    else if (pathname.startsWith('/planner')) initial.planning = true;
-    else if (pathname.startsWith('/projects')) initial.workspace = true;
     else initial.workspace = true;
     return initial;
   });
@@ -219,7 +210,9 @@ export function AppSidebar() {
           </button>
         </div>
 
-        {/* Workspace Selector Dropdown */}
+        {/* Workspace Selector Dropdown: hidden for now. To restore it, uncomment
+            this block, MOCK_WORKSPACES, the two workspace state hooks, and the
+            setWorkspaceSwitcherOpen(false) call in the role switcher below.
         {!sidebarCollapsed && (
           <div className="px-3 py-2 border-b border-ink-soft/30 relative">
             <button
@@ -265,6 +258,7 @@ export function AppSidebar() {
             )}
           </div>
         )}
+        */}
 
         {/* Demo Role Switcher */}
         {!sidebarCollapsed && (
@@ -273,7 +267,7 @@ export function AppSidebar() {
               className="flex items-center gap-2 px-2 py-1 rounded cursor-pointer hover:bg-white/5 transition-colors text-[11px]"
               onClick={() => {
                 setRoleSwitcherOpen(!roleSwitcherOpen);
-                setWorkspaceSwitcherOpen(false);
+                // setWorkspaceSwitcherOpen(false);
               }}
             >
               <div className="w-2 h-2 rounded-full shrink-0" style={{ background: roleConfig.color }} />
@@ -328,30 +322,6 @@ export function AppSidebar() {
               const isOpen = !!openSections[section.id];
               const hasActiveChild = section.items.some(item => isActive(item));
               const SectionIcon = section.icon;
-
-              if (section.direct) {
-                return (
-                  <Link
-                    key={section.id}
-                    href={section.items[0].href}
-                    className={cn(
-                      'w-full flex items-center gap-2 px-2.5 py-1.5 rounded-md text-xs font-semibold transition-all group select-none',
-                      hasActiveChild
-                        ? 'text-white bg-white/10 shadow-xs'
-                        : 'text-white/60 hover:text-white hover:bg-white/5'
-                    )}
-                    aria-current={hasActiveChild ? 'page' : undefined}
-                  >
-                    <SectionIcon
-                      className={cn(
-                        'w-4 h-4 shrink-0 transition-colors',
-                        hasActiveChild ? 'text-flash' : 'text-white/40 group-hover:text-flash'
-                      )}
-                    />
-                    <span className="truncate text-xs">{section.title}</span>
-                  </Link>
-                );
-              }
 
               return (
                 <div key={section.id} className="rounded-lg transition-colors">
