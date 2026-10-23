@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useApp } from '@/context/app-context';
 import { Card, Button } from '@/components/shared/ui';
 import { formatDate } from '@/lib/utils';
+import { Modal } from '@/components/shared/modal';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -319,78 +320,80 @@ export default function PlannerCalendarPage() {
         </div>
 
         {/* Quick Create Scheduled Item Modal */}
-        {showQuickCreate && (
-          <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-paper-elevated border border-line rounded-2xl p-6 max-w-md w-full shadow-xl animate-fade-in space-y-4">
-              <h2 className="text-base font-bold text-ink">Schedule Item on Calendar</h2>
-              <form onSubmit={handleCreateEvent} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Item Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={quickTitle}
-                    onChange={(e) => setQuickTitle(e.target.value)}
-                    placeholder="e.g. Design review with stakeholders"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  />
-                </div>
+        <Modal
+          isOpen={showQuickCreate}
+          onClose={() => setShowQuickCreate(false)}
+          size="sm"
+        >
+          <div className="p-6 space-y-4">
+            <h2 className="text-base font-bold text-ink">Schedule Item on Calendar</h2>
+            <form onSubmit={handleCreateEvent} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Item Title</label>
+                <input
+                  type="text"
+                  required
+                  value={quickTitle}
+                  onChange={(e) => setQuickTitle(e.target.value)}
+                  placeholder="e.g. Design review with stakeholders"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1">Type</label>
-                    <select
-                      value={quickType}
-                      onChange={(e) => setQuickType(e.target.value as any)}
-                      className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                    >
-                      <option value="task">Task</option>
-                      <option value="milestone">Milestone</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1">Date</label>
-                    <input
-                      type="date"
-                      value={quickDate}
-                      onChange={(e) => setQuickDate(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                    />
-                  </div>
-                </div>
-
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Project</label>
+                  <label className="block text-xs font-semibold text-ink mb-1">Type</label>
                   <select
-                    value={quickProjectId}
-                    onChange={(e) => setQuickProjectId(e.target.value)}
+                    value={quickType}
+                    onChange={(e) => setQuickType(e.target.value as any)}
                     className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
                   >
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
+                    <option value="task">Task</option>
+                    <option value="milestone">Milestone</option>
                   </select>
                 </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowQuickCreate(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="sm">
-                    Schedule Item
-                  </Button>
+                <div>
+                  <label className="block text-xs font-semibold text-ink mb-1">Date</label>
+                  <input
+                    type="date"
+                    value={quickDate}
+                    onChange={(e) => setQuickDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
+                  />
                 </div>
-              </form>
-            </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Project</label>
+                <select
+                  value={quickProjectId}
+                  onChange={(e) => setQuickProjectId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowQuickCreate(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm">
+                  Schedule Item
+                </Button>
+              </div>
+            </form>
           </div>
-        )}
+        </Modal>
 
         {/* Calendar View Container */}
         <div className="bg-paper-elevated border border-line rounded-2xl overflow-hidden shadow-xs">

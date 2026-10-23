@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { DocumentType } from '@/types/documents';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface UploadDemoDialogProps {
   open: boolean;
@@ -104,8 +105,14 @@ export function UploadDemoDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
-      <div className="bg-white border border-line rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5 animate-in fade-in zoom-in-95 duration-150">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onOpenChange(false);
+        }}
+      >
+        <div className="bg-white border border-line rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5 max-h-[calc(100dvh-32px)] overflow-y-auto my-auto">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-xl bg-flash/10 flex items-center justify-center text-flash-deep">
@@ -280,5 +287,6 @@ export function UploadDemoDialog({
         </form>
       </div>
     </div>
+  </ClientPortal>
   );
 }

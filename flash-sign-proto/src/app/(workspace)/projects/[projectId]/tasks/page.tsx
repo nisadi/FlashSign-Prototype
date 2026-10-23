@@ -21,6 +21,8 @@ import {
   Clock,
   Layers,
   ChevronDown,
+  Sparkles,
+  FileCode2,
 } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '@/types';
 
@@ -42,10 +44,16 @@ export default function ProjectTasksListPage({
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [groupBy, setGroupBy] = useState<'none' | 'status' | 'assignee'>('none');
 
-  const project = projects.find((p) => p.id === projectId);
+  const project =
+    projects.find((p) => p.id === projectId) ||
+    (projectId === 'p-mvhmnblw' ? projects.find((p) => p.id === 'p1') : undefined);
   if (!project) return notFound();
 
-  const projectTasks = tasks.filter((t) => t.projectId === projectId);
+  const effectiveId =
+    projectId === 'p-mvhmnblw' && !tasks.some((t) => t.projectId === 'p-mvhmnblw')
+      ? 'p1'
+      : projectId;
+  const projectTasks = tasks.filter((t) => t.projectId === projectId || t.projectId === effectiveId);
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
 
   // Filtered & Sorted Tasks
@@ -376,15 +384,44 @@ export default function ProjectTasksListPage({
                           {task.key}
                         </td>
                         <td className="py-3 px-3">
-                          <span
-                            className={`font-medium ${
-                              task.status === 'done'
-                                ? 'line-through text-muted'
-                                : 'text-ink group-hover:text-flash-deep'
-                            }`}
-                          >
-                            {task.title}
-                          </span>
+                          <div className="flex flex-col gap-1">
+                            <div className="flex items-center gap-2 flex-wrap">
+                              <span
+                                className={`font-medium ${
+                                  task.status === 'done'
+                                    ? 'line-through text-muted'
+                                    : 'text-ink group-hover:text-flash-deep'
+                                }`}
+                              >
+                                {task.title}
+                              </span>
+
+                              {task.isSrsGenerated && (
+                                <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                                  <Sparkles className="w-2.5 h-2.5 text-emerald-600" /> SRS Generated
+                                </span>
+                              )}
+
+                              {task.type && (
+                                <span className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-mist/60 text-muted uppercase font-semibold">
+                                  {task.type}
+                                </span>
+                              )}
+                            </div>
+
+                            {task.sourceDocumentName && (
+                              <div className="flex items-center gap-1 text-[10px] text-muted font-mono">
+                                <FileCode2 className="w-3 h-3 text-flash-deep shrink-0" />
+                                <span className="truncate max-w-xs">{task.sourceDocumentName}</span>
+                                {task.sourceSection && (
+                                  <>
+                                    <span>•</span>
+                                    <span className="text-muted/80">{task.sourceSection}</span>
+                                  </>
+                                )}
+                              </div>
+                            )}
+                          </div>
                         </td>
                         <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
                           <select

@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import type { TaskPriority, TaskType, ProjectStatus, ProjectHealth } from '@/types';
 import { X, CheckSquare, FolderKanban, Flag, Zap, Check } from 'lucide-react';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface QuickCreateDialogProps {
   isOpen: boolean;
@@ -137,8 +138,14 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs">
-      <div className="bg-paper-elevated border border-line rounded-2xl w-full max-w-lg shadow-2xl p-6 relative">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="bg-paper-elevated border border-line rounded-2xl w-full max-w-lg shadow-2xl p-6 relative max-h-[calc(100dvh-32px)] overflow-y-auto my-auto flex flex-col">
         <button
           onClick={onClose}
           className="absolute top-5 right-5 p-1 text-muted hover:text-ink rounded"
@@ -466,5 +473,6 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
         )}
       </div>
     </div>
+  </ClientPortal>
   );
 }

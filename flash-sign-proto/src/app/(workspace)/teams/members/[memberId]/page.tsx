@@ -14,6 +14,7 @@ import { AvailabilityBadge } from '@/components/collaboration/collaboration-badg
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import type { AvailabilityStatus, Task } from '@/types';
 import { FEATURES } from '@/lib/features';
+import { Modal } from '@/components/shared/modal';
 
 export default function MemberProfilePage() {
   const params = useParams();
@@ -387,69 +388,71 @@ export default function MemberProfilePage() {
       />
 
       {/* Assign Task Modal */}
-      {assignTaskOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-2xl p-6 max-w-md w-full space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-ink">Assign New Task to {member.name}</h3>
-            <form onSubmit={handleAssignTask} className="space-y-3">
-              <div>
-                <label className="block font-semibold text-ink mb-1">Task Title</label>
-                <input
-                  type="text"
-                  value={newTaskTitle}
-                  onChange={e => setNewTaskTitle(e.target.value)}
-                  placeholder="e.g. Implement WebAssembly verification runner"
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                  required
-                />
-              </div>
+      <Modal
+        isOpen={assignTaskOpen}
+        onClose={() => setAssignTaskOpen(false)}
+        size="sm"
+      >
+        <div className="p-6 space-y-4 text-xs">
+          <h3 className="text-sm font-bold text-ink">Assign New Task to {member.name}</h3>
+          <form onSubmit={handleAssignTask} className="space-y-3">
+            <div>
+              <label className="block font-semibold text-ink mb-1">Task Title</label>
+              <input
+                type="text"
+                value={newTaskTitle}
+                onChange={e => setNewTaskTitle(e.target.value)}
+                placeholder="e.g. Implement WebAssembly verification runner"
+                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+                required
+              />
+            </div>
 
-              <div>
-                <label className="block font-semibold text-ink mb-1">Project</label>
-                <select
-                  value={newTaskProject}
-                  onChange={e => setNewTaskProject(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                >
-                  {projects.map(p => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block font-semibold text-ink mb-1">Project</label>
+              <select
+                value={newTaskProject}
+                onChange={e => setNewTaskProject(e.target.value)}
+                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+              >
+                {projects.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.name}
+                  </option>
+                ))}
+              </select>
+            </div>
 
-              <div>
-                <label className="block font-semibold text-ink mb-1">Estimated Points / Hours</label>
-                <input
-                  type="number"
-                  min="1"
-                  max="13"
-                  value={newTaskPoints}
-                  onChange={e => setNewTaskPoints(Number(e.target.value))}
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                />
-              </div>
+            <div>
+              <label className="block font-semibold text-ink mb-1">Estimated Points / Hours</label>
+              <input
+                type="number"
+                min="1"
+                max="13"
+                value={newTaskPoints}
+                onChange={e => setNewTaskPoints(Number(e.target.value))}
+                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+              />
+            </div>
 
-              <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
-                <button
-                  type="button"
-                  onClick={() => setAssignTaskOpen(false)}
-                  className="px-3.5 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-mist font-medium"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-4 py-1.5 rounded-lg bg-flash hover:bg-flash-deep text-ink font-bold shadow-xs transition-colors"
-                >
-                  Assign Task
-                </button>
-              </div>
-            </form>
-          </div>
+            <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
+              <button
+                type="button"
+                onClick={() => setAssignTaskOpen(false)}
+                className="px-3.5 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-mist font-medium"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-4 py-1.5 rounded-lg bg-flash hover:bg-flash-deep text-ink font-bold shadow-xs transition-colors"
+              >
+                Assign Task
+              </button>
+            </div>
+          </form>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

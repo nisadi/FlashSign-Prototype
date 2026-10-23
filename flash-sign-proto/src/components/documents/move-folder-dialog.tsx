@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { Folder, X, Check } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface MoveFolderDialogProps {
   documentId: string | null;
@@ -30,8 +31,14 @@ export function MoveFolderDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
-      <div className="bg-white border border-line rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-4 animate-in fade-in zoom-in-95 duration-150">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onOpenChange(false);
+        }}
+      >
+        <div className="bg-white border border-line rounded-2xl max-w-md w-full p-6 shadow-2xl relative space-y-4 max-h-[calc(100dvh-32px)] flex flex-col my-auto overflow-hidden">
         <div className="flex items-start justify-between">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-flash/10 text-flash-deep flex items-center justify-center">
@@ -108,5 +115,6 @@ export function MoveFolderDialog({
         </div>
       </div>
     </div>
+  </ClientPortal>
   );
 }

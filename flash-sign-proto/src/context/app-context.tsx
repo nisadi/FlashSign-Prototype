@@ -90,6 +90,7 @@ interface AppActions {
   addRecentProject: (id: string) => void;
   // Tasks
   addTask: (task: CreateTaskInput) => void;
+  addTasks: (tasks: CreateTaskInput[]) => void;
   updateTask: (id: string, updates: Partial<Task>) => void;
   deleteTask: (id: string) => void;
   reassignTask: (taskId: string, newAssigneeId: string) => void;
@@ -142,6 +143,7 @@ interface AppActions {
   deleteCompanySeal: (id: string) => void;
   // Files
   addFile: (file: CreateFileInput) => void;
+  updateFile: (id: string, updates: Partial<ProjectFile>) => void;
   deleteFile: (id: string) => void;
   // Activity
   addActivity: (log: Partial<AuditLog> & { action: string; resource: string; resourceId: string }) => void;
@@ -410,6 +412,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         attachments: t.attachments || [],
         checklist: t.checklist || [],
         acceptanceCriteria: t.acceptanceCriteria,
+        sourceDocumentId: t.sourceDocumentId,
+        sourceDocumentName: t.sourceDocumentName,
+        sourceSection: t.sourceSection,
+        isSrsGenerated: t.isSrsGenerated,
         createdAt: t.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
@@ -422,6 +428,54 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...s,
         tasks: nextTasks,
         projects: s.projects.map(p => p.id === newTask.projectId ? { ...p, progress, updatedAt: new Date().toISOString() } : p),
+      };
+    }),
+    addTasks: (newTaskList) => update(s => {
+      const addedTasks: Task[] = newTaskList.map((t, idx) => ({
+        id: t.id || `t-${Date.now()}-${idx}`,
+        key: t.key || `FS-${s.tasks.length + idx + 1}`,
+        title: t.title,
+        description: t.description || '',
+        type: t.type || 'task',
+        status: t.status || 'todo',
+        priority: t.priority || 'medium',
+        projectId: t.projectId,
+        sprintId: t.sprintId,
+        assigneeId: t.assigneeId,
+        reporterId: t.reporterId || s.currentUserId,
+        parentId: t.parentId,
+        storyPoints: t.storyPoints || t.points,
+        points: t.points || t.storyPoints,
+        startDate: t.startDate,
+        dueDate: t.dueDate,
+        tags: t.tags || t.labels || [],
+        labels: t.labels || t.tags || [],
+        comments: t.comments || [],
+        attachments: t.attachments || [],
+        checklist: t.checklist || [],
+        acceptanceCriteria: t.acceptanceCriteria,
+        sourceDocumentId: t.sourceDocumentId,
+        sourceDocumentName: t.sourceDocumentName,
+        sourceSection: t.sourceSection,
+        isSrsGenerated: t.isSrsGenerated,
+        createdAt: t.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      }));
+
+      const nextTasks = [...addedTasks, ...s.tasks];
+      const affectedProjectIds = Array.from(new Set(newTaskList.map(t => t.projectId)));
+      const nextProjects = s.projects.map(p => {
+        if (!affectedProjectIds.includes(p.id)) return p;
+        const projectTasks = nextTasks.filter(item => item.projectId === p.id);
+        const doneCount = projectTasks.filter(item => item.status === 'done').length;
+        const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+        return { ...p, progress, updatedAt: new Date().toISOString() };
+      });
+
+      return {
+        ...s,
+        tasks: nextTasks,
+        projects: nextProjects,
       };
     }),
     updateTask: (id, updates) => update(s => {
@@ -516,9 +570,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         uploadedBy: f.uploadedBy || s.currentUserId,
         createdAt: f.createdAt || new Date().toISOString(),
         taskId: f.taskId,
+        category: f.category,
+        analysisStatus: f.analysisStatus || 'not_analyzed',
+        analyzedAt: f.analyzedAt,
+        tasksGeneratedCount: f.tasksGeneratedCount,
       };
       return { ...s, files: [newFile, ...s.files] };
     }),
+    updateFile: (id, updates) => update(s => ({
+      ...s,
+      files: s.files.map(f => f.id === id ? { ...f, ...updates } : f),
+    })),
     deleteFile: (id) => update(s => ({ ...s, files: s.files.filter(f => f.id !== id) })),
 
     // Activity

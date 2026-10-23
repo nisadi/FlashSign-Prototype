@@ -6,6 +6,7 @@ import { useApp } from '@/context/app-context';
 import type { Meeting } from '@/types';
 import { MeetingStatusBadge, AvailabilityBadge } from './collaboration-badges';
 import { FEATURES } from '@/lib/features';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface MeetingDetailDrawerProps {
   meeting: Meeting | null;
@@ -46,8 +47,14 @@ export function MeetingDetailDrawer({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end bg-ink/40 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-paper-elevated border-l border-line w-full max-w-md h-full flex flex-col shadow-2xl animate-in slide-in-from-right duration-200">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex justify-end bg-ink/50 backdrop-blur-xs animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="bg-paper-elevated border-l border-line w-full max-w-md h-full flex flex-col shadow-2xl animate-slide-in-right">
         {/* Header */}
         <div className="p-5 border-b border-line flex items-center justify-between bg-mist/30">
           <div className="flex items-center gap-2.5">
@@ -226,5 +233,6 @@ export function MeetingDetailDrawer({
         </div>
       </div>
     </div>
+  </ClientPortal>
   );
 }

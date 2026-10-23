@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, Sparkles } from 'lucide-react';
 import { PRESET_AVATAR_COLORS } from '@/types/demo-auth';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface CreateWorkspaceDialogProps {
   isOpen: boolean;
@@ -38,8 +39,14 @@ export function CreateWorkspaceDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-xs animate-fade-up">
-      <div className="w-full max-w-lg bg-[var(--paper-elevated)] rounded-2xl border border-[var(--line)] shadow-2xl p-6 sm:p-7 relative">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="w-full max-w-lg bg-[var(--paper-elevated)] rounded-2xl border border-[var(--line)] shadow-2xl p-6 sm:p-7 relative max-h-[calc(100dvh-32px)] overflow-y-auto my-auto flex flex-col">
         {/* Close Button */}
         <button
           type="button"
@@ -173,5 +180,6 @@ export function CreateWorkspaceDialog({
         </form>
       </div>
     </div>
+  </ClientPortal>
   );
 }

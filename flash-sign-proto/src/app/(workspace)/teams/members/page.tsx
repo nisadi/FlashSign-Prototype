@@ -14,6 +14,7 @@ import { AvailabilityBadge } from '@/components/collaboration/collaboration-badg
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import type { User, AvailabilityStatus } from '@/types';
 import { FEATURES } from '@/lib/features';
+import { Modal } from '@/components/shared/modal';
 
 export default function MembersDirectoryPage() {
   const router = useRouter();
@@ -428,9 +429,13 @@ export default function MembersDirectoryPage() {
       />
 
       {/* Delete Confirmation */}
-      {deleteConfirmMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-2xl p-6 max-w-sm w-full space-y-4 text-xs">
+      <Modal
+        isOpen={!!deleteConfirmMember}
+        onClose={() => setDeleteConfirmMember(null)}
+        size="xs"
+      >
+        {deleteConfirmMember && (
+          <div className="p-6 space-y-4 text-xs">
             <h3 className="text-sm font-bold text-ink">Remove Member</h3>
             <p className="text-muted leading-relaxed">
               Are you sure you want to remove <strong>{deleteConfirmMember.name}</strong> from the organization? Their task assignments will be unlinked.
@@ -450,8 +455,8 @@ export default function MembersDirectoryPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

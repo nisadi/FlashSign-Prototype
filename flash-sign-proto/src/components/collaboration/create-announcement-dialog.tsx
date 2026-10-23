@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import { X, Megaphone, Pin, AlertCircle, Check } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { Announcement, AnnouncementPriority } from '@/types';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface CreateAnnouncementDialogProps {
   open: boolean;
@@ -96,8 +97,14 @@ export function CreateAnnouncementDialog({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
-      <div className="bg-paper-elevated border border-line rounded-xl shadow-2xl w-full max-w-xl max-h-[90vh] flex flex-col overflow-hidden">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex items-center justify-center p-3 sm:p-4 bg-ink/60 backdrop-blur-xs overflow-y-auto animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onOpenChange(false);
+        }}
+      >
+        <div className="bg-paper-elevated border border-line rounded-2xl shadow-2xl w-full max-w-xl max-h-[calc(100dvh-32px)] flex flex-col overflow-hidden my-auto">
         {/* Header */}
         <div className="px-6 py-4 border-b border-line flex items-center justify-between bg-mist/30">
           <div className="flex items-center gap-2.5">
@@ -242,5 +249,6 @@ export function CreateAnnouncementDialog({
         </form>
       </div>
     </div>
+  </ClientPortal>
   );
 }

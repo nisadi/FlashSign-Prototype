@@ -7,6 +7,7 @@ import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Card, Button, ProgressBar } from '@/components/shared/ui';
 import { Avatar } from '@/components/shared/avatar';
+import { Modal } from '@/components/shared/modal';
 import {
   Users,
   UserPlus,
@@ -108,52 +109,54 @@ export default function ProjectTeamPage({
         </div>
 
         {/* Add Member Modal */}
-        {showAddModal && (
-          <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-paper-elevated border border-line rounded-2xl p-6 max-w-md w-full shadow-xl animate-fade-in space-y-4">
-              <h2 className="text-base font-bold text-ink">Add Member from Directory</h2>
-              <p className="text-xs text-muted">
-                Select an organization member to join {project.name}.
+        <Modal
+          isOpen={showAddModal}
+          onClose={() => setShowAddModal(false)}
+          size="sm"
+        >
+          <div className="p-6 space-y-4">
+            <h2 className="text-base font-bold text-ink">Add Member from Directory</h2>
+            <p className="text-xs text-muted">
+              Select an organization member to join {project.name}.
+            </p>
+
+            {availableUsers.length === 0 ? (
+              <p className="text-xs text-muted py-4 text-center">
+                All organization members are already on this project!
               </p>
-
-              {availableUsers.length === 0 ? (
-                <p className="text-xs text-muted py-4 text-center">
-                  All organization members are already on this project!
-                </p>
-              ) : (
-                <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
-                  {availableUsers.map((u) => (
-                    <div
-                      key={u.id}
-                      className="p-2.5 rounded-xl border border-line bg-paper flex items-center justify-between hover:border-flash/40 transition-colors"
-                    >
-                      <div className="flex items-center gap-2.5 min-w-0">
-                        <Avatar user={u} size="sm" />
-                        <div className="min-w-0">
-                          <p className="text-xs font-semibold text-ink truncate">{u.name}</p>
-                          <p className="text-[10px] text-muted truncate">{u.email}</p>
-                        </div>
+            ) : (
+              <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                {availableUsers.map((u) => (
+                  <div
+                    key={u.id}
+                    className="p-2.5 rounded-xl border border-line bg-paper flex items-center justify-between hover:border-flash/40 transition-colors"
+                  >
+                    <div className="flex items-center gap-2.5 min-w-0">
+                      <Avatar user={u} size="sm" />
+                      <div className="min-w-0">
+                        <p className="text-xs font-semibold text-ink truncate">{u.name}</p>
+                        <p className="text-[10px] text-muted truncate">{u.email}</p>
                       </div>
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        onClick={() => handleAddMember(u.id)}
-                      >
-                        Add
-                      </Button>
                     </div>
-                  ))}
-                </div>
-              )}
-
-              <div className="flex justify-end pt-2">
-                <Button variant="secondary" size="sm" onClick={() => setShowAddModal(false)}>
-                  Close
-                </Button>
+                    <Button
+                      variant="secondary"
+                      size="xs"
+                      onClick={() => handleAddMember(u.id)}
+                    >
+                      Add
+                    </Button>
+                  </div>
+                ))}
               </div>
+            )}
+
+            <div className="flex justify-end pt-2">
+              <Button variant="secondary" size="sm" onClick={() => setShowAddModal(false)}>
+                Close
+              </Button>
             </div>
           </div>
-        )}
+        </Modal>
 
         {/* Members Grid */}
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">

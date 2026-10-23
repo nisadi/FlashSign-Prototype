@@ -4,6 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { Search, FolderKanban, CheckSquare, Flag, Zap, User, X } from 'lucide-react';
+import { ClientPortal } from '@/components/shared/modal';
 
 interface SearchCommandProps {
   isOpen: boolean;
@@ -46,8 +47,14 @@ export function SearchCommand({ isOpen, onClose }: SearchCommandProps) {
     matchingUsers.length > 0;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 bg-ink/50 backdrop-blur-xs">
-      <div className="bg-paper-elevated border border-line rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh]">
+    <ClientPortal>
+      <div
+        className="fixed inset-0 z-[1000] flex items-start justify-center p-3 sm:p-4 pt-16 sm:pt-20 bg-ink/60 backdrop-blur-xs animate-fade-in"
+        onClick={(e) => {
+          if (e.target === e.currentTarget) onClose();
+        }}
+      >
+        <div className="bg-paper-elevated border border-line rounded-2xl w-full max-w-xl shadow-2xl overflow-hidden flex flex-col max-h-[75vh]">
         {/* Input Header */}
         <div className="p-4 border-b border-line flex items-center gap-3 bg-paper">
           <Search className="w-4 h-4 text-muted shrink-0" />
@@ -213,5 +220,6 @@ export function SearchCommand({ isOpen, onClose }: SearchCommandProps) {
         </div>
       </div>
     </div>
+  </ClientPortal>
   );
 }

@@ -9,6 +9,7 @@ import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 import { SignatureEditor, isCompleteDraft, initialsFromName } from '@/components/signature/signature-editor';
 import { SignatureMark, type SignatureDraft } from '@/components/signature/signature-mark';
 import { cn } from '@/lib/utils';
+import { Modal } from '@/components/shared/modal';
 
 export default function DemoSigningExperiencePage() {
   const params = useParams();
@@ -404,37 +405,39 @@ export default function DemoSigningExperiencePage() {
       </main>
 
       {/* Decline Dialog Modal */}
-      {showDeclineModal && (
-        <div className="fixed inset-0 bg-ink/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-          <div className="bg-paper-elevated border border-line rounded-xl p-6 max-w-md w-full shadow-xl space-y-4">
-            <h3 className="text-lg font-bold text-ink">Decline Signature Request</h3>
-            <p className="text-xs text-muted">
-              Declining will update the request status to Declined in local state and notify the sender.
-            </p>
-            <textarea
-              rows={3}
-              placeholder="Reason for declining (optional)..."
-              value={declineReason}
-              onChange={(e) => setDeclineReason(e.target.value)}
-              className="w-full px-3 py-2 bg-paper border border-line rounded-lg text-xs text-ink focus:outline-none focus:border-flash"
-            />
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowDeclineModal(false)}
-                className="px-4 py-2 bg-paper border border-line rounded-lg text-xs font-semibold text-ink hover:bg-mist/50"
-              >
-                Back
-              </button>
-              <button
-                onClick={handleDecline}
-                className="px-4 py-2 bg-danger hover:bg-danger/90 text-white rounded-lg text-xs font-bold"
-              >
-                Confirm Decline
-              </button>
-            </div>
+      <Modal
+        isOpen={showDeclineModal}
+        onClose={() => setShowDeclineModal(false)}
+        size="sm"
+      >
+        <div className="p-6 space-y-4">
+          <h3 className="text-lg font-bold text-ink">Decline Signature Request</h3>
+          <p className="text-xs text-muted">
+            Declining will update the request status to Declined in local state and notify the sender.
+          </p>
+          <textarea
+            rows={3}
+            placeholder="Reason for declining (optional)..."
+            value={declineReason}
+            onChange={(e) => setDeclineReason(e.target.value)}
+            className="w-full px-3 py-2 bg-paper border border-line rounded-lg text-xs text-ink focus:outline-none focus:border-flash"
+          />
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setShowDeclineModal(false)}
+              className="px-4 py-2 bg-paper border border-line rounded-lg text-xs font-semibold text-ink hover:bg-mist/50"
+            >
+              Back
+            </button>
+            <button
+              onClick={handleDecline}
+              className="px-4 py-2 bg-danger hover:bg-danger/90 text-white rounded-lg text-xs font-bold"
+            >
+              Confirm Decline
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

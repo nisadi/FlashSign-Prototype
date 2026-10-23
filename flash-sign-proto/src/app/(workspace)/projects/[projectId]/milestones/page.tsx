@@ -20,6 +20,7 @@ import {
   Link as LinkIcon,
 } from 'lucide-react';
 import type { Milestone } from '@/types';
+import { Modal } from '@/components/shared/modal';
 
 export default function ProjectMilestonesPage({
   params,
@@ -111,63 +112,65 @@ export default function ProjectMilestonesPage({
         </div>
 
         {/* Create Milestone Modal */}
-        {showModal && (
-          <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-paper-elevated border border-line rounded-2xl p-6 max-w-md w-full shadow-xl animate-fade-in space-y-4">
-              <h2 className="text-base font-bold text-ink">Add New Milestone</h2>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">
-                    Milestone Title <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Beta Client Testing Release"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  />
-                </div>
+        <Modal
+          isOpen={showModal}
+          onClose={() => setShowModal(false)}
+          size="sm"
+        >
+          <div className="p-6 space-y-4">
+            <h2 className="text-base font-bold text-ink">Add New Milestone</h2>
+            <form onSubmit={handleCreate} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">
+                  Milestone Title <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. Beta Client Testing Release"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Description</label>
-                  <textarea
-                    rows={3}
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Outline key deliverables and requirements…"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Description</label>
+                <textarea
+                  rows={3}
+                  value={description}
+                  onChange={(e) => setDescription(e.target.value)}
+                  placeholder="Outline key deliverables and requirements…"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Target Due Date</label>
-                  <input
-                    type="date"
-                    value={dueDate}
-                    onChange={(e) => setDueDate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Target Due Date</label>
+                <input
+                  type="date"
+                  value={dueDate}
+                  onChange={(e) => setDueDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
+                />
+              </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="sm">
-                    Create Milestone
-                  </Button>
-                </div>
-              </form>
-            </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm">
+                  Create Milestone
+                </Button>
+              </div>
+            </form>
           </div>
-        )}
+        </Modal>
 
         {/* Milestone Cards Grid */}
         {filteredMilestones.length === 0 ? (

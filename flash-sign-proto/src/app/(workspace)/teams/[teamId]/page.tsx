@@ -12,6 +12,7 @@ import { useApp } from '@/context/app-context';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { CreateTeamDialog } from '@/components/collaboration/create-team-dialog';
+import { Modal } from '@/components/shared/modal';
 
 export default function TeamDetailsPage() {
   const params = useParams();
@@ -474,30 +475,32 @@ export default function TeamDetailsPage() {
       />
 
       {/* Delete Confirmation Modal */}
-      {deleteConfirmOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-2xl p-6 max-w-sm w-full space-y-4 text-xs">
-            <h3 className="text-sm font-bold text-ink">Delete Team</h3>
-            <p className="text-muted leading-relaxed">
-              Are you sure you want to delete <strong>{team.name}</strong>? This action will remove the squad and unlink assigned members.
-            </p>
-            <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
-              <button
-                onClick={() => setDeleteConfirmOpen(false)}
-                className="px-3.5 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-mist transition-colors font-medium"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDeleteTeam}
-                className="px-4 py-1.5 rounded-lg bg-danger text-white font-semibold hover:bg-danger/90 transition-colors"
-              >
-                Delete Team
-              </button>
-            </div>
+      <Modal
+        isOpen={deleteConfirmOpen}
+        onClose={() => setDeleteConfirmOpen(false)}
+        size="xs"
+      >
+        <div className="p-6 space-y-4 text-xs">
+          <h3 className="text-sm font-bold text-ink">Delete Team</h3>
+          <p className="text-muted leading-relaxed">
+            Are you sure you want to delete <strong>{team.name}</strong>? This action will remove the squad and unlink assigned members.
+          </p>
+          <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
+            <button
+              onClick={() => setDeleteConfirmOpen(false)}
+              className="px-3.5 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-mist transition-colors font-medium"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDeleteTeam}
+              className="px-4 py-1.5 rounded-lg bg-danger text-white font-semibold hover:bg-danger/90 transition-colors"
+            >
+              Delete Team
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
   );
 }

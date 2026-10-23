@@ -144,9 +144,16 @@ export interface Task {
   attachments: string[];
   checklist?: TaskChecklistItem[];
   acceptanceCriteria?: string;
+  sourceDocumentId?: string;
+  sourceDocumentName?: string;
+  sourceSection?: string;
+  isSrsGenerated?: boolean;
   createdAt: string;
   updatedAt: string;
 }
+
+export type DocumentCategory = 'srs' | 'test_report' | 'doc' | 'other';
+export type FileAnalysisStatus = 'not_analyzed' | 'analyzed' | 'tasks_created';
 
 export interface ProjectFile {
   id: string;
@@ -157,6 +164,10 @@ export interface ProjectFile {
   taskId?: string;
   uploadedBy: string;
   createdAt: string;
+  category?: DocumentCategory;
+  analysisStatus?: FileAnalysisStatus;
+  analyzedAt?: string;
+  tasksGeneratedCount?: number;
 }
 
 // ─── Sprints ─────────────────────────────────────────────────────────────────

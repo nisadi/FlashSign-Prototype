@@ -8,8 +8,9 @@ import { formatDate, formatRelative } from '@/lib/utils';
 import type { TaskStatus, TaskPriority } from '@/types';
 import {
   X, Trash2, CheckSquare, MessageSquare, Paperclip, Clock, Tag,
-  Calendar, User as UserIcon, Plus, Check, AlertCircle, FileText,
+  Calendar, User as UserIcon, Plus, Check, AlertCircle, FileText, Sparkles,
 } from 'lucide-react';
+import { ClientPortal, Modal } from '@/components/shared/modal';
 
 export function TaskDetailDrawer() {
   const {
@@ -102,24 +103,30 @@ export function TaskDetailDrawer() {
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex justify-end">
-      {/* Backdrop */}
-      <div
-        className="fixed inset-0 bg-ink/40 backdrop-blur-xs transition-opacity"
-        onClick={closeTaskDrawer}
-      />
+    <ClientPortal lockScroll={true}>
+      <div className="fixed inset-0 z-[1000] flex justify-end">
+        {/* Backdrop */}
+        <div
+          className="fixed inset-0 bg-ink/50 backdrop-blur-xs transition-opacity"
+          onClick={closeTaskDrawer}
+        />
 
-      {/* Drawer Panel */}
-      <div className="relative w-full max-w-2xl bg-paper-elevated border-l border-line shadow-2xl flex flex-col h-full z-10 animate-slide-in-right">
+        {/* Drawer Panel */}
+        <div className="relative w-full max-w-2xl bg-paper-elevated border-l border-line shadow-2xl flex flex-col h-full z-10 animate-slide-in-right">
         {/* Header */}
         <div className="p-4 sm:px-6 border-b border-line flex items-center justify-between shrink-0 bg-paper">
-          <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-2.5 flex-wrap">
             <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-mist text-ink-soft border border-line">
               {task.key}
             </span>
             <span className="text-xs text-muted truncate max-w-[200px]">
               {project?.name}
             </span>
+            {task.isSrsGenerated && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold tracking-wider uppercase bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
+                <Sparkles className="w-2.5 h-2.5 text-emerald-600" /> SRS Generated
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
@@ -272,11 +279,33 @@ export function TaskDetailDrawer() {
                 />
               </div>
 
+              {/* Source Document Reference */}
+              {task.sourceDocumentName && (
+                <div className="p-3.5 rounded-xl bg-mist/30 border border-line space-y-1 text-xs">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-[10px] font-bold text-muted uppercase tracking-wider flex items-center gap-1">
+                      <Sparkles className="w-3 h-3 text-flash-deep" /> Source SRS Specification
+                    </span>
+                    {task.sourceSection && (
+                      <span className="font-mono text-[10px] px-2 py-0.5 rounded bg-paper border border-line text-ink-soft">
+                        {task.sourceSection}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-2 font-semibold text-ink pt-0.5">
+                    <FileText className="w-4 h-4 text-flash-deep shrink-0" />
+                    <span className="truncate">{task.sourceDocumentName}</span>
+                  </div>
+                </div>
+              )}
+
               {/* Acceptance Criteria */}
               {task.acceptanceCriteria && (
                 <div className="p-3.5 rounded-lg bg-emerald-50/60 border border-emerald-200/80">
-                  <h4 className="text-xs font-bold text-emerald-950 mb-1">Acceptance Criteria</h4>
-                  <p className="text-xs text-emerald-900 leading-relaxed">{task.acceptanceCriteria}</p>
+                  <h4 className="text-xs font-bold text-emerald-950 mb-1 flex items-center gap-1.5">
+                    <Check className="w-3.5 h-3.5 text-emerald-700" /> Acceptance Criteria
+                  </h4>
+                  <p className="text-xs text-emerald-900 font-mono whitespace-pre-line leading-relaxed">{task.acceptanceCriteria}</p>
                 </div>
               )}
 
@@ -421,30 +450,33 @@ export function TaskDetailDrawer() {
       </div>
 
       {/* Delete Confirmation Modal */}
-      {showDeleteConfirm && (
-        <div className="fixed inset-0 z-60 flex items-center justify-center p-4 bg-ink/50 backdrop-blur-xs">
-          <div className="bg-paper-elevated border border-line rounded-xl p-5 max-w-sm w-full shadow-2xl space-y-3">
-            <h3 className="font-bold text-sm text-ink">Delete Task {task.key}?</h3>
-            <p className="text-xs text-muted">
-              Are you sure you want to permanently delete this task? This action cannot be undone.
-            </p>
-            <div className="flex justify-end gap-2 pt-2">
-              <button
-                onClick={() => setShowDeleteConfirm(false)}
-                className="px-3 py-1.5 text-xs text-muted hover:text-ink rounded"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleDelete}
-                className="px-3 py-1.5 text-xs font-semibold bg-danger text-white rounded hover:opacity-90"
-              >
-                Delete Task
-              </button>
-            </div>
+      <Modal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        size="xs"
+      >
+        <div className="p-5 space-y-3">
+          <h3 className="font-bold text-sm text-ink">Delete Task {task.key}?</h3>
+          <p className="text-xs text-muted">
+            Are you sure you want to permanently delete this task? This action cannot be undone.
+          </p>
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              onClick={() => setShowDeleteConfirm(false)}
+              className="px-3 py-1.5 text-xs text-muted hover:text-ink rounded transition-colors"
+            >
+              Cancel
+            </button>
+            <button
+              onClick={handleDelete}
+              className="px-3 py-1.5 text-xs font-semibold bg-danger text-white rounded hover:opacity-90 transition-opacity"
+            >
+              Delete Task
+            </button>
           </div>
         </div>
-      )}
+      </Modal>
     </div>
+  </ClientPortal>
   );
 }

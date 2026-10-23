@@ -17,6 +17,7 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { AvailabilityStatus } from '@/types/collaboration';
 import { FEATURES } from '@/lib/features';
+import { Modal } from '@/components/shared/modal';
 
 /** Team availability: status summary, weekly schedule grid and member detail modal. */
 export function AvailabilityBoard() {
@@ -451,9 +452,13 @@ export function AvailabilityBoard() {
       </div>
 
       {/* Member Schedule Detail Modal / Drawer */}
-      {selectedMember && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs">
-          <div className="bg-white border border-line rounded-2xl max-w-lg w-full p-6 shadow-2xl relative space-y-5 animate-in fade-in zoom-in-95 duration-150">
+      <Modal
+        isOpen={!!selectedMember}
+        onClose={() => setSelectedMemberId(null)}
+        size="md"
+      >
+        {selectedMember && (
+          <div className="p-6 space-y-5">
             <div className="flex items-start justify-between">
               <div className="flex items-center gap-3">
                 <MemberAvatar user={selectedMember} size="lg" />
@@ -549,8 +554,8 @@ export function AvailabilityBoard() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

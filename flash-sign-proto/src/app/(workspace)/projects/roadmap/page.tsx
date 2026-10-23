@@ -7,6 +7,7 @@ import { Card, Button, ProgressBar } from '@/components/shared/ui';
 import { ProjectStatusBadge, HealthBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate } from '@/lib/utils';
+import { Modal } from '@/components/shared/modal';
 import {
   Compass,
   Search,
@@ -186,78 +187,80 @@ export default function ProjectRoadmapPage() {
         </div>
 
         {/* Create Milestone Modal */}
-        {showMilestoneModal && (
-          <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-paper-elevated border border-line rounded-2xl p-6 max-w-md w-full shadow-xl animate-fade-in space-y-4">
-              <h2 className="text-base font-bold text-ink">Add Roadmap Milestone</h2>
-              <form onSubmit={handleCreateMilestone} className="space-y-4">
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">
-                    Milestone Title
-                  </label>
-                  <input
-                    type="text"
-                    required
-                    value={newMilestoneName}
-                    onChange={(e) => setNewMilestoneName(e.target.value)}
-                    placeholder="e.g. SOC2 Certification Audit"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  />
-                </div>
+        <Modal
+          isOpen={showMilestoneModal}
+          onClose={() => setShowMilestoneModal(false)}
+          size="sm"
+        >
+          <div className="p-6 space-y-4">
+            <h2 className="text-base font-bold text-ink">Add Roadmap Milestone</h2>
+            <form onSubmit={handleCreateMilestone} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">
+                  Milestone Title
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={newMilestoneName}
+                  onChange={(e) => setNewMilestoneName(e.target.value)}
+                  placeholder="e.g. SOC2 Certification Audit"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Project</label>
-                  <select
-                    value={targetProjectId}
-                    onChange={(e) => setTargetProjectId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  >
-                    {projects.map((p) => (
-                      <option key={p.id} value={p.id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Project</label>
+                <select
+                  value={targetProjectId}
+                  onChange={(e) => setTargetProjectId(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                >
+                  {projects.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Target Date</label>
-                  <input
-                    type="date"
-                    value={newMilestoneDate}
-                    onChange={(e) => setNewMilestoneDate(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Target Date</label>
+                <input
+                  type="date"
+                  value={newMilestoneDate}
+                  onChange={(e) => setNewMilestoneDate(e.target.value)}
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
+                />
+              </div>
 
-                <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Description</label>
-                  <textarea
-                    rows={2}
-                    value={newMilestoneDesc}
-                    onChange={(e) => setNewMilestoneDesc(e.target.value)}
-                    placeholder="Key deliverables…"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  />
-                </div>
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Description</label>
+                <textarea
+                  rows={2}
+                  value={newMilestoneDesc}
+                  onChange={(e) => setNewMilestoneDesc(e.target.value)}
+                  placeholder="Key deliverables…"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
 
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowMilestoneModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="sm">
-                    Create Milestone
-                  </Button>
-                </div>
-              </form>
-            </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowMilestoneModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm">
+                  Create Milestone
+                </Button>
+              </div>
+            </form>
           </div>
-        )}
+        </Modal>
 
         {/* Roadmap Grid */}
         <div className="bg-paper-elevated border border-line rounded-2xl overflow-hidden shadow-xs">

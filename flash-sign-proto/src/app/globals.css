@@ -50,7 +50,7 @@
 /* ── Keyframes ── */
 @keyframes fade-up {
   from { opacity: 0; transform: translateY(12px); }
-  to   { opacity: 1; transform: translateY(0); }
+  to   { opacity: 1; transform: none; }
 }
 @keyframes draw-line {
   from { width: 0; }
@@ -63,7 +63,7 @@
 @keyframes spin { to { transform: rotate(360deg); } }
 @keyframes slide-in-right {
   from { transform: translateX(100%); opacity: 0; }
-  to   { transform: translateX(0); opacity: 1; }
+  to   { transform: none; opacity: 1; }
 }
 
 /* ── Animation Classes ── */
@@ -73,6 +73,47 @@
 .animate-draw-line        { animation: draw-line 0.7s ease-out 0.3s both; }
 .animate-pulse-bar        { animation: pulse-bar 2.4s ease-in-out infinite; }
 .animate-slide-in-right   { animation: slide-in-right 0.3s ease-out both; }
+
+/* ── Standard Modal Classes ── */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  background: rgba(12, 31, 34, 0.6);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  overflow-y: auto;
+}
+
+.modal-dialog {
+  position: relative;
+  width: min(100%, 640px);
+  max-height: calc(100dvh - 32px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  margin: auto;
+  overflow: hidden;
+  border-radius: 16px;
+  background: var(--paper-elevated, #ffffff);
+  box-shadow: 0 20px 60px rgba(12, 31, 34, 0.25);
+  box-sizing: border-box;
+}
+
+.modal-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+}
+
+.modal-header,
+.modal-footer {
+  flex: 0 0 auto;
+}
 
 @media (prefers-reduced-motion: reduce) {
   .animate-fade-up,

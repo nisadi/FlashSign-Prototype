@@ -11,6 +11,7 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AnnouncementPriorityBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateAnnouncementDialog } from '@/components/collaboration/create-announcement-dialog';
 import type { Announcement } from '@/types';
+import { Modal } from '@/components/shared/modal';
 
 export default function AnnouncementsPage() {
   const {
@@ -278,9 +279,13 @@ export default function AnnouncementsPage() {
       />
 
       {/* Delete Confirmation */}
-      {deleteConfirmAnn && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-2xl p-6 max-w-sm w-full space-y-4 text-xs">
+      <Modal
+        isOpen={!!deleteConfirmAnn}
+        onClose={() => setDeleteConfirmAnn(null)}
+        size="xs"
+      >
+        {deleteConfirmAnn && (
+          <div className="p-6 space-y-4 text-xs">
             <h3 className="text-sm font-bold text-ink">Delete Announcement</h3>
             <p className="text-muted leading-relaxed">
               Are you sure you want to delete <strong>"{deleteConfirmAnn.title}"</strong>? It will be removed from all team feeds.
@@ -300,8 +305,8 @@ export default function AnnouncementsPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

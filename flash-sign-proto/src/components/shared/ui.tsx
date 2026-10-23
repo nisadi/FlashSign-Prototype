@@ -111,9 +111,13 @@ export function EmptyState({ icon: Icon, title, description, action }: EmptyStat
 }
 
 // ── Card ──────────────────────────────────────────────────────────────────────
-export function Card({ children, className }: { children: React.ReactNode; className?: string }) {
+export function Card({
+  children,
+  className,
+  ...rest
+}: React.HTMLAttributes<HTMLDivElement>) {
   return (
-    <div className={cn('bg-paper-elevated rounded-xl border border-line', className)}>
+    <div className={cn('bg-paper-elevated rounded-xl border border-line', className)} {...rest}>
       {children}
     </div>
   );

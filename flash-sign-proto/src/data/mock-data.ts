@@ -627,14 +627,16 @@ export const MOCK_TASKS: Task[] = [
 
 // ── Project Files ─────────────────────────────────────────────────────────────
 export const MOCK_PROJECT_FILES: ProjectFile[] = [
-  { id: 'f1', name: 'FlashSign_v2_Architecture_Spec.pdf', type: 'pdf', size: '3.4 MB', projectId: 'p1', uploadedBy: 'u4', createdAt: d(-25) },
-  { id: 'f2', name: 'Signing_Canvas_UX_Specs.figma', type: 'figma', size: '18.2 MB', projectId: 'p1', taskId: 'task1', uploadedBy: 'u3', createdAt: d(-14) },
-  { id: 'f3', name: 'ACME_REST_OpenAPI_v3.json', type: 'code', size: '240 KB', projectId: 'p2', taskId: 'task9', uploadedBy: 'u14', createdAt: d(-8) },
-  { id: 'f4', name: 'ACME_Branding_Guidelines.pdf', type: 'pdf', size: '5.1 MB', projectId: 'p2', taskId: 'task10', uploadedBy: 'u10', createdAt: d(-7) },
-  { id: 'f5', name: 'Claude_Agent_Evaluation_Matrix.xlsx', type: 'doc', size: '890 KB', projectId: 'p3', taskId: 'task14', uploadedBy: 'u5', createdAt: d(-10) },
-  { id: 'f6', name: 'Q4_Penetration_Testing_Summary.pdf', type: 'pdf', size: '2.1 MB', projectId: 'p5', taskId: 'task23', uploadedBy: 'u11', createdAt: d(-15) },
-  { id: 'f7', name: 'Mobile_Navigation_Wireframes.png', type: 'image', size: '1.4 MB', projectId: 'p4', taskId: 'task19', uploadedBy: 'u3', createdAt: d(-4) },
-  { id: 'f8', name: 'Customer_Research_Interview_Notes.zip', type: 'archive', size: '12.6 MB', projectId: 'p6', taskId: 'task27', uploadedBy: 'u3', createdAt: d(-75) },
+  { id: 'f1', name: 'FlashSign_Core_Platform_SRS_v2.4.pdf', type: 'pdf', size: '4.8 MB', projectId: 'p1', category: 'srs', analysisStatus: 'not_analyzed', uploadedBy: 'u2', createdAt: d(-10) },
+  { id: 'f2', name: 'FlashSign_v2_Architecture_Spec.pdf', type: 'pdf', size: '3.4 MB', projectId: 'p1', category: 'doc', analysisStatus: 'not_analyzed', uploadedBy: 'u4', createdAt: d(-25) },
+  { id: 'f3', name: 'Signing_Canvas_UX_Specs.figma', type: 'figma', size: '18.2 MB', projectId: 'p1', taskId: 'task1', category: 'other', analysisStatus: 'not_analyzed', uploadedBy: 'u3', createdAt: d(-14) },
+  { id: 'f4', name: 'Security_Penetration_Test_Report_Q3.pdf', type: 'pdf', size: '2.1 MB', projectId: 'p1', category: 'test_report', analysisStatus: 'not_analyzed', uploadedBy: 'u6', createdAt: d(-12) },
+  { id: 'f5', name: 'ACME_REST_OpenAPI_v3.json', type: 'code', size: '240 KB', projectId: 'p2', taskId: 'task9', category: 'doc', analysisStatus: 'not_analyzed', uploadedBy: 'u14', createdAt: d(-8) },
+  { id: 'f6', name: 'ACME_Branding_Guidelines.pdf', type: 'pdf', size: '5.1 MB', projectId: 'p2', taskId: 'task10', category: 'doc', analysisStatus: 'not_analyzed', uploadedBy: 'u10', createdAt: d(-7) },
+  { id: 'f7', name: 'Claude_Agent_Evaluation_Matrix.xlsx', type: 'doc', size: '890 KB', projectId: 'p3', taskId: 'task14', category: 'test_report', analysisStatus: 'not_analyzed', uploadedBy: 'u5', createdAt: d(-10) },
+  { id: 'f8', name: 'Q4_Penetration_Testing_Summary.pdf', type: 'pdf', size: '2.1 MB', projectId: 'p5', taskId: 'task23', category: 'test_report', analysisStatus: 'not_analyzed', uploadedBy: 'u11', createdAt: d(-15) },
+  { id: 'f9', name: 'Mobile_Navigation_Wireframes.png', type: 'image', size: '1.4 MB', projectId: 'p4', taskId: 'task19', category: 'other', analysisStatus: 'not_analyzed', uploadedBy: 'u3', createdAt: d(-4) },
+  { id: 'f10', name: 'Customer_Research_Interview_Notes.zip', type: 'archive', size: '12.6 MB', projectId: 'p6', taskId: 'task27', category: 'other', analysisStatus: 'not_analyzed', uploadedBy: 'u3', createdAt: d(-75) },
 ];
 
 // ── Agent Runs ────────────────────────────────────────────────────────────────

@@ -12,6 +12,7 @@ import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { CreateTeamDialog } from '@/components/collaboration/create-team-dialog';
 import type { Team } from '@/types';
+import { Modal } from '@/components/shared/modal';
 
 export default function TeamsDirectoryPage() {
   const router = useRouter();
@@ -400,9 +401,13 @@ export default function TeamsDirectoryPage() {
       />
 
       {/* Delete Confirmation Dialog */}
-      {deleteConfirmTeam && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-ink/60 backdrop-blur-xs animate-in fade-in duration-150">
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-2xl p-6 max-w-sm w-full space-y-4 text-xs">
+      <Modal
+        isOpen={!!deleteConfirmTeam}
+        onClose={() => setDeleteConfirmTeam(null)}
+        size="xs"
+      >
+        {deleteConfirmTeam && (
+          <div className="p-6 space-y-4 text-xs">
             <h3 className="text-sm font-bold text-ink">Delete Team</h3>
             <p className="text-muted leading-relaxed">
               Are you sure you want to delete <strong>{deleteConfirmTeam.name}</strong>? Member assignments to this team will be unlinked.
@@ -422,8 +427,8 @@ export default function TeamsDirectoryPage() {
               </button>
             </div>
           </div>
-        </div>
-      )}
+        )}
+      </Modal>
     </div>
   );
 }

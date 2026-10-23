@@ -21,6 +21,7 @@ import {
   CheckSquare,
 } from 'lucide-react';
 import type { Sprint } from '@/types';
+import { Modal } from '@/components/shared/modal';
 
 export default function ProjectSprintsPage({
   params,
@@ -101,74 +102,76 @@ export default function ProjectSprintsPage({
         </div>
 
         {/* Create Sprint Modal */}
-        {showCreateModal && (
-          <div className="fixed inset-0 z-50 bg-ink/50 backdrop-blur-xs flex items-center justify-center p-4">
-            <div className="bg-paper-elevated border border-line rounded-2xl p-6 max-w-md w-full shadow-xl animate-fade-in space-y-4">
-              <h2 className="text-base font-bold text-ink">Create New Sprint</h2>
-              <form onSubmit={handleCreateSprint} className="space-y-4">
+        <Modal
+          isOpen={showCreateModal}
+          onClose={() => setShowCreateModal(false)}
+          size="sm"
+        >
+          <div className="p-6 space-y-4">
+            <h2 className="text-base font-bold text-ink">Create New Sprint</h2>
+            <form onSubmit={handleCreateSprint} className="space-y-4">
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">
+                  Sprint Name <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="text"
+                  required
+                  value={sprintName}
+                  onChange={(e) => setSprintName(e.target.value)}
+                  placeholder="e.g. Sprint 4: Core Optimization"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-ink mb-1">Sprint Goal</label>
+                <textarea
+                  rows={2}
+                  value={sprintGoal}
+                  onChange={(e) => setSprintGoal(e.target.value)}
+                  placeholder="e.g. Finalize responsive layout and release preview…"
+                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">
-                    Sprint Name <span className="text-danger">*</span>
-                  </label>
+                  <label className="block text-xs font-semibold text-ink mb-1">Start Date</label>
                   <input
-                    type="text"
-                    required
-                    value={sprintName}
-                    onChange={(e) => setSprintName(e.target.value)}
-                    placeholder="e.g. Sprint 4: Core Optimization"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
                   />
                 </div>
-
                 <div>
-                  <label className="block text-xs font-semibold text-ink mb-1">Sprint Goal</label>
-                  <textarea
-                    rows={2}
-                    value={sprintGoal}
-                    onChange={(e) => setSprintGoal(e.target.value)}
-                    placeholder="e.g. Finalize responsive layout and release preview…"
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
+                  <label className="block text-xs font-semibold text-ink mb-1">End Date</label>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
                   />
                 </div>
+              </div>
 
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1">Start Date</label>
-                    <input
-                      type="date"
-                      value={startDate}
-                      onChange={(e) => setStartDate(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-xs font-semibold text-ink mb-1">End Date</label>
-                    <input
-                      type="date"
-                      value={endDate}
-                      onChange={(e) => setEndDate(e.target.value)}
-                      className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                    />
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-2">
-                  <Button
-                    type="button"
-                    variant="secondary"
-                    size="sm"
-                    onClick={() => setShowCreateModal(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" variant="primary" size="sm">
-                    Create Sprint
-                  </Button>
-                </div>
-              </form>
-            </div>
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <Button
+                  type="button"
+                  variant="secondary"
+                  size="sm"
+                  onClick={() => setShowCreateModal(false)}
+                >
+                  Cancel
+                </Button>
+                <Button type="submit" variant="primary" size="sm">
+                  Create Sprint
+                </Button>
+              </div>
+            </form>
           </div>
-        )}
+        </Modal>
 
         {/* Active Sprint Section */}
         <div>
