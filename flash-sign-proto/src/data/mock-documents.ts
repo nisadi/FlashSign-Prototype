@@ -1006,6 +1006,58 @@ export const MOCK_CONTRACTS: Contract[] = [
 
 // ─── Mock Electronic Signature Requests (at least 12) ─────────────────────────
 export const MOCK_SIGNATURE_REQUESTS: SignatureRequest[] = [
+  // Waiting for the Owner / CEO's signature (shows in Action Required and the agreement tasks)
+  {
+    id: 'sig-13',
+    title: 'Northstar Studio 2027 Statement of Work',
+    senderId: 'u9', // David Osei
+    senderName: 'David Osei',
+    signingOrder: 'sequential',
+    status: 'sent',
+    expiresAt: d(10),
+    message: 'Aria, the 2027 SOW with Northstar Studio is ready for your signature and the company seal.',
+    reminderIntervalDays: 2,
+    createdAt: dt(-1),
+    sentAt: dt(-1),
+    signers: [
+      {
+        id: 'sgn-130',
+        name: 'Aria Chen',
+        email: 'aria@flashsign.io',
+        role: 'CEO',
+        order: 1,
+        status: 'pending',
+        required: true,
+        color: '#00c2a8',
+      },
+      {
+        id: 'sgn-131',
+        name: 'Hannah Lee',
+        email: 'hannah@northstar.studio',
+        role: 'Client Signatory',
+        order: 2,
+        status: 'waiting',
+        required: true,
+        color: '#3b82f6',
+      },
+    ],
+    fields: [
+      { id: 'fld-130', type: 'signature', signerId: 'sgn-130', pageNumber: 1, positionX: 18, positionY: 82, width: 180, height: 48, required: true },
+      { id: 'fld-131', type: 'date', signerId: 'sgn-130', pageNumber: 1, positionX: 55, positionY: 82, width: 140, height: 40, required: true },
+      { id: 'fld-132', type: 'signature', signerId: 'sgn-131', pageNumber: 1, positionX: 18, positionY: 90, width: 180, height: 48, required: true },
+    ],
+    events: [
+      {
+        id: 'ev-130',
+        requestId: 'sig-13',
+        eventName: 'Request Sent',
+        actorName: 'David Osei',
+        description: 'Signature request sent to Aria Chen (CEO), then Hannah Lee (Northstar Studio).',
+        category: 'delivery',
+        timestamp: dt(-1),
+      },
+    ],
+  },
   {
     id: 'sig-1',
     documentId: 'doc-101',

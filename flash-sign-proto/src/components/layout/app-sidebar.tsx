@@ -286,7 +286,8 @@ export function AppSidebar() {
         )}
         */}
 
-        {/* Demo Role Switcher */}
+        {/* Demo Role Switcher: hidden for the stakeholder demo (the app runs as CEO, see FEATURES.roleSwitcher
+            in lib/features.ts). To restore, set roleSwitcher to true and uncomment this block.
         {!sidebarCollapsed && (
           <div className="px-3 py-1.5 border-b border-ink-soft/30">
             <div
@@ -323,6 +324,7 @@ export function AppSidebar() {
             )}
           </div>
         )}
+        */}
 
         {/* Navigation Items (Collapsible Accordion Dropdowns) */}
         <nav className="flex-1 overflow-y-auto py-3 px-2 space-y-1.5 custom-scrollbar">

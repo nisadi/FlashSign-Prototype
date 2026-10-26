@@ -31,6 +31,7 @@ import type {
 import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
 import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS } from '@/data/mock-agent-activity';
 import { ROLE_CONFIGS } from '@/lib/permissions';
+import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
 
 // ── State Shape ────────────────────────────────────────────────────────────────
@@ -244,12 +245,14 @@ export type AppContextValue = AppState & AppActions;
 
 const AppContext = createContext<AppContextValue | null>(null);
 
-const STORAGE_KEY = 'flashsign-proto-state';
+// Bump the version when the demo data changes, so browsers drop older saved demo data
+const STORAGE_KEY = 'flashsign-proto-state-v2';
 
 function getInitialState(): AppState {
   return {
-    demoRole: 'project_manager',
-    currentUserId: DEMO_ROLE_USERS['project_manager'],
+    // While the role switcher is hidden the demo always runs as the Owner / CEO
+    demoRole: FEATURES.roleSwitcher ? 'project_manager' : FIXED_DEMO_ROLE,
+    currentUserId: DEMO_ROLE_USERS[FEATURES.roleSwitcher ? 'project_manager' : FIXED_DEMO_ROLE],
     org: MOCK_ORG,
     users: MOCK_USERS,
     projects: MOCK_PROJECTS,
@@ -297,6 +300,8 @@ function loadState(): AppState {
     return {
       ...getInitialState(),
       ...saved,
+      // A role saved from an earlier session is ignored while the switcher is hidden
+      ...(FEATURES.roleSwitcher ? {} : { demoRole: FIXED_DEMO_ROLE, currentUserId: DEMO_ROLE_USERS[FIXED_DEMO_ROLE] }),
       srsTaskHistories: saved.srsTaskHistories || INITIAL_SRS_TASK_HISTORY,
     };
   } catch {

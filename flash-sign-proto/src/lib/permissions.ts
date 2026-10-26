@@ -127,7 +127,8 @@ export function canSignDocument(role: DemoRole): boolean {
 }
 
 export function canManageUsers(role: DemoRole): boolean {
-  return ['org_admin', 'platform_admin'].includes(role);
+  // The Owner (CEO) manages people as well as the admins
+  return ['ceo', 'org_admin', 'platform_admin'].includes(role);
 }
 
 export function canViewReports(role: DemoRole): boolean {

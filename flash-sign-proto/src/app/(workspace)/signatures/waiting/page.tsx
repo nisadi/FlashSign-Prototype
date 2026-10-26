@@ -30,7 +30,7 @@ export default function WaitingForMySignaturePage() {
       s.status !== 'cancelled' &&
       s.status !== 'expired' &&
       s.signers.some(signer =>
-        (signer.email === currentUser?.email || signer.name.toLowerCase().includes('alex')) &&
+        signer.email === currentUser?.email &&
         signer.status !== 'signed' && signer.status !== 'declined'
       )
     );

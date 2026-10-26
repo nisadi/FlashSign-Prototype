@@ -69,6 +69,9 @@ const SPECS: Spec[] = [
   ['u4', 'ACME-13', 4, '11:00', 120, 'claude_code', 'paused'],
   ['u4', 'AIAG-23', 2, '09:30', 210, 'claude_code', 'paused', 'Sandbox container spike'],
   ['u4', 'AIAG-23', 1, '10:00', 180, 'web', 'paused'],
+  // Aria Chen (owner / CEO)
+  ['u1', 'ACME-17', 1, '15:00', 45, 'web', 'paused', 'Reviewed discount tiers with Marcus'],
+  ['u1', 'ACME-17', 0, '10:30', 30, 'claude_code', 'paused', 'Compared renewal pricing with last year'],
   // Marcus Webb (project manager)
   ['u2', 'FSV2-110', 3, '15:00', 90, 'web', 'paused', 'Walkthrough outline drafted'],
 ];

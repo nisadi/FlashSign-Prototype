@@ -33,10 +33,7 @@ export default function SentSignatureRequestsPage() {
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const sentRequests = useMemo(() => {
-    return signatureRequests.filter(s =>
-      s.senderId === currentUser?.id ||
-      (s.senderName || '').toLowerCase().includes('alex')
-    );
+    return signatureRequests.filter(s => s.senderId === currentUser?.id);
   }, [signatureRequests, currentUser]);
 
   const filteredRequests = useMemo(() => {

@@ -49,7 +49,7 @@ export default function AgreementsHomePage() {
       .map(request => ({
         request,
         signer: request.signers.find(signer =>
-          (signer.email === currentUser?.email || signer.name.toLowerCase().includes('alex')) &&
+          signer.email === currentUser?.email &&
           signer.status !== 'signed' && signer.status !== 'declined'
         ),
       }))

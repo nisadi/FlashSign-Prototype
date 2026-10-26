@@ -623,6 +623,26 @@ export const MOCK_TASKS: Task[] = [
     storyPoints: 3, startDate: d(10), dueDate: d(24), tags: ['mobile', 'stylus'],
     checklist: [], comments: [], attachments: [], createdAt: d(-1), updatedAt: d(-1),
   },
+  // Owner / CEO (Aria Chen): so the CEO's dashboard and the AI agent demo have work to show
+  {
+    id: 'task35', key: 'FSV2-111', title: 'Approve v2.0 release scope and public beta date',
+    description: 'Confirm which features ship in the November public beta and sign off the launch date with Product and Engineering.',
+    type: 'task', status: 'todo', priority: 'high', projectId: 'p1', assigneeId: 'u1', reporterId: 'u2',
+    storyPoints: 2, startDate: d(0), dueDate: d(3), tags: ['release', 'approval'],
+    checklist: [
+      { id: 'chk35a', text: 'Review beta feature list', completed: false },
+      { id: 'chk35b', text: 'Confirm launch date with Marcus', completed: false },
+    ],
+    comments: [], attachments: [], acceptanceCriteria: 'Release scope approved and beta date published to the team.',
+    createdAt: d(-2), updatedAt: d(-1),
+  },
+  {
+    id: 'task36', key: 'ACME-17', title: 'Review ACME renewal pricing proposal',
+    description: 'Check the proposed 2027 renewal pricing and discount tiers before the contract goes to the client.',
+    type: 'task', status: 'in_progress', priority: 'medium', projectId: 'p2', assigneeId: 'u1', reporterId: 'u2',
+    storyPoints: 3, startDate: d(-1), dueDate: d(5), tags: ['commercial', 'renewal'],
+    checklist: [], comments: [], attachments: [], createdAt: d(-3), updatedAt: d(-1),
+  },
 ];
 
 // ── Project Files ─────────────────────────────────────────────────────────────

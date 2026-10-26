@@ -56,7 +56,7 @@ export default function DemoSigningExperiencePage() {
   // Set initial signer once loaded
   React.useEffect(() => {
     if (pendingSigners.length > 0 && !activeSignerId) {
-      const match = pendingSigners.find(s => s.email === currentUser?.email || s.name.toLowerCase().includes('alex')) || pendingSigners[0];
+      const match = pendingSigners.find(s => s.email === currentUser?.email) || pendingSigners[0];
       setActiveSignerId(match.id);
     }
   }, [pendingSigners, activeSignerId, currentUser]);
