@@ -52,6 +52,7 @@ export default function ReportsPage() {
         </div>
         <div className="flex items-center gap-2">
           {[
+            { label: 'Task time', href: '/reports/task-time' },
             { label: 'Projects', href: '/reports/projects' },
             { label: 'AI Agents', href: '/reports/ai-agents' },
             { label: 'Documents', href: '/reports/documents' },

@@ -418,6 +418,18 @@ export interface WorkSession {
   note?: string;
 }
 
+/** A card moving between board columns; In Progress -> In Review gives the task's time */
+export interface TaskStatusChange {
+  id: string;
+  taskId: string;
+  from: TaskStatus;
+  to: TaskStatus;
+  at: string;
+  /** Who moved it (for an agent, the person it works for) */
+  byUserId: string;
+  via: AgentClient | 'web';
+}
+
 export type AgentEventAction =
   | 'listed_tasks'
   | 'started'

@@ -1,8 +1,8 @@
-import type { AgentAccessToken, AgentClient, AgentEvent, AgentSettings, WorkSession } from '@/types';
+import type { AgentAccessToken, AgentClient, AgentEvent, AgentSettings, TaskStatusChange, WorkSession } from '@/types';
 import { MOCK_TASKS } from './mock-data';
 
-// Demo work sessions and agent activity for the AI Agent Hub (Activity, Timesheet) and the
-// Kanban timer badges. Times are anchored to the start of today so the week always looks current.
+// Demo work sessions, agent activity and card moves for the AI Agent Hub (Activity, Timesheet),
+// the Kanban timer badges and Reports > Task time. Times are anchored to the start of today so the week always looks current.
 
 const startOfToday = (() => {
   const d = new Date();
@@ -10,10 +10,10 @@ const startOfToday = (() => {
   return d;
 })();
 
-/** The last five working days, newest first (0 = today if it's a weekday). */
+/** The last ten working days, newest first (0 = today if it's a weekday). */
 const WORKDAY_OFFSETS = (() => {
   const offsets: number[] = [];
-  for (let back = 0; offsets.length < 5; back++) {
+  for (let back = 0; offsets.length < 10; back++) {
     const d = new Date(startOfToday);
     d.setDate(d.getDate() - back);
     if (d.getDay() !== 0 && d.getDay() !== 6) offsets.push(back);
@@ -43,6 +43,18 @@ type Spec = [
 ];
 
 const SPECS: Spec[] = [
+  // Older work on tasks that have since gone to review or done (Reports > Task time)
+  ['u5', 'ONB-43', 9, '09:00', 180, 'claude_code', 'paused', 'Funnel events tracked from each onboarding step'],
+  ['u5', 'ONB-43', 8, '10:00', 150, 'claude_code', 'finished', 'Conversion dashboard; PR #188'],
+  ['u6', 'ONB-42', 9, '09:30', 240, 'gemini_cli', 'paused'],
+  ['u6', 'ONB-42', 8, '09:15', 200, 'web', 'paused'],
+  ['u6', 'ONB-42', 7, '10:00', 120, 'gemini_cli', 'finished', 'Prototype linked in Figma; PR #191'],
+  ['u4', 'SEC-8', 7, '13:00', 160, 'claude_code', 'idle_timeout'],
+  ['u4', 'SEC-8', 6, '09:00', 140, 'codex', 'finished', 'Gitleaks step added to CI; PR #196'],
+  ['u4', 'ACME-14', 6, '13:30', 90, 'manual', 'paused', 'Call with ACME IT about their IdP'],
+  ['u4', 'ACME-14', 5, '09:00', 200, 'claude_code', 'finished', 'SAML login working with Okta and Azure AD; PR #199'],
+  ['u5', 'FSV2-104', 5, '14:00', 120, 'codex', 'paused', 'Event schema agreed'],
+  ['u6', 'ACME-12', 5, '09:00', 180, 'claude_code', 'paused'],
   // Priya Nair (developer)
   ['u5', 'SEC-5', 4, '09:10', 150, 'claude_code', 'paused', 'Escaped user input in comment renderer'],
   ['u5', 'SEC-5', 4, '13:30', 120, 'claude_code', 'paused'],
@@ -88,7 +100,8 @@ export const MOCK_WORK_SESSIONS: WorkSession[] = SPECS.map(([userId, key, workda
     taskId: taskId(key),
     startedAt: startedAt.toISOString(),
     endedAt: endedAt?.toISOString(),
-    lastActivityAt: (endedAt ?? startedAt).toISOString(),
+    // A running demo timer was last active a few minutes ago, so it isn't auto-stopped on load
+    lastActivityAt: (endedAt ?? new Date(Math.max(startedAt.getTime(), Date.now() - 10 * 60_000))).toISOString(),
     source,
     endReason,
     needsReview: endReason === 'idle_timeout' || endReason === 'day_cutoff',
@@ -127,6 +140,33 @@ export const MOCK_AGENT_EVENTS: AgentEvent[] = MOCK_WORK_SESSIONS.filter(s => is
     });
   }
   return events;
+});
+
+// Card moves that go with the sessions above: In Progress at the first session, In Review when
+// the work was finished, Done a day later after review, To Do again when it was put back.
+const REVIEWER: Record<string, string> = { p1: 'u4', p2: 'u2', p3: 'u4', p5: 'u8', p6: 'u3' };
+
+export const MOCK_STATUS_CHANGES: TaskStatusChange[] = MOCK_TASKS.flatMap(task => {
+  const sessions = MOCK_WORK_SESSIONS.filter(w => w.taskId === task.id).sort((a, b) => a.startedAt.localeCompare(b.startedAt));
+  if (sessions.length === 0) return [];
+  const first = sessions[0];
+  const last = sessions[sessions.length - 1];
+  const via = (w: WorkSession) => (isAgent(w.source) ? w.source : 'web');
+  const move = (from: TaskStatusChange['from'], to: TaskStatusChange['to'], at: string, byUserId: string, by: TaskStatusChange['via']): TaskStatusChange =>
+    ({ id: id('sc'), taskId: task.id, from, to, at, byUserId, via: by });
+
+  const changes = [move('todo', 'in_progress', first.startedAt, first.userId, via(first))];
+  if (task.status === 'review' || task.status === 'done') {
+    const finished = [...sessions].reverse().find(w => w.endReason === 'finished') ?? last;
+    changes.push(move('in_progress', 'review', finished.endedAt!, finished.userId, via(finished)));
+    if (task.status === 'done') {
+      const doneAt = new Date(new Date(finished.endedAt!).getTime() + 20 * 60 * 60_000).toISOString();
+      changes.push(move('review', 'done', doneAt, REVIEWER[task.projectId] ?? 'u2', 'web'));
+    }
+  } else if (task.status === 'todo' && last.endedAt) {
+    changes.push(move('in_progress', 'todo', last.endedAt, last.userId, 'web'));
+  }
+  return changes;
 });
 
 export const DEFAULT_AGENT_SETTINGS: AgentSettings = {

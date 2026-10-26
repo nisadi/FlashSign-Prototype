@@ -6,7 +6,7 @@ import type {
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
-  AgentClient, AgentEvent, AgentSettings, WorkSession,
+  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
@@ -29,7 +29,8 @@ import type {
   SavedSignature, SigningDefaults, CompanySeal,
 } from '@/types/documents';
 import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
-import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS } from '@/data/mock-agent-activity';
+import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS, MOCK_STATUS_CHANGES } from '@/data/mock-agent-activity';
+import { applyAutoStops } from '@/lib/task-time';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
@@ -82,6 +83,7 @@ export interface AppState {
   workSessions: WorkSession[];
   agentEvents: AgentEvent[];
   agentSettings: AgentSettings;
+  taskStatusChanges: TaskStatusChange[];
   sidebarCollapsed: boolean;
   recentProjectIds: string[];
   activeTaskDrawerId: string | null;
@@ -103,6 +105,40 @@ function agentEvent(
   detail?: string
 ): AgentEvent {
   return { id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, userId, taskId, agent, action, detail, at: new Date().toISOString() };
+}
+
+function statusChange(taskId: string, from: TaskStatus, to: TaskStatus, byUserId: string, via: TaskStatusChange['via'], at: string): TaskStatusChange {
+  return { id: `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, taskId, from, to, at, byUserId, via };
+}
+
+/**
+ * A card moved on the board (or in a task view). Moving into In Progress starts the worker's
+ * timer (pausing any other one they have running); moving out of In Progress stops it,
+ * as finished when it goes to In Review / Done. Every move is recorded for Reports > Task time.
+ */
+function trackStatusMove(s: AppState, task: Task, to: TaskStatus, now: string): Pick<AppState, 'workSessions' | 'taskStatusChanges'> {
+  const from = task.status;
+  const workerId = task.assigneeId ?? s.currentUserId;
+  let workSessions = s.workSessions;
+
+  if (from === 'in_progress') {
+    const endReason = to === 'review' || to === 'done' ? ('finished' as const) : ('paused' as const);
+    workSessions = workSessions.map(w =>
+      w.taskId === task.id && !w.endedAt ? { ...w, endedAt: now, lastActivityAt: now, endReason } : w
+    );
+  }
+  if (to === 'in_progress' && !workSessions.some(w => w.userId === workerId && w.taskId === task.id && !w.endedAt)) {
+    workSessions = [
+      ...workSessions.map(w =>
+        w.userId === workerId && !w.endedAt ? { ...w, endedAt: now, lastActivityAt: now, endReason: 'switched_task' as const } : w
+      ),
+      { id: `ws-${Date.now()}`, userId: workerId, taskId: task.id, startedAt: now, lastActivityAt: now, source: 'web' },
+    ];
+  }
+  return {
+    workSessions,
+    taskStatusChanges: [...s.taskStatusChanges, statusChange(task.id, from, to, s.currentUserId, 'web', now)],
+  };
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────────
@@ -285,6 +321,7 @@ function getInitialState(): AppState {
     workSessions: MOCK_WORK_SESSIONS,
     agentEvents: MOCK_AGENT_EVENTS,
     agentSettings: DEFAULT_AGENT_SETTINGS,
+    taskStatusChanges: MOCK_STATUS_CHANGES,
     sidebarCollapsed: false,
     recentProjectIds: ['p1', 'p2', 'p3'],
     activeTaskDrawerId: null,
@@ -338,6 +375,7 @@ function saveState(state: AppState): void {
       workSessions: state.workSessions,
       agentEvents: state.agentEvents,
       agentSettings: state.agentSettings,
+      taskStatusChanges: state.taskStatusChanges,
       agentRuns: state.agentRuns,
       sidebarCollapsed: state.sidebarCollapsed,
       recentProjectIds: state.recentProjectIds,
@@ -374,6 +412,38 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated) saveState(state);
   }, [state, hydrated]);
+
+  // Auto-stop running timers after the idle limit or at the end of the shift (checked every minute)
+  useEffect(() => {
+    if (!hydrated) return;
+    const check = () => setState(s => {
+      const stopped = applyAutoStops(s.workSessions, s.agentSettings, Date.now());
+      return stopped ? { ...s, workSessions: stopped.sessions, agentEvents: [...s.agentEvents, ...stopped.events] } : s;
+    });
+    check();
+    const timer = setInterval(check, 60_000);
+
+    // Using the web app counts as activity for a timer started here (moving a card to In Progress).
+    // Agent timers get their activity from the agent's own calls.
+    let lastTouch = 0;
+    const touch = () => {
+      if (Date.now() - lastTouch < 60_000) return;
+      lastTouch = Date.now();
+      setState(s => {
+        const open = s.workSessions.find(w => w.userId === s.currentUserId && !w.endedAt && w.source === 'web');
+        if (!open) return s;
+        const now = new Date().toISOString();
+        return { ...s, workSessions: s.workSessions.map(w => (w === open ? { ...w, lastActivityAt: now } : w)) };
+      });
+    };
+    window.addEventListener('pointerdown', touch);
+    window.addEventListener('keydown', touch);
+    return () => {
+      clearInterval(timer);
+      window.removeEventListener('pointerdown', touch);
+      window.removeEventListener('keydown', touch);
+    };
+  }, [hydrated]);
 
   const { currentUser: authUser, selectedWorkspace: authOrg, isAuthenticated } = useDemoAuth();
 
@@ -593,7 +663,12 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     }),
     updateTask: (id, updates) => update(s => {
-      const nextTasks = s.tasks.map(t => t.id === id ? { ...t, ...updates, updatedAt: new Date().toISOString() } : t);
+      const now = new Date().toISOString();
+      const before = s.tasks.find(t => t.id === id);
+      const timing = before && updates.status && updates.status !== before.status
+        ? trackStatusMove(s, { ...before, ...updates, status: before.status }, updates.status, now)
+        : {};
+      const nextTasks = s.tasks.map(t => t.id === id ? { ...t, ...updates, updatedAt: now } : t);
       const updatedTask = nextTasks.find(t => t.id === id);
       const projectId = updatedTask?.projectId;
       let nextProjects = s.projects;
@@ -605,6 +680,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       }
       return {
         ...s,
+        ...timing,
         tasks: nextTasks,
         projects: nextProjects,
       };
@@ -1301,6 +1377,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const events: AgentEvent[] = [];
       if (open) events.push(agentEvent(s.currentUserId, agent, 'paused', open.taskId, 'Paused automatically to start another task'));
       events.push(agentEvent(s.currentUserId, agent, 'started', taskId));
+      const moves = s.tasks.some(t => t.id === taskId && t.status === 'todo');
       return {
         ...s,
         workSessions: [
@@ -1308,6 +1385,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           { id: `ws-${Date.now()}`, userId: s.currentUserId, taskId, startedAt: now, lastActivityAt: now, source: agent },
         ],
         tasks: s.tasks.map(t => (t.id === taskId && t.status === 'todo' ? { ...t, status: 'in_progress' as const, updatedAt: now } : t)),
+        taskStatusChanges: moves
+          ? [...s.taskStatusChanges, statusChange(taskId, 'todo', 'in_progress', s.currentUserId, agent, now)]
+          : s.taskStatusChanges,
         agentEvents: [...s.agentEvents, ...events],
       };
     }),
@@ -1345,6 +1425,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }),
     agentFinishTask: (taskId, agent, summary) => update(s => {
       const now = new Date().toISOString();
+      const from = s.tasks.find(t => t.id === taskId)?.status;
       return {
         ...s,
         workSessions: s.workSessions.map(w =>
@@ -1362,6 +1443,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               }
             : t
         ),
+        taskStatusChanges: from && from !== 'review'
+          ? [...s.taskStatusChanges, statusChange(taskId, from, 'review', s.currentUserId, agent, now)]
+          : s.taskStatusChanges,
         agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'finished', taskId, summary)],
       };
     }),

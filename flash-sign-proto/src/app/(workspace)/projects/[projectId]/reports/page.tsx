@@ -7,6 +7,7 @@ import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Card, StatCard, Button, ProgressBar } from '@/components/shared/ui';
 import { Avatar } from '@/components/shared/avatar';
+import { TaskTimeReport } from '@/components/reports/task-time-report';
 import { formatDate } from '@/lib/utils';
 import {
   BarChart3,
@@ -422,6 +423,15 @@ export default function ProjectReportsPage({
             })}
           </div>
         </Card>
+
+        {/* Task time: In Progress -> In Review */}
+        <div className="space-y-3">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Task time</h2>
+            <p className="text-xs text-muted">How long each task took from In Progress to In Review.</p>
+          </div>
+          <TaskTimeReport projectId={projectId} />
+        </div>
       </div>
     </div>
   );
