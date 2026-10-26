@@ -36,6 +36,50 @@ export const AGENTS: Record<AgentClient, AgentInfo> = {
 
 export const AGENT_LIST = Object.values(AGENTS);
 
+/**
+ * How the Connect page groups agents: one card per product. A product has one or more apps;
+ * each app is a separate program with its own config, so it is set up (and connected) on its own.
+ */
+export interface AgentFamily {
+  id: 'claude' | 'codex' | 'gemini';
+  label: string;
+  vendor: string;
+  apps: { client: AgentClient; label: string; where: string }[];
+  /** Shown on the card: where one setup applies */
+  coverage: string;
+  /** Part of the coverage note not yet confirmed against the vendor's docs */
+  coverageVerify?: string;
+}
+
+export const AGENT_FAMILIES: AgentFamily[] = [
+  {
+    id: 'claude',
+    label: 'Claude Code',
+    vendor: 'Anthropic',
+    apps: [{ client: 'claude_code', label: 'Claude Code', where: 'Terminal, VS Code, JetBrains' }],
+    coverage: 'One setup works in the terminal, the VS Code extension and the JetBrains plugin.',
+  },
+  {
+    id: 'codex',
+    label: 'Codex',
+    vendor: 'OpenAI',
+    apps: [{ client: 'codex', label: 'Codex', where: 'Terminal and IDE extension' }],
+    coverage: 'One setup works in the Codex CLI and the Codex IDE extension; both read ~/.codex/config.toml.',
+  },
+  {
+    id: 'gemini',
+    label: 'Gemini',
+    vendor: 'Google',
+    apps: [
+      { client: 'gemini_cli', label: 'Gemini CLI', where: 'In the terminal' },
+      { client: 'antigravity', label: 'Antigravity', where: 'Google’s AI code editor' },
+    ],
+    coverage: 'Gemini CLI and Antigravity are separate apps, so each has its own setup. Do one now and the other whenever you like; they use the same token.',
+  },
+];
+
+export const familyOf = (client: AgentClient) => AGENT_FAMILIES.find(f => f.apps.some(a => a.client === client))!;
+
 // ── Tokens ────────────────────────────────────────────────────────────────────
 
 const BASE62 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -157,7 +201,8 @@ export function agentSetup(agent: AgentClient, token: string): AgentSetup {
         steps: [
           { text: 'Open (or create) ~/.codex/config.toml and add:', code: { label: '~/.codex/config.toml', content: codexToml } },
           { text: 'Codex reads the token from PM_TOKEN itself; the file holds only the variable’s name.' },
-          { text: 'Start a new Codex session so it loads the server.' },
+          { text: 'Start a new Codex session so it loads the server. Using the Codex extension in VS Code? Restart VS Code once so it picks up the change and PM_TOKEN.' },
+          { text: 'Keep this in your user file ~/.codex/config.toml, not in a project’s .codex/config.toml: the IDE extension may not read project-level servers.' },
         ],
         verify: 'Older Codex versions needed an experimental setting for this server type; check your version.',
       };

@@ -11,7 +11,13 @@ const OTHER: Record<string, { label: string; mark: string; color: string }> = {
 };
 
 /** Small coloured mark + name identifying which agent (or the web app) did something. */
-export function AgentBadge({ source, showLabel = true, className }: { source: Source; showLabel?: boolean; className?: string }) {
+export function AgentBadge({ source, showLabel = true, label, className }: {
+  source: Source;
+  showLabel?: boolean;
+  /** Overrides the name shown, e.g. "Gemini" for the product card */
+  label?: string;
+  className?: string;
+}) {
   const info = source in AGENTS ? AGENTS[source as keyof typeof AGENTS] : OTHER[source];
   return (
     <span className={cn('inline-flex items-center gap-1.5 text-xs text-ink', className)} title={info.label}>
@@ -22,7 +28,7 @@ export function AgentBadge({ source, showLabel = true, className }: { source: So
       >
         {info.mark}
       </span>
-      {showLabel && <span className="font-medium">{info.label}</span>}
+      {showLabel && <span className="font-medium">{label ?? info.label}</span>}
     </span>
   );
 }

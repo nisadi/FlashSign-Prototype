@@ -4,7 +4,7 @@ import React from 'react';
 import { Power, Bot, Timer, Database, Users, Lock } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { canManageAgents } from '@/lib/permissions';
-import { AGENT_LIST, maskedToken, tokenStatus } from '@/lib/agent-connection';
+import { AGENT_FAMILIES, maskedToken, tokenStatus } from '@/lib/agent-connection';
 import { cn, formatRelative } from '@/lib/utils';
 import type { AgentClient } from '@/types';
 import { AgentBadge } from '@/components/agents/agent-badge';
@@ -55,22 +55,27 @@ export default function AgentOrganisationPage() {
         description="Each agent belongs to a different AI company, which receives task titles and descriptions when the agent reads them. Allow only the ones your company has approved."
         className={cn(disabled && 'opacity-60')}
       >
-        {AGENT_LIST.map(a => (
-          <div key={a.id} className="flex items-center justify-between gap-4">
-            <span className="flex items-center gap-3">
-              <AgentBadge source={a.id} />
-              <span className="text-muted">{a.vendor}</span>
-            </span>
-            <input
-              type="checkbox"
-              role="switch"
-              aria-label={`Allow ${a.label}`}
-              checked={agentSettings.allowedAgents[a.id]}
-              disabled={disabled}
-              onChange={e => setAllowed(a.id, e.target.checked)}
-              className="w-9 h-5 shrink-0 appearance-none rounded-full bg-line relative transition-colors checked:bg-flash cursor-pointer disabled:cursor-not-allowed
-                after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow after:transition-transform checked:after:translate-x-4"
-            />
+        {AGENT_FAMILIES.map(f => (
+          <div key={f.id} className="space-y-2">
+            {f.apps.length > 1 && <p className="text-[11px] font-bold uppercase tracking-wider text-muted">{f.label} · {f.vendor}</p>}
+            {f.apps.map(a => (
+              <div key={a.client} className={cn('flex items-center justify-between gap-4', f.apps.length > 1 && 'pl-3')}>
+                <span className="flex items-center gap-3">
+                  <AgentBadge source={a.client} />
+                  <span className="text-muted">{f.apps.length > 1 ? a.where : f.vendor}</span>
+                </span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  aria-label={`Allow ${a.label}`}
+                  checked={agentSettings.allowedAgents[a.client]}
+                  disabled={disabled}
+                  onChange={e => setAllowed(a.client, e.target.checked)}
+                  className="w-9 h-5 shrink-0 appearance-none rounded-full bg-line relative transition-colors checked:bg-flash cursor-pointer disabled:cursor-not-allowed
+                    after:content-[''] after:absolute after:top-0.5 after:left-0.5 after:w-4 after:h-4 after:rounded-full after:bg-white after:shadow after:transition-transform checked:after:translate-x-4"
+                />
+              </div>
+            ))}
           </div>
         ))}
       </SettingsCard>

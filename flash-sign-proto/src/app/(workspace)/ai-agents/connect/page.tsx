@@ -4,14 +4,14 @@ import React, { useMemo, useState } from 'react';
 import Link from 'next/link';
 import {
   Check, ChevronDown, KeyRound, Terminal, Plug, Activity, Sparkles, MessageSquare, FileText,
-  CircleCheck, CircleAlert, Loader2, Info, FlaskConical, Ban,
+  CircleCheck, CircleAlert, Loader2, Info, FlaskConical, Ban, ArrowRight,
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import { cn, formatRelative } from '@/lib/utils';
 import {
   TOKEN_PLACEHOLDER, OS_LABELS, detectOperatingSystem, saveTokenCommand, agentSetup, CHECK_STEPS,
   TROUBLESHOOTING, TRY_PROMPTS, agentsMd, INSTRUCTION_FILES, PERMISSIONS_JSON, HOOKS_JSON,
-  SESSION_START_SCRIPT, SESSION_END_SCRIPT, tokenStatus, maskedToken, AGENTS, AGENT_LIST, PM_SERVER_URL,
+  SESSION_START_SCRIPT, SESSION_END_SCRIPT, tokenStatus, maskedToken, AGENTS, AGENT_FAMILIES, familyOf, PM_SERVER_URL,
   type OperatingSystem,
 } from '@/lib/agent-connection';
 import type { AgentClient } from '@/types';
@@ -24,8 +24,10 @@ export default function ConnectAgentPage() {
   const { agentTokens, projects, markAgentTokenUsed, agentSettings } = useApp();
   const user = useCurrentUser();
 
+  // The app being set up; the cards group apps by product (Claude Code, Codex, Gemini)
   const [agent, setAgent] = useState<AgentClient>('claude_code');
   const agentInfo = AGENTS[agent];
+  const family = familyOf(agent);
   const agentAllowed = agentSettings.enabled && agentSettings.allowedAgents[agent];
 
   const myActiveTokens = useMemo(
@@ -49,6 +51,18 @@ export default function ConnectAgentPage() {
   const [checkError, setCheckError] = useState<string | null>(null);
 
   const connected = !!usedToken;
+  const isAppConnected = (client: AgentClient) => myActiveTokens.some(t => t.usedBy?.[client]);
+  const isAppAllowed = (client: AgentClient) => agentSettings.enabled && agentSettings.allowedAgents[client];
+  // Another app of the same product that isn't connected yet (e.g. Antigravity after Gemini CLI)
+  const otherApp = family.apps.find(a => a.client !== agent && !isAppConnected(a.client) && isAppAllowed(a.client));
+
+  // Picking a product card selects its first app that still needs setting up
+  const selectFamily = (familyId: string) => {
+    const f = AGENT_FAMILIES.find(x => x.id === familyId)!;
+    const next = f.apps.find(a => !isAppConnected(a.client)) ?? f.apps[0];
+    setAgent(next.client);
+    setCheckError(null);
+  };
   const done = {
     token: myActiveTokens.length > 0,
     save: manualDone.save || myActiveTokens.some(t => t.lastUsedAt),
@@ -91,38 +105,85 @@ export default function ConnectAgentPage() {
           </p>
         </div>
 
-        {/* Agent picker */}
-        <section className="bg-paper-elevated border border-line rounded-xl p-5 space-y-3">
+        {/* Agent picker: one card per product */}
+        <section className="bg-paper-elevated border border-line rounded-xl p-5 space-y-4">
           <p className="text-sm font-bold text-ink">Which agent are you connecting?</p>
-          <div className="grid grid-cols-2 lg:grid-cols-4 gap-2" role="radiogroup" aria-label="Agent">
-            {AGENT_LIST.map(a => {
-              const selected = a.id === agent;
-              const allowed = agentSettings.enabled && agentSettings.allowedAgents[a.id];
-              const isConnected = myActiveTokens.some(t => t.usedBy?.[a.id]);
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-2" role="radiogroup" aria-label="Agent">
+            {AGENT_FAMILIES.map(f => {
+              const selected = f.id === family.id;
+              const anyAllowed = f.apps.some(a => isAppAllowed(a.client));
               return (
                 <button
-                  key={a.id}
+                  key={f.id}
                   type="button"
                   role="radio"
                   aria-checked={selected}
-                  onClick={() => setAgent(a.id)}
+                  onClick={() => selectFamily(f.id)}
                   className={cn(
                     'text-left p-3 rounded-lg border transition-colors',
                     selected ? 'border-flash bg-flash/5 ring-1 ring-flash' : 'border-line hover:border-flash/50'
                   )}
                 >
-                  <AgentBadge source={a.id} />
-                  <span className="block text-[11px] text-muted mt-1">{a.vendor}</span>
-                  <span className={cn('block text-[11px] font-semibold mt-1', isConnected ? 'text-emerald-700' : allowed ? 'text-muted' : 'text-danger')}>
-                    {isConnected ? '● Connected' : allowed ? 'Not connected' : 'Turned off by admin'}
+                  <AgentBadge source={f.apps[0].client} label={f.label} />
+                  <span className="block text-[11px] text-muted mt-1">{f.vendor}</span>
+                  <span className="mt-1.5 flex flex-col gap-0.5">
+                    {!anyAllowed ? (
+                      <span className="text-[11px] font-semibold text-danger">Turned off by admin</span>
+                    ) : (
+                      f.apps.map(a => {
+                        const on = isAppConnected(a.client);
+                        return (
+                          <span key={a.client} className={cn('text-[11px] font-semibold', on ? 'text-emerald-700' : 'text-muted')}>
+                            {on ? '●' : '○'} {f.apps.length > 1 ? `${a.label} · ` : ''}{on ? 'Connected' : 'Not connected'}
+                          </span>
+                        );
+                      })
+                    )}
                   </span>
                 </button>
               );
             })}
           </div>
+
+          {/* Products with more than one app: choose which one to set up now */}
+          {family.apps.length > 1 && (
+            <div className="space-y-2 pt-1">
+              <p className="text-xs font-semibold text-ink">Which {family.label} app are you setting up now?</p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2" role="radiogroup" aria-label={`${family.label} app`}>
+                {family.apps.map(a => {
+                  const on = isAppConnected(a.client);
+                  const selected = a.client === agent;
+                  return (
+                    <button
+                      key={a.client}
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => { setAgent(a.client); setCheckError(null); }}
+                      className={cn(
+                        'flex items-center justify-between gap-3 text-left p-3 rounded-lg border transition-colors',
+                        selected ? 'border-flash bg-flash/5 ring-1 ring-flash' : 'border-line hover:border-flash/50'
+                      )}
+                    >
+                      <span>
+                        <AgentBadge source={a.client} />
+                        <span className="block text-[11px] text-muted mt-0.5">{a.where}</span>
+                      </span>
+                      <span className={cn('text-[11px] font-semibold shrink-0', on ? 'text-emerald-700' : 'text-muted')}>
+                        {on ? '● Connected' : 'Not set up yet'}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+          )}
+
           <p className="text-xs text-muted">
-            You can connect all of them with the same token. They share one timer and one timesheet, so you can switch agents in the middle of a task.
+            {family.coverage}{' '}
+            You can connect every agent with the same token; they share one timer and one timesheet.
           </p>
+          {family.coverageVerify && <VerifyNote text={family.coverageVerify} />}
         </section>
 
         {!agentAllowed ? (
@@ -269,6 +330,19 @@ export default function ConnectAgentPage() {
                   </button>
                 </div>
                 {checkError && <p className="text-danger">{checkError}</p>}
+                {connected && otherApp && (
+                  <button
+                    type="button"
+                    onClick={() => { setAgent(otherApp.client); setCheckError(null); }}
+                    className="w-full flex items-center justify-between gap-3 p-3 rounded-lg border border-dashed border-line hover:border-flash text-left"
+                  >
+                    <span>
+                      <span className="block font-semibold text-ink">Also use {otherApp.label}?</span>
+                      <span className="block text-muted">Set it up now or any time later. Your token is already saved, so it&apos;s just steps 3 and 4.</span>
+                    </span>
+                    <ArrowRight className="w-4 h-4 text-flash-deep shrink-0" />
+                  </button>
+                )}
                 <p className="text-[11px] text-muted italic">Prototype: the check is simulated until the PM MCP server is running.</p>
 
                 <details className="group rounded-lg border border-line bg-paper">
