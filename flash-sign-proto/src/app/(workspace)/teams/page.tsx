@@ -16,6 +16,7 @@ import { CreateAnnouncementDialog } from '@/components/collaboration/create-anno
 import { TaskFlowChart, AvailabilityNow, TaskStatusByMember, MeetingLoad } from '@/components/analytics/team-charts';
 import { WEEKLY_TASK_FLOW } from '@/data/mock-analytics';
 import { FEATURES } from '@/lib/features';
+import { TimeTrackingSection } from '@/components/analytics/time-tracking';
 
 // The demo data is anchored to this date (see data/mock-collaboration.ts)
 const TODAY = '2026-10-21';
@@ -293,6 +294,9 @@ export default function TeamAnalyticsPage() {
           <TaskStatusByMember users={users} tasks={tasks} className="lg:col-span-2" />
           <MeetingLoad users={users} meetings={meetings} weekStart={WEEK_START} weekEnd={WEEK_END} />
         </div>
+
+        {/* Hours per person and per agent */}
+        <TimeTrackingSection />
 
         {/* Availability, leave, milestones */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">

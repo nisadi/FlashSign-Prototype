@@ -5,7 +5,8 @@ import type {
   DemoRole, User, Project, Task, Sprint, Document, ApprovalRequest,
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
-  AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord,
+  AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
+  AgentClient, AgentEvent, AgentSettings, WorkSession,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
@@ -28,6 +29,7 @@ import type {
   SavedSignature, SigningDefaults, CompanySeal,
 } from '@/types/documents';
 import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
+import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS } from '@/data/mock-agent-activity';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import type { Organization } from '@/types';
 
@@ -74,10 +76,31 @@ export interface AppState {
   savedSignatures: SavedSignature[];
   signingDefaults: SigningDefaults;
   companySeals: CompanySeal[];
+  agentTokens: AgentAccessToken[];
+  workSessions: WorkSession[];
+  agentEvents: AgentEvent[];
+  agentSettings: AgentSettings;
   sidebarCollapsed: boolean;
   recentProjectIds: string[];
   activeTaskDrawerId: string | null;
   srsTaskHistories: Record<string, SrsGeneratedTaskRecord[]>;
+}
+
+const AGENT_LABEL: Record<AgentClient, string> = {
+  claude_code: 'Claude Code',
+  codex: 'Codex',
+  gemini_cli: 'Gemini CLI',
+  antigravity: 'Antigravity',
+};
+
+function agentEvent(
+  userId: string,
+  agent: AgentEvent['agent'],
+  action: AgentEvent['action'],
+  taskId?: string,
+  detail?: string
+): AgentEvent {
+  return { id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, userId, taskId, agent, action, detail, at: new Date().toISOString() };
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────────
@@ -143,6 +166,20 @@ interface AppActions {
   addCompanySeal: (seal: Omit<CompanySeal, 'id' | 'createdAt' | 'usageCount'>) => void;
   updateCompanySeal: (id: string, updates: Partial<CompanySeal>) => void;
   deleteCompanySeal: (id: string) => void;
+  // AI agent connection tokens
+  addAgentToken: (token: AgentAccessToken) => void;
+  revokeAgentToken: (id: string) => void;
+  markAgentTokenUsed: (id: string, agent: AgentClient) => void;
+  // What an AI agent does for the signed-in person (simulates the PM MCP server's tools)
+  agentListTasks: (agent: AgentClient) => void;
+  agentStartTask: (taskId: string, agent: AgentClient) => void;
+  agentContinueTask: (taskId: string, agent: AgentClient) => void;
+  agentAddNote: (taskId: string, agent: AgentClient, text: string) => void;
+  agentPauseTask: (agent: AgentClient, note?: string) => void;
+  agentFinishTask: (taskId: string, agent: AgentClient, summary: string) => void;
+  logManualTime: (taskId: string, minutes: number, date: string, note?: string) => void;
+  updateAgentSettings: (updates: Partial<AgentSettings>) => void;
+  updateWorkSession: (id: string, updates: Partial<WorkSession>) => void;
   // Files
   addFile: (file: CreateFileInput) => void;
   updateFile: (id: string, updates: Partial<ProjectFile>) => void;
@@ -240,6 +277,10 @@ function getInitialState(): AppState {
     savedSignatures: [],
     signingDefaults: DEFAULT_SIGNING_DEFAULTS,
     companySeals: MOCK_COMPANY_SEALS,
+    agentTokens: MOCK_AGENT_TOKENS,
+    workSessions: MOCK_WORK_SESSIONS,
+    agentEvents: MOCK_AGENT_EVENTS,
+    agentSettings: DEFAULT_AGENT_SETTINGS,
     sidebarCollapsed: false,
     recentProjectIds: ['p1', 'p2', 'p3'],
     activeTaskDrawerId: null,
@@ -287,6 +328,10 @@ function saveState(state: AppState): void {
       savedSignatures: state.savedSignatures,
       signingDefaults: state.signingDefaults,
       companySeals: state.companySeals,
+      agentTokens: state.agentTokens,
+      workSessions: state.workSessions,
+      agentEvents: state.agentEvents,
+      agentSettings: state.agentSettings,
       agentRuns: state.agentRuns,
       sidebarCollapsed: state.sidebarCollapsed,
       recentProjectIds: state.recentProjectIds,
@@ -1167,6 +1212,121 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteCompanySeal: (id) => update(s => ({
       ...s,
       companySeals: s.companySeals.filter(seal => seal.id !== id),
+    })),
+
+    // AI agent connection tokens
+    addAgentToken: (token) => update(s => ({ ...s, agentTokens: [...s.agentTokens, token] })),
+    revokeAgentToken: (id) => update(s => ({
+      ...s,
+      agentTokens: s.agentTokens.map(t => (t.id === id ? { ...t, revokedAt: new Date().toISOString() } : t)),
+    })),
+    markAgentTokenUsed: (id, agent) => update(s => {
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        agentTokens: s.agentTokens.map(t => (t.id === id ? { ...t, lastUsedAt: now, usedBy: { ...t.usedBy, [agent]: now } } : t)),
+      };
+    }),
+
+    // AI agent actions. Rules match the MCP server design: one open timer per person,
+    // only To do -> In Progress -> In Review, every action recorded with the agent that did it.
+    agentListTasks: (agent) => update(s => ({
+      ...s,
+      agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'listed_tasks')],
+    })),
+    agentStartTask: (taskId, agent) => update(s => {
+      const now = new Date().toISOString();
+      const open = s.workSessions.find(w => w.userId === s.currentUserId && !w.endedAt);
+      if (open?.taskId === taskId) return s;
+      const events: AgentEvent[] = [];
+      if (open) events.push(agentEvent(s.currentUserId, agent, 'paused', open.taskId, 'Paused automatically to start another task'));
+      events.push(agentEvent(s.currentUserId, agent, 'started', taskId));
+      return {
+        ...s,
+        workSessions: [
+          ...s.workSessions.map(w => (w === open ? { ...w, endedAt: now, lastActivityAt: now, endReason: 'switched_task' as const } : w)),
+          { id: `ws-${Date.now()}`, userId: s.currentUserId, taskId, startedAt: now, lastActivityAt: now, source: agent },
+        ],
+        tasks: s.tasks.map(t => (t.id === taskId && t.status === 'todo' ? { ...t, status: 'in_progress' as const, updatedAt: now } : t)),
+        agentEvents: [...s.agentEvents, ...events],
+      };
+    }),
+    agentContinueTask: (taskId, agent) => update(s => {
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        workSessions: s.workSessions.map(w =>
+          w.userId === s.currentUserId && !w.endedAt && w.taskId === taskId ? { ...w, lastActivityAt: now } : w
+        ),
+        agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'continued', taskId, 'Picked up the running timer')],
+      };
+    }),
+    agentAddNote: (taskId, agent, text) => update(s => {
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        workSessions: s.workSessions.map(w =>
+          w.userId === s.currentUserId && !w.endedAt ? { ...w, lastActivityAt: now } : w
+        ),
+        agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'note', taskId, text)],
+      };
+    }),
+    agentPauseTask: (agent, note) => update(s => {
+      const now = new Date().toISOString();
+      const open = s.workSessions.find(w => w.userId === s.currentUserId && !w.endedAt);
+      if (!open) return s;
+      return {
+        ...s,
+        workSessions: s.workSessions.map(w =>
+          w === open ? { ...w, endedAt: now, lastActivityAt: now, endReason: 'paused' as const, note: note ?? w.note } : w
+        ),
+        agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'paused', open.taskId, note)],
+      };
+    }),
+    agentFinishTask: (taskId, agent, summary) => update(s => {
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        workSessions: s.workSessions.map(w =>
+          w.userId === s.currentUserId && !w.endedAt && w.taskId === taskId
+            ? { ...w, endedAt: now, lastActivityAt: now, endReason: 'finished' as const, note: summary }
+            : w
+        ),
+        tasks: s.tasks.map(t =>
+          t.id === taskId
+            ? {
+                ...t,
+                status: 'review' as const,
+                updatedAt: now,
+                comments: [...(t.comments || []), { id: `cm-${Date.now()}`, authorId: s.currentUserId, body: `${summary}\n\n(via ${AGENT_LABEL[agent]})`, createdAt: now }],
+              }
+            : t
+        ),
+        agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'finished', taskId, summary)],
+      };
+    }),
+    logManualTime: (taskId, minutes, date, note) => update(s => {
+      const start = new Date(`${date}T09:00:00`);
+      const end = new Date(start.getTime() + minutes * 60_000);
+      return {
+        ...s,
+        workSessions: [
+          ...s.workSessions,
+          {
+            id: `ws-${Date.now()}`, userId: s.currentUserId, taskId, source: 'manual',
+            startedAt: start.toISOString(), endedAt: end.toISOString(), lastActivityAt: end.toISOString(),
+            endReason: 'paused', note,
+          },
+        ],
+      };
+    }),
+    updateAgentSettings: (updates) => update(s => ({
+      ...s,
+      agentSettings: { ...s.agentSettings, ...updates },
+    })),
+    updateWorkSession: (id, updates) => update(s => ({
+      ...s,
+      workSessions: s.workSessions.map(w => (w.id === id ? { ...w, ...updates } : w)),
     })),
 
     // Documents

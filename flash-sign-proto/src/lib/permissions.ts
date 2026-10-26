@@ -133,3 +133,13 @@ export function canManageUsers(role: DemoRole): boolean {
 export function canViewReports(role: DemoRole): boolean {
   return ['ceo', 'project_manager', 'engineering_lead', 'org_admin', 'platform_admin', 'auditor', 'document_manager'].includes(role);
 }
+
+/** Owner and Admin: organisation-wide AI agent settings (AI Agent Hub > Organisation) */
+export function canManageAgents(role: DemoRole): boolean {
+  return ['ceo', 'org_admin', 'platform_admin'].includes(role);
+}
+
+/** Roles that see the whole team's timesheet, not only their own */
+export function canViewTeamTime(role: DemoRole): boolean {
+  return ['ceo', 'project_manager', 'engineering_lead', 'org_admin', 'platform_admin'].includes(role);
+}

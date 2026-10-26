@@ -8,6 +8,7 @@ import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { Button } from '@/components/shared/ui';
+import { TaskTimerBadge } from '@/components/agents/task-timer-badge';
 import {
   Plus,
   Search,
@@ -294,6 +295,7 @@ export default function KanbanBoardPage({
 
                           {/* Labels */}
                           <div className="flex flex-wrap gap-1 mb-2.5">
+                            <TaskTimerBadge taskId={task.id} />
                             {task.isSrsGenerated && (
                               <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30 uppercase tracking-wider">
                                 <Sparkles className="w-2.5 h-2.5 text-emerald-600" /> SRS

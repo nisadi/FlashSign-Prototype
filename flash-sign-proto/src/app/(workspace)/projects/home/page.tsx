@@ -7,6 +7,7 @@ import { formatDate, formatRelative } from '@/lib/utils';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { QuickCreateDialog } from '@/components/shared/quick-create-dialog';
+import { MyWorkCard } from '@/components/agents/my-work-card';
 import {
   FolderKanban, CheckSquare, Clock, AlertTriangle, Plus, ArrowRight,
   TrendingUp, Users, Calendar, Sparkles, Activity, CheckCircle2,
@@ -126,6 +127,9 @@ export default function ProjectManagementHomePage() {
           </span>
         </Link>
       </div>
+
+      {/* Running timer, hours and agent activity */}
+      <MyWorkCard />
 
       {/* Main Grid: Projects & My Tasks */}
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">

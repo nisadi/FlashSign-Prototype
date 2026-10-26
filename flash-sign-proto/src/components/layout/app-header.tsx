@@ -14,6 +14,11 @@ const PAGE_TITLES: Record<string, string> = {
   '/teams': 'Team Analytics',
 };
 
+// Crumb labels that differ from their URL segment wherever they appear in the trail
+const CRUMB_LABELS: Record<string, string> = {
+  '/ai-agents': 'AI Agent Hub',
+};
+
 function Breadcrumbs() {
   const pathname = usePathname();
   const segments = pathname.split('/').filter(Boolean);
@@ -23,7 +28,7 @@ function Breadcrumbs() {
     const href = '/' + segments.slice(0, i + 1).join('/');
     const isLast = i === segments.length - 1;
     const matchingProj = projects.find(p => p.id === seg) || (seg === 'p-mvhmnblw' ? projects.find(p => p.id === 'p1') : undefined);
-    const label = (isLast && PAGE_TITLES[href])
+    const label = (isLast && PAGE_TITLES[href]) || CRUMB_LABELS[href]
       || (matchingProj ? matchingProj.name : seg.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase()));
     return { label, href, isLast };
   });

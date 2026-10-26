@@ -380,3 +380,72 @@ export interface Integration {
 
 export * from './collaboration';
 export * from './documents';
+
+// ─── AI Agent Connection (MCP) ──────────────────────────────────────────────
+
+/** A personal access token a person uses to connect their AI agent to the PM platform.
+ *  Only the last four characters are kept; the full token is shown once at creation. */
+export interface AgentAccessToken {
+  id: string;
+  userId: string;
+  name: string;
+  lastFour: string;
+  createdAt: string;
+  expiresAt: string;
+  lastUsedAt?: string;
+  /** When each agent last used this token. Agents identify themselves when they connect
+   *  (MCP client info), so one token per computer serves all of them. */
+  usedBy?: Partial<Record<AgentClient, string>>;
+  revokedAt?: string;
+}
+
+/** AI coding agents that can connect to the PM platform through the MCP server */
+export type AgentClient = 'claude_code' | 'codex' | 'gemini_cli' | 'antigravity';
+
+/** One block of time on one task. One open session per person, whichever agent started it. */
+export interface WorkSession {
+  id: string;
+  userId: string;
+  taskId: string;
+  startedAt: string;
+  endedAt?: string;
+  lastActivityAt: string;
+  /** Agent that started it; 'web' = started in the web app, 'manual' = typed-in time */
+  source: AgentClient | 'web' | 'manual';
+  endReason?: 'paused' | 'finished' | 'switched_task' | 'idle_timeout' | 'day_cutoff';
+  /** Auto-stopped sessions the person should check */
+  needsReview?: boolean;
+  note?: string;
+}
+
+export type AgentEventAction =
+  | 'listed_tasks'
+  | 'started'
+  | 'continued'
+  | 'paused'
+  | 'note'
+  | 'finished'
+  | 'time_logged'
+  | 'auto_stopped';
+
+/** Something an agent did for a person (shown in My Agent Activity and the task history) */
+export interface AgentEvent {
+  id: string;
+  userId: string;
+  taskId?: string;
+  agent: AgentClient | 'system';
+  action: AgentEventAction;
+  detail?: string;
+  at: string;
+}
+
+/** Organisation-wide rules for AI agent connections (AI Agent Hub > Organisation) */
+export interface AgentSettings {
+  enabled: boolean;
+  allowedAgents: Record<AgentClient, boolean>;
+  idleTimeoutMinutes: number;
+  dayCutoff: string; // "20:00"
+  allowClaimUnassigned: boolean;
+  /** Projects whose data may NOT be sent to AI providers */
+  blockedProjectIds: string[];
+}

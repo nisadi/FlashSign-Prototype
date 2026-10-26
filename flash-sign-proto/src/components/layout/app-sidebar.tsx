@@ -27,7 +27,7 @@ import { useState, useEffect } from 'react';
 
 export function AppSidebar() {
   const pathname = usePathname();
-  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, signatureRequests, agentRuns } = useApp();
+  const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, signatureRequests } = useApp();
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
@@ -35,7 +35,6 @@ export function AppSidebar() {
   // const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   // const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
 
-  const pendingReviewsCount = agentRuns?.filter(r => r.status === 'needs_review').length || 0;
   const actionRequiredSignatures = signatureRequests?.filter(r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed').length || 0;
 
   interface NavItem {
@@ -107,14 +106,14 @@ export function AppSidebar() {
       title: 'Teams',
       icon: Users,
       items: [
-        // The workload, announcements and activity boards open from Analytics, so they highlight it
+        // The workload, announcements, activity and timesheet pages open from Analytics, so they highlight it
         {
           label: 'Analytics',
           href: '/teams',
           icon: BarChart3,
           activeWhen: path =>
             path === '/teams' ||
-            ['/teams/workload', '/teams/announcements', '/teams/activity'].some(p => path.startsWith(p)),
+            ['/teams/workload', '/teams/announcements', '/teams/activity', '/teams/timesheet'].some(p => path.startsWith(p)),
         },
         ...(FEATURES.teams ? [{ label: 'Teams Directory', href: '/teams/directory', icon: Building2 }] : []),
         { label: 'Members', href: '/teams/members', icon: UserCheck },
@@ -127,16 +126,14 @@ export function AppSidebar() {
       ],
     },
     {
+      // One page: agent connection (MCP) setup and status. The old sub-pages were never built;
+      // SRS analysis returns later (docs/AI_AGENT_PM_INTEGRATION.md, Part B).
       id: 'ai-agents',
-      title: 'AI Coding Agents',
+      title: 'AI Agent Hub',
       icon: Bot,
-      badge: pendingReviewsCount > 0 ? pendingReviewsCount : undefined,
+      direct: true,
       items: [
-        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot },
-        { label: 'SRS Story Generator', href: '/ai-agents/story-generator', icon: FileText },
-        { label: 'Task Assignment & IDE', href: '/ai-agents/assign', icon: FolderKanban },
-        { label: 'Provider Settings', href: '/ai-agents/settings', icon: Settings },
-        { label: 'AI Audit Trail', href: '/ai-agents/audit', icon: Activity },
+        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot, activeWhen: path => path.startsWith('/ai-agents') },
       ],
     },
     {
