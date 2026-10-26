@@ -1,14 +1,19 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { Suspense, useState, useMemo } from 'react';
 import Link from 'next/link';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import {
   Users, UserPlus, Search, Filter, LayoutGrid, List,
   Briefcase, Mail, Building2, CheckSquare, ChevronRight,
-  Edit3, Trash2, ArrowUpDown,
+  Edit3, Trash2, ArrowUpDown, MailPlus,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageUsers } from '@/lib/permissions';
+import { cn } from '@/lib/utils';
+import { InviteMemberDialog } from '@/components/members/invite-member-dialog';
+import { InvitationsList } from '@/components/members/invitations-list';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
@@ -16,9 +21,28 @@ import type { User, AvailabilityStatus } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { Modal } from '@/components/shared/modal';
 
+type MembersTab = 'members' | 'invited';
+
 export default function MembersDirectoryPage() {
+  return (
+    <Suspense>
+      <MembersDirectory />
+    </Suspense>
+  );
+}
+
+function MembersDirectory() {
   const router = useRouter();
-  const { users, teams, projects, tasks, deleteMember } = useApp();
+  const searchParams = useSearchParams();
+  const { users, teams, projects, tasks, deleteMember, demoRole } = useApp();
+  const { invitations, selectedWorkspace } = useDemoAuth();
+  const canInvite = canManageUsers(demoRole);
+
+  // Members = people who have joined; Invited = invitations not accepted yet (?tab=invited)
+  const tab: MembersTab = searchParams.get('tab') === 'invited' ? 'invited' : 'members';
+  const setTab = (next: MembersTab) => router.replace(next === 'invited' ? '/teams/members?tab=invited' : '/teams/members');
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const pendingCount = invitations.filter(i => i.organizationId === selectedWorkspace.id && i.status === 'pending').length;
 
   const [search, setSearch] = useState('');
   const [departmentFilter, setDepartmentFilter] = useState('all');
@@ -90,19 +114,49 @@ export default function MembersDirectoryPage() {
             </p>
           </div>
 
-          <div className="flex items-center gap-2">
-            <button
-              onClick={() => {
-                setMemberToEdit(null);
-                setCreateMemberOpen(true);
-              }}
-              className="flex items-center gap-1.5 px-4 py-2 bg-flash hover:bg-flash-deep text-ink font-bold rounded-lg shadow-xs transition-colors text-xs"
-            >
-              <UserPlus className="w-4 h-4" />
-              <span>Add Member</span>
-            </button>
-          </div>
+          {canInvite && (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="flex items-center gap-1.5 px-4 py-2 bg-flash hover:bg-flash-deep text-ink font-bold rounded-lg shadow-xs transition-colors text-xs"
+              >
+                <UserPlus className="w-4 h-4" />
+                <span>Invite people</span>
+              </button>
+            </div>
+          )}
         </div>
+
+        {/* Members / Invited */}
+        <div className="flex items-center gap-1 border-b border-line" role="tablist" aria-label="Members">
+          {([
+            ['members', 'Members', users.length, Users],
+            ['invited', 'Invited', pendingCount, MailPlus],
+          ] as const).map(([id, label, count, Icon]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={tab === id}
+              onClick={() => setTab(id)}
+              className={cn(
+                'flex items-center gap-1.5 px-3.5 py-2.5 -mb-px border-b-2 text-xs font-semibold transition-colors',
+                tab === id ? 'border-flash-deep text-ink' : 'border-transparent text-muted hover:text-ink'
+              )}
+            >
+              <Icon className="w-3.5 h-3.5" />
+              {label}
+              <span className={cn('px-1.5 py-0.5 rounded-full text-[10px] font-mono', tab === id ? 'bg-flash/15 text-flash-deep' : 'bg-mist text-muted')}>
+                {count}
+              </span>
+            </button>
+          ))}
+        </div>
+
+        {tab === 'invited' ? (
+          <InvitationsList onInvite={() => setInviteOpen(true)} canManage={canInvite} />
+        ) : (
+        <>
 
         {/* Filter Toolbar */}
         <div className="p-4 rounded-xl bg-paper-elevated border border-line shadow-2xs space-y-3">
@@ -419,9 +473,13 @@ export default function MembersDirectoryPage() {
             </div>
           </div>
         )}
+        </>
+        )}
       </div>
 
-      {/* Add / Edit Member Dialog */}
+      <InviteMemberDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
+
+      {/* Edit Member Dialog */}
       <CreateMemberDialog
         open={createMemberOpen}
         onOpenChange={setCreateMemberOpen}

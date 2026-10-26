@@ -99,6 +99,10 @@ export default function SignUpPage() {
           <p className="text-xs text-[var(--muted)] mt-1">
             Sign up to start coordinating projects, automating AI workflows, and signing documents with Flash Sign.
           </p>
+          <p className="text-xs text-[var(--ink-soft)] mt-3 p-2.5 rounded-lg bg-[var(--mist)]">
+            This creates a new organization with you as the owner. Joining an existing team?
+            Use the invitation link from your email; the workspace owner can send one from Members.
+          </p>
         </div>
 
         {/* Global validation error banner */}

@@ -46,6 +46,25 @@ export interface DemoWorkspace {
   createdAt?: string;
 }
 
+/** An invitation to join an organization. Only the owner signs up directly; everyone else joins through one of these. */
+export interface DemoInvitation {
+  id: string;
+  email: string;
+  fullName?: string;
+  role: DemoRole;
+  jobTitle?: string;
+  department?: string;
+  message?: string;
+  organizationId: string;
+  organizationName: string;
+  invitedById: string;
+  invitedByName: string;
+  sentAt: string;
+  expiresAt: string;
+  status: 'pending' | 'accepted' | 'revoked';
+  acceptedAt?: string;
+}
+
 export interface DemoPreferences {
   theme: 'light' | 'dark';
   inAppNotifications: boolean;
@@ -302,5 +321,55 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     avatarColor: '#d97706',
     avatarInitials: 'TM',
     createdAt: '2026-03-01T09:00:00Z',
+  },
+];
+
+const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
+
+/** Invitations the owner of Flash Technologies has sent but nobody has accepted yet */
+export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
+  {
+    id: 'inv-demo-1',
+    email: 'ravi.perera@flashsign.io',
+    fullName: 'Ravi Perera',
+    role: 'developer',
+    jobTitle: 'Frontend Developer',
+    department: 'Engineering',
+    message: 'Welcome aboard! You will be working with Priya on the signing canvas.',
+    organizationId: 'ws-flash',
+    organizationName: 'Flash Technologies',
+    invitedById: 'user-demo',
+    invitedByName: 'Demo User',
+    sentAt: daysFromNow(-1),
+    expiresAt: daysFromNow(6),
+    status: 'pending',
+  },
+  {
+    id: 'inv-demo-2',
+    email: 'emma.clarke@flashsign.io',
+    fullName: 'Emma Clarke',
+    role: 'qa',
+    jobTitle: 'QA Engineer',
+    department: 'Quality',
+    organizationId: 'ws-flash',
+    organizationName: 'Flash Technologies',
+    invitedById: 'user-demo',
+    invitedByName: 'Demo User',
+    sentAt: daysFromNow(-3),
+    expiresAt: daysFromNow(4),
+    status: 'pending',
+  },
+  {
+    id: 'inv-demo-3',
+    email: 'jordan.lee@flashsign.io',
+    role: 'project_manager',
+    department: 'Delivery',
+    organizationId: 'ws-flash',
+    organizationName: 'Flash Technologies',
+    invitedById: 'user-demo',
+    invitedByName: 'Demo User',
+    sentAt: daysFromNow(-9),
+    expiresAt: daysFromNow(-2),
+    status: 'pending',
   },
 ];

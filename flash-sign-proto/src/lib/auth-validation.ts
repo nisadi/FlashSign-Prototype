@@ -136,3 +136,25 @@ export const preferencesSetupSchema = z.object({
 });
 
 export type PreferencesSetupFormData = z.infer<typeof preferencesSetupSchema>;
+
+/** Joining through an invitation: the email comes from the invitation, no organization step */
+export const acceptInviteSchema = z
+  .object({
+    fullName: z.string().min(2, 'Full name must be at least 2 characters'),
+    jobTitle: z.string().optional(),
+    password: z
+      .string()
+      .min(8, 'Password must be at least 8 characters')
+      .regex(/[A-Za-z]/, 'Must include letters')
+      .regex(/[0-9]/, 'Must include at least one number'),
+    confirmPassword: z.string().min(1, 'Please confirm your password'),
+    terms: z.boolean().refine((val) => val === true, {
+      message: 'You must agree to the Terms of Service and Privacy Policy to continue',
+    }),
+  })
+  .refine((data) => data.password === data.confirmPassword, {
+    message: 'Passwords do not match',
+    path: ['confirmPassword'],
+  });
+
+export type AcceptInviteFormData = z.infer<typeof acceptInviteSchema>;

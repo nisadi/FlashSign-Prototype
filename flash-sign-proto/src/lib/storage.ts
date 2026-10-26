@@ -43,5 +43,6 @@ export const STORAGE_KEYS = {
   SESSION_ACTIVE: 'flashsign_demo_session_active',
   PENDING_SIGNUP: 'flashsign_demo_pending_signup',
   AUTH_SUCCESS_MSG: 'flashsign_demo_auth_success_msg',
+  INVITATIONS: 'flashsign_demo_invitations',
 } as const;
 

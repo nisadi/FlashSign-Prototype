@@ -5,11 +5,15 @@ import type {
   DemoUser,
   DemoWorkspace,
   DemoPreferences,
+  DemoInvitation,
+  DemoRole,
 } from '@/types/demo-auth';
 import {
   INITIAL_DEMO_WORKSPACES,
   DEMO_PRESET_USERS,
+  INITIAL_DEMO_INVITATIONS,
 } from '@/types/demo-auth';
+import { INVITE_VALID_DAYS, isInviteExpired, type InvitePayload } from '@/lib/invitations';
 import {
   safeStorageGet,
   safeStorageSet,
@@ -41,6 +45,7 @@ export interface DemoAuthContextType {
   completedSteps: string[];
   pendingSignupUser: DemoUser | null;
   authMessage: string | null;
+  invitations: DemoInvitation[];
 
   // Authentication & Onboarding
   signUp: (data: {
@@ -67,6 +72,22 @@ export interface DemoAuthContextType {
 
   logout: () => void;
   clearAuthMessage: () => void;
+
+  // Invitations: the owner invites people; they join through the link without creating an organization
+  sendInvitation: (data: {
+    email: string;
+    fullName?: string;
+    role: DemoRole;
+    jobTitle?: string;
+    department?: string;
+    message?: string;
+  }) => { success: boolean; invitation?: DemoInvitation; error?: string };
+  resendInvitation: (id: string) => DemoInvitation | undefined;
+  revokeInvitation: (id: string) => void;
+  acceptInvitation: (
+    invite: InvitePayload,
+    data: { fullName: string; password: string; jobTitle?: string }
+  ) => { success: boolean; error?: string };
   setPendingSignupUser: (user: DemoUser | null) => void;
 
   // Backward compatibility methods
@@ -97,6 +118,7 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
   const [completedSteps, setCompletedSteps] = useState<string[]>(['workspace']);
   const [pendingSignupUser, setPendingSignupUserState] = useState<DemoUser | null>(null);
   const [authMessage, setAuthMessageState] = useState<string | null>(null);
+  const [invitations, setInvitations] = useState<DemoInvitation[]>(INITIAL_DEMO_INVITATIONS);
   const [isHydrated, setIsHydrated] = useState(false);
 
   // Safely hydrate from localStorage on mount (client-side only)
@@ -165,6 +187,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
 
       const storedSteps = safeStorageGet<string[] | null>(STORAGE_KEYS.COMPLETED_STEPS, null);
       if (storedSteps) setCompletedSteps(storedSteps);
+
+      // 7. Invitations
+      const storedInvitations = safeStorageGet<DemoInvitation[] | null>(STORAGE_KEYS.INVITATIONS, null);
+      if (storedInvitations) setInvitations(storedInvitations);
     } finally {
       setIsHydrated(true);
     }
@@ -184,10 +210,32 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
   }, []);
 
+  const saveInvitations = useCallback((next: DemoInvitation[]) => {
+    setInvitations(next);
+    safeStorageSet(STORAGE_KEYS.INVITATIONS, next);
+  }, []);
+
+  /** A live (pending, not expired) invitation for this email, if any */
+  const openInvitationFor = useCallback(
+    (email: string) =>
+      invitations.find(
+        (i) => i.status === 'pending' && !isInviteExpired(i) && i.email.toLowerCase() === email.trim().toLowerCase()
+      ),
+    [invitations]
+  );
+
   // ── Step 1: Sign Up (New User) ─────────────────────────────────────────────
   const signUp = useCallback(
     (data: { fullName: string; email: string; password: string; jobTitle?: string }) => {
       const normalizedEmail = data.email.trim().toLowerCase();
+
+      const invitation = openInvitationFor(normalizedEmail);
+      if (invitation) {
+        return {
+          success: false,
+          error: `You've been invited to join ${invitation.organizationName}. Open the invitation link in your email to create your account.`,
+        };
+      }
 
       // Check if user already exists and has completed setup
       const existingUser = users.find((u) => u.email.trim().toLowerCase() === normalizedEmail);
@@ -239,7 +287,7 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       // DO NOT mark authenticated yet. User must complete org setup then log in.
       return { success: true, user: newUser };
     },
-    [users]
+    [users, openInvitationFor]
   );
 
   // ── Step 2: Create Organization (New User) ─────────────────────────────────
@@ -349,9 +397,12 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (!matchedUser) {
+        const invitation = openInvitationFor(normalizedEmail);
         return {
           success: false,
-          error: 'No account found with this email address. Please check your credentials or create an account.',
+          error: invitation
+            ? `You haven't joined ${invitation.organizationName} yet. Open the invitation link in your email to create your account.`
+            : 'No account found with this email address. Please check your credentials or create an account.',
         };
       }
 
@@ -413,7 +464,158 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true, user: matchedUser };
     },
-    [users, workspaces]
+    [users, workspaces, openInvitationFor]
+  );
+
+  // ── Invitations ────────────────────────────────────────────────────────────
+  const sendInvitation = useCallback<DemoAuthContextType['sendInvitation']>(
+    (data) => {
+      if (!currentUser) return { success: false, error: 'Please log in to invite people.' };
+      const email = data.email.trim();
+      const normalizedEmail = email.toLowerCase();
+      const org = selectedWorkspace;
+
+      const member = users.find(
+        (u) => u.email.trim().toLowerCase() === normalizedEmail && u.organizationId === org.id
+      );
+      if (member) {
+        return { success: false, error: `${member.fullName} is already a member of ${org.name}.` };
+      }
+      const existing = invitations.find(
+        (i) => i.organizationId === org.id && i.status === 'pending' && i.email.toLowerCase() === normalizedEmail
+      );
+      if (existing && !isInviteExpired(existing)) {
+        return { success: false, error: `${email} already has a pending invitation. Resend it from the Invited tab.` };
+      }
+
+      const now = Date.now();
+      const invitation: DemoInvitation = {
+        id: `inv-${now.toString(36)}`,
+        email,
+        fullName: data.fullName?.trim() || undefined,
+        role: data.role,
+        jobTitle: data.jobTitle?.trim() || undefined,
+        department: data.department?.trim() || undefined,
+        message: data.message?.trim() || undefined,
+        organizationId: org.id,
+        organizationName: org.name,
+        invitedById: currentUser.id,
+        invitedByName: currentUser.fullName,
+        sentAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + INVITE_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+        status: 'pending',
+      };
+      // An expired invitation to the same email is replaced by the new one
+      saveInvitations([invitation, ...invitations.filter((i) => i !== existing)]);
+      return { success: true, invitation };
+    },
+    [currentUser, selectedWorkspace, users, invitations, saveInvitations]
+  );
+
+  const resendInvitation = useCallback(
+    (id: string) => {
+      const now = Date.now();
+      let resent: DemoInvitation | undefined;
+      const next = invitations.map((i) => {
+        if (i.id !== id) return i;
+        resent = {
+          ...i,
+          sentAt: new Date(now).toISOString(),
+          expiresAt: new Date(now + INVITE_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
+        };
+        return resent;
+      });
+      saveInvitations(next);
+      return resent;
+    },
+    [invitations, saveInvitations]
+  );
+
+  const revokeInvitation = useCallback(
+    (id: string) => {
+      saveInvitations(invitations.map((i) => (i.id === id ? { ...i, status: 'revoked' as const } : i)));
+    },
+    [invitations, saveInvitations]
+  );
+
+  // Invited person creates their account: no organization step, straight into the inviting organization
+  const acceptInvitation = useCallback<DemoAuthContextType['acceptInvitation']>(
+    (invite, data) => {
+      const local = invitations.find((i) => i.id === invite.id);
+      if (local?.status === 'revoked') {
+        return { success: false, error: 'This invitation was cancelled. Ask the workspace owner to invite you again.' };
+      }
+      if (local?.status === 'accepted') {
+        return { success: false, error: 'This invitation has already been used. Log in with your email and password.' };
+      }
+      if (isInviteExpired(local ?? invite)) {
+        return { success: false, error: 'This invitation has expired. Ask the workspace owner to send a new one.' };
+      }
+      const normalizedEmail = invite.email.trim().toLowerCase();
+      if (users.some((u) => u.email.trim().toLowerCase() === normalizedEmail)) {
+        return { success: false, error: 'An account with this email already exists. Please log in instead.' };
+      }
+
+      // The link may be opened in a browser that has never seen this organization
+      let org = workspaces.find((w) => w.id === invite.organizationId);
+      let nextWorkspaces = workspaces;
+      if (!org) {
+        org = {
+          id: invite.organizationId,
+          name: invite.organizationName,
+          slug: slugify(invite.organizationName),
+          ownerId: invite.invitedById,
+          memberCount: 1,
+          activeProjectCount: 0,
+          accentColor: '#00c2a8',
+          initials: invite.organizationName.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase(),
+        };
+        nextWorkspaces = [...workspaces, org];
+      }
+      nextWorkspaces = nextWorkspaces.map((w) => (w.id === org!.id ? { ...w, memberCount: w.memberCount + 1 } : w));
+      org = nextWorkspaces.find((w) => w.id === invite.organizationId)!;
+
+      const fullName = data.fullName.trim();
+      const newUser: DemoUser = {
+        id: `user-${Date.now()}`,
+        fullName,
+        email: invite.email,
+        password: data.password,
+        jobTitle: data.jobTitle?.trim() || invite.jobTitle || 'Team Member',
+        department: invite.department || 'General',
+        timezone: 'America/New_York (UTC-5)',
+        role: invite.role,
+        organizationId: org.id,
+        registrationCompleted: true,
+        organizationSetupCompleted: true,
+        avatarColor: '#2a78d6',
+        avatarInitials: fullName.split(' ').filter(Boolean).map((n) => n[0]).slice(0, 2).join('').toUpperCase() || 'TM',
+        createdAt: new Date().toISOString(),
+      };
+
+      const updatedUsers = [...users, newUser];
+      setUsers(updatedUsers);
+      safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
+      setWorkspaces(nextWorkspaces);
+      safeStorageSet(STORAGE_KEYS.WORKSPACES, nextWorkspaces);
+      if (local) {
+        saveInvitations(
+          invitations.map((i) => (i.id === local.id ? { ...i, status: 'accepted' as const, acceptedAt: new Date().toISOString() } : i))
+        );
+      }
+
+      // Signed straight in to the organization that invited them
+      setCurrentUser(newUser);
+      setIsAuthenticated(true);
+      setSelectedWorkspace(org);
+      setPendingSignupUserState(null);
+      safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
+      safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, org);
+      safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
+      safeStorageSet(STORAGE_KEYS.USER, newUser);
+      return { success: true };
+    },
+    [invitations, users, workspaces, saveInvitations]
   );
 
   // ── Logout ─────────────────────────────────────────────────────────────────
@@ -544,8 +746,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     setCompletedSteps(['workspace']);
     setPendingSignupUserState(null);
     setAuthMessageState(null);
+    setInvitations(INITIAL_DEMO_INVITATIONS);
 
     safeStorageSet(STORAGE_KEYS.USERS, DEMO_PRESET_USERS);
+    safeStorageRemove(STORAGE_KEYS.INVITATIONS);
     safeStorageSet(STORAGE_KEYS.WORKSPACES, INITIAL_DEMO_WORKSPACES);
     safeStorageSet(STORAGE_KEYS.USER, DEMO_PRESET_USERS[0]);
     safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, INITIAL_DEMO_WORKSPACES[0]);
@@ -570,11 +774,16 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         completedSteps,
         pendingSignupUser,
         authMessage,
+        invitations,
         signUp,
         createOrganization,
         login,
         logout,
         clearAuthMessage,
+        sendInvitation,
+        resendInvitation,
+        revokeInvitation,
+        acceptInvitation,
         setPendingSignupUser,
         register,
         selectWorkspace,
