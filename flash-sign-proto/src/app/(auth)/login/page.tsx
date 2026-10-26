@@ -25,7 +25,7 @@ import {
 
 export default function LoginPage() {
   const router = useRouter();
-  const { login, authMessage, clearAuthMessage, users } = useDemoAuth();
+  const { login, authMessage, clearAuthMessage, users, pendingSignupUser } = useDemoAuth();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -45,6 +45,17 @@ export default function LoginPage() {
       rememberMe: true,
     },
   });
+
+  // Automatically prefill credentials if arriving from creating an organization
+  useEffect(() => {
+    if (pendingSignupUser?.email && pendingSignupUser?.organizationSetupCompleted) {
+      setValue('email', pendingSignupUser.email, { shouldValidate: true });
+      if (pendingSignupUser.password) {
+        setValue('password', pendingSignupUser.password, { shouldValidate: true });
+      }
+      setActivePreset(null);
+    }
+  }, [pendingSignupUser, setValue]);
 
   const onSubmit = async (data: LoginFormData) => {
     setErrorMessage(null);

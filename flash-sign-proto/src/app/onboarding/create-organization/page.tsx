@@ -75,19 +75,21 @@ export default function CreateOrganizationPage() {
     }
   }, [orgName, slugManuallyEdited, setValue]);
 
+  const [hasCreatedOrg, setHasCreatedOrg] = useState(false);
+
   // If page is refreshed and there is no user session at all, redirect to signup
   useEffect(() => {
-    if (isHydrated && !pendingSignupUser && !currentUser) {
+    if (isHydrated && !hasCreatedOrg && !pendingSignupUser && !currentUser) {
       router.replace('/signup');
     }
-  }, [isHydrated, pendingSignupUser, currentUser, router]);
+  }, [isHydrated, hasCreatedOrg, pendingSignupUser, currentUser, router]);
 
   const onSubmit = async (data: CreateOrganizationFormData) => {
     setErrorMessage(null);
     setIsSubmitting(true);
 
     // Simulate brief client-side processing
-    await new Promise((resolve) => setTimeout(resolve, 450));
+    await new Promise((resolve) => setTimeout(resolve, 300));
 
     const result = createOrganization({
       name: data.name,
@@ -98,16 +100,16 @@ export default function CreateOrganizationPage() {
       description: data.description,
     });
 
-    setIsSubmitting(false);
-
     if (!result.success) {
+      setIsSubmitting(false);
       setErrorMessage(result.error || 'Failed to create organization. Please try again.');
       return;
     }
 
-    // Required by prompt:
-    // Mark organization setup as completed -> Display success message -> Redirect the user to the Login page.
-    // The user must log in after organization creation. Do not automatically redirect them to the dashboard.
+    setHasCreatedOrg(true);
+    setIsSubmitting(false);
+
+    // Redirect user to the Login page after organization creation
     router.push('/login');
   };
 

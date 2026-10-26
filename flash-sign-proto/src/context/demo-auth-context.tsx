@@ -323,9 +323,9 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       setUsers(updatedUsers);
       safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
 
-      // Clear pending signup session
-      setPendingSignupUserState(null);
-      safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
+      // Keep updated user in pending session so login screen can recognize them
+      setPendingSignupUserState(updatedUser);
+      safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, updatedUser);
 
       // Flash success message for login screen
       const successMessage = `Organization "${newOrg.name}" created successfully! Please log in to access your workspace.`;
@@ -397,9 +397,11 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, matchedOrg);
       }
 
-      // Clear any pending message
+      // Clear any pending message and pending signup user
       setAuthMessageState(null);
       safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
+      setPendingSignupUserState(null);
+      safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
 
       // Persist session if rememberMe
       safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
