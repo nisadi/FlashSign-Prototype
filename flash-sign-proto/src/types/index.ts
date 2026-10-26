@@ -170,6 +170,38 @@ export interface ProjectFile {
   tasksGeneratedCount?: number;
 }
 
+export type SrsReviewOutcome = 'accepted' | 'rejected';
+
+export interface SrsGeneratedTaskRecord {
+  id: string;
+  originalId?: string;
+  projectTaskId?: string;
+  projectTaskKey?: string;
+  fileId: string;
+  fileName: string;
+  projectId: string;
+  projectName?: string;
+  title: string;
+  originalTitle?: string;
+  description: string;
+  originalDescription?: string;
+  acceptanceCriteria?: string;
+  originalAcceptanceCriteria?: string;
+  priority: TaskPriority;
+  originalPriority?: TaskPriority;
+  type: TaskType;
+  originalType?: TaskType;
+  sourceSection: string;
+  points?: number;
+  tags?: string[];
+  isEdited: boolean;
+  outcome: SrsReviewOutcome;
+  rejectionReason?: string;
+  createdAt?: string;
+  reviewedAt?: string;
+}
+
+
 // ─── Sprints ─────────────────────────────────────────────────────────────────
 
 export type SprintStatus = 'planned' | 'planning' | 'active' | 'completed';

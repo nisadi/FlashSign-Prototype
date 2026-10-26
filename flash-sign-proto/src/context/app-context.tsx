@@ -5,12 +5,13 @@ import type {
   DemoRole, User, Project, Task, Sprint, Document, ApprovalRequest,
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
-  AvailabilityStatus, LeaveType, EventCategory,
+  AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
   MOCK_APPROVALS, MOCK_NOTIFICATIONS, MOCK_AUDIT_LOGS, MOCK_AGENT_RUNS,
   MOCK_MILESTONES, MOCK_TEAMS, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG,
+  INITIAL_SRS_TASK_HISTORY,
 } from '@/data/mock-data';
 import {
   MOCK_CALENDAR_EVENTS, MOCK_TIME_OFF, MOCK_MEETINGS, MOCK_ANNOUNCEMENTS,
@@ -76,6 +77,7 @@ export interface AppState {
   sidebarCollapsed: boolean;
   recentProjectIds: string[];
   activeTaskDrawerId: string | null;
+  srsTaskHistories: Record<string, SrsGeneratedTaskRecord[]>;
 }
 
 // ── Actions ────────────────────────────────────────────────────────────────────
@@ -145,6 +147,7 @@ interface AppActions {
   addFile: (file: CreateFileInput) => void;
   updateFile: (id: string, updates: Partial<ProjectFile>) => void;
   deleteFile: (id: string) => void;
+  saveSrsTaskHistory: (fileId: string, history: SrsGeneratedTaskRecord[]) => void;
   // Activity
   addActivity: (log: Partial<AuditLog> & { action: string; resource: string; resourceId: string }) => void;
   // Documents
@@ -240,6 +243,7 @@ function getInitialState(): AppState {
     sidebarCollapsed: false,
     recentProjectIds: ['p1', 'p2', 'p3'],
     activeTaskDrawerId: null,
+    srsTaskHistories: INITIAL_SRS_TASK_HISTORY,
   };
 }
 
@@ -249,7 +253,11 @@ function loadState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return getInitialState();
     const saved = JSON.parse(raw) as Partial<AppState>;
-    return { ...getInitialState(), ...saved };
+    return {
+      ...getInitialState(),
+      ...saved,
+      srsTaskHistories: saved.srsTaskHistories || INITIAL_SRS_TASK_HISTORY,
+    };
   } catch {
     return getInitialState();
   }
@@ -282,6 +290,7 @@ function saveState(state: AppState): void {
       agentRuns: state.agentRuns,
       sidebarCollapsed: state.sidebarCollapsed,
       recentProjectIds: state.recentProjectIds,
+      srsTaskHistories: state.srsTaskHistories,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
   } catch {
@@ -582,6 +591,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       files: s.files.map(f => f.id === id ? { ...f, ...updates } : f),
     })),
     deleteFile: (id) => update(s => ({ ...s, files: s.files.filter(f => f.id !== id) })),
+    saveSrsTaskHistory: (fileId, history) => update(s => ({
+      ...s,
+      srsTaskHistories: {
+        ...(s.srsTaskHistories || {}),
+        [fileId]: history,
+      },
+    })),
 
     // Activity
     addActivity: (log) => update(s => {

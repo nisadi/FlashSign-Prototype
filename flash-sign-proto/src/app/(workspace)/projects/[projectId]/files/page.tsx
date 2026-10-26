@@ -29,11 +29,12 @@ import {
   Tag,
   CheckSquare,
 } from 'lucide-react';
-import type { ProjectFile, DocumentCategory, FileAnalysisStatus } from '@/types';
+import type { ProjectFile, DocumentCategory, FileAnalysisStatus, SrsGeneratedTaskRecord } from '@/types';
 import type { CreateTaskInput } from '@/context/app-context';
 import { DocumentClassificationModal } from '@/components/projects/document-classification-modal';
 import { SrsActionModal } from '@/components/projects/srs-action-modal';
 import { GeneratedTasksReviewModal } from '@/components/projects/generated-tasks-review-modal';
+import { SrsGeneratedTasksModal } from '@/components/projects/srs-generated-tasks-modal';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/shared/modal';
 import { generateSuggestedTasksFromSrs, SrsSuggestedTask } from '@/lib/srs-analysis';
 
@@ -43,7 +44,7 @@ export default function ProjectFilesPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, files, tasks, users, addFile, updateFile, deleteFile, addTasks } = useApp();
+  const { projects, files, tasks, users, addFile, updateFile, deleteFile, addTasks, srsTaskHistories, saveSrsTaskHistory } = useApp();
 
   const [search, setSearch] = useState('');
   const [typeFilter, setTypeFilter] = useState('all');
@@ -56,6 +57,7 @@ export default function ProjectFilesPage({
   const [classifyModalFile, setClassifyModalFile] = useState<ProjectFile | null>(null);
   const [srsModalFile, setSrsModalFile] = useState<ProjectFile | null>(null);
   const [reviewModalFile, setReviewModalFile] = useState<ProjectFile | null>(null);
+  const [srsHistoryModalFile, setSrsHistoryModalFile] = useState<ProjectFile | null>(null);
   const [srsSuggestedTasks, setSrsSuggestedTasks] = useState<SrsSuggestedTask[]>([]);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
@@ -170,9 +172,13 @@ export default function ProjectFilesPage({
     setSrsModalFile(null);
   };
 
-  const handleAcceptRemainingTasks = (acceptedTasks: SrsSuggestedTask[]) => {
-    if (!reviewModalFile || acceptedTasks.length === 0) return;
+  const handleAcceptRemainingTasks = (
+    allTasks: SrsSuggestedTask[],
+    acceptedTasks: SrsSuggestedTask[]
+  ) => {
+    if (!reviewModalFile) return;
 
+    // 1. Prepare created project tasks for accepted items only
     const taskInputs: CreateTaskInput[] = acceptedTasks.map((t, idx) => ({
       id: `task-srs-${Date.now()}-${idx}`,
       key: `${project.key}-${tasks.length + idx + 101}`,
@@ -192,7 +198,51 @@ export default function ProjectFilesPage({
       labels: ['SRS Generated', ...t.tags],
     }));
 
-    addTasks(taskInputs);
+    if (taskInputs.length > 0) {
+      addTasks(taskInputs);
+    }
+
+    // 2. Map all tasks to complete SrsGeneratedTaskRecord[] audit history
+    const taskInputMap = new Map<string, CreateTaskInput>();
+    acceptedTasks.forEach((t, idx) => {
+      taskInputMap.set(t.id, taskInputs[idx]);
+    });
+
+    const historyRecords: SrsGeneratedTaskRecord[] = allTasks.map((t, idx) => {
+      const created = taskInputMap.get(t.id);
+      const isAccepted = !t.isRejected;
+
+      return {
+        id: `srs-rec-${reviewModalFile.id}-${Date.now()}-${idx}`,
+        originalId: t.id,
+        projectTaskId: isAccepted && created ? created.id : undefined,
+        projectTaskKey: isAccepted && created ? created.key : undefined,
+        fileId: reviewModalFile.id,
+        fileName: reviewModalFile.name,
+        projectId: project.id,
+        projectName: project.name,
+        title: t.title,
+        originalTitle: t.originalTitle || t.title,
+        description: t.description,
+        originalDescription: t.originalDescription || t.description,
+        acceptanceCriteria: t.acceptanceCriteria,
+        originalAcceptanceCriteria: t.originalAcceptanceCriteria || t.acceptanceCriteria,
+        priority: t.priority,
+        originalPriority: t.originalPriority || t.priority,
+        type: t.type,
+        originalType: t.originalType || t.type,
+        sourceSection: t.sourceSection,
+        points: t.points,
+        tags: t.tags,
+        isEdited: !!t.isEdited,
+        outcome: isAccepted ? 'accepted' : 'rejected',
+        rejectionReason: t.rejectionReason || (isAccepted ? undefined : 'Excluded during SRS analysis review: Not added to project backlog.'),
+        createdAt: new Date().toISOString(),
+        reviewedAt: new Date().toISOString(),
+      };
+    });
+
+    saveSrsTaskHistory(reviewModalFile.id, historyRecords);
 
     updateFile(reviewModalFile.id, {
       category: 'srs',
@@ -202,7 +252,11 @@ export default function ProjectFilesPage({
     });
 
     setReviewModalFile(null);
-    showToast(`${acceptedTasks.length} tasks added to ${project.name} successfully.`);
+    if (acceptedTasks.length > 0) {
+      showToast(`${acceptedTasks.length} tasks added to ${project.name} (${allTasks.length - acceptedTasks.length} rejected). Generation history preserved.`);
+    } else {
+      showToast(`Review complete: all ${allTasks.length} tasks rejected. SRS generation history preserved.`);
+    }
   };
 
   const getFileIcon = (type: string) => {
@@ -254,13 +308,23 @@ export default function ProjectFilesPage({
     }
   };
 
-  const getAnalysisStatusBadge = (status?: FileAnalysisStatus, count?: number) => {
-    switch (status) {
+  const getAnalysisStatusBadge = (file: ProjectFile) => {
+    switch (file.analysisStatus) {
       case 'tasks_created':
         return (
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/30">
-            <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Tasks Created
-          </span>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              setSrsHistoryModalFile(file);
+            }}
+            className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-[10px] font-bold bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 border border-emerald-500/35 hover:bg-emerald-500/25 hover:border-emerald-500/60 hover:shadow-xs transition-all cursor-pointer group/badge focus:outline-none focus:ring-2 focus:ring-emerald-500/40"
+            title="Click to view all tasks generated from this SRS"
+          >
+            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600 dark:text-emerald-400 shrink-0" />
+            <span>Tasks Created</span>
+            <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 group-hover/badge:scale-125 transition-transform" />
+          </button>
         );
       case 'analyzed':
         return (
@@ -434,7 +498,7 @@ export default function ProjectFilesPage({
                     <div>
                       <div className="flex items-center gap-2 mb-1.5 flex-wrap">
                         {getCategoryBadge(file.category)}
-                        {getAnalysisStatusBadge(file.analysisStatus, file.tasksGeneratedCount)}
+                        {getAnalysisStatusBadge(file)}
                       </div>
 
                       <h3 className="text-xs font-bold text-ink hover:text-flash-deep transition-colors truncate">
@@ -449,15 +513,21 @@ export default function ProjectFilesPage({
 
                     {isSrs && (
                       <div className="pt-2" onClick={(e) => e.stopPropagation()}>
-                        <button
-                          onClick={() => setSrsModalFile(file)}
-                          className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-xs border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-colors"
-                        >
-                          <Sparkles className="w-3.5 h-3.5" />
-                          {file.analysisStatus === 'tasks_created'
-                            ? 'Re-analyze SRS'
-                            : 'Analyze SRS & Create Tasks'}
-                        </button>
+                        {file.analysisStatus === 'tasks_created' ? (
+                          <button
+                            onClick={() => setSrsHistoryModalFile(file)}
+                            className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-xs border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" /> View Generated Tasks
+                          </button>
+                        ) : (
+                          <button
+                            onClick={() => setSrsModalFile(file)}
+                            className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-xs border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-colors"
+                          >
+                            <Sparkles className="w-3.5 h-3.5" /> Analyze SRS & Create Tasks
+                          </button>
+                        )}
                       </div>
                     )}
                   </div>
@@ -529,7 +599,7 @@ export default function ProjectFilesPage({
 
                         {/* Analysis Status */}
                         <td className="py-3.5 px-3">
-                          {getAnalysisStatusBadge(file.analysisStatus, file.tasksGeneratedCount)}
+                          {getAnalysisStatusBadge(file)}
                         </td>
 
                         {/* Uploaded Date */}
@@ -544,13 +614,23 @@ export default function ProjectFilesPage({
                         >
                           <div className="flex items-center justify-end gap-1.5">
                             {isSrs && (
-                              <button
-                                onClick={() => setSrsModalFile(file)}
-                                className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] border border-emerald-500/25 flex items-center gap-1 transition-colors"
-                                title="Analyze SRS and create suggested tasks"
-                              >
-                                <Sparkles className="w-3 h-3" /> Analyze SRS
-                              </button>
+                              file.analysisStatus === 'tasks_created' ? (
+                                <button
+                                  onClick={() => setSrsHistoryModalFile(file)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] border border-emerald-500/25 flex items-center gap-1 transition-colors"
+                                  title="View all tasks generated from this SRS"
+                                >
+                                  <Sparkles className="w-3 h-3" /> View Tasks
+                                </button>
+                              ) : (
+                                <button
+                                  onClick={() => setSrsModalFile(file)}
+                                  className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] border border-emerald-500/25 flex items-center gap-1 transition-colors"
+                                  title="Analyze SRS and create suggested tasks"
+                                >
+                                  <Sparkles className="w-3 h-3" /> Analyze SRS
+                                </button>
+                              )
                             )}
 
                             <button
@@ -756,6 +836,17 @@ export default function ProjectFilesPage({
           tasks={srsSuggestedTasks}
           onClose={() => setReviewModalFile(null)}
           onAcceptRemaining={handleAcceptRemainingTasks}
+        />
+      )}
+
+      {/* SRS Generated Tasks History Modal */}
+      {srsHistoryModalFile && (
+        <SrsGeneratedTasksModal
+          project={project}
+          file={srsHistoryModalFile}
+          isOpen={!!srsHistoryModalFile}
+          historyTasks={srsTaskHistories[srsHistoryModalFile.id] || []}
+          onClose={() => setSrsHistoryModalFile(null)}
         />
       )}
     </div>

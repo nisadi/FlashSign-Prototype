@@ -26,7 +26,7 @@ interface GeneratedTasksReviewModalProps {
   isOpen: boolean;
   tasks: SrsSuggestedTask[];
   onClose: () => void;
-  onAcceptRemaining: (acceptedTasks: SrsSuggestedTask[]) => void;
+  onAcceptRemaining: (allTasks: SrsSuggestedTask[], acceptedTasks: SrsSuggestedTask[]) => void;
 }
 
 export function GeneratedTasksReviewModal({
@@ -64,7 +64,19 @@ export function GeneratedTasksReviewModal({
 
   const handleToggleReject = (id: string) => {
     setTasks((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, isRejected: !t.isRejected } : t))
+      prev.map((t) => {
+        if (t.id === id) {
+          const willBeRejected = !t.isRejected;
+          return {
+            ...t,
+            isRejected: willBeRejected,
+            rejectionReason: willBeRejected
+              ? (t.rejectionReason || 'Excluded during SRS analysis review.')
+              : undefined,
+          };
+        }
+        return t;
+      })
     );
   };
 
@@ -79,18 +91,28 @@ export function GeneratedTasksReviewModal({
 
   const handleSaveEdit = (id: string) => {
     setTasks((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              title: editTitle.trim() || t.title,
-              description: editDescription.trim(),
-              acceptanceCriteria: editAcceptanceCriteria.trim(),
-              priority: editPriority,
-              type: editType,
-            }
-          : t
-      )
+      prev.map((t) => {
+        if (t.id !== id) return t;
+        const nextTitle = editTitle.trim() || t.title;
+        const nextDescription = editDescription.trim();
+        const nextAcceptance = editAcceptanceCriteria.trim();
+        const isModified =
+          nextTitle !== (t.originalTitle || t.title) ||
+          nextDescription !== (t.originalDescription ?? t.description) ||
+          nextAcceptance !== (t.originalAcceptanceCriteria ?? t.acceptanceCriteria) ||
+          editPriority !== (t.originalPriority ?? t.priority) ||
+          editType !== (t.originalType ?? t.type);
+
+        return {
+          ...t,
+          title: nextTitle,
+          description: nextDescription,
+          acceptanceCriteria: nextAcceptance,
+          priority: editPriority,
+          type: editType,
+          isEdited: isModified || !!t.isEdited,
+        };
+      })
     );
     setEditingTaskId(null);
   };
@@ -102,7 +124,13 @@ export function GeneratedTasksReviewModal({
   const handleAcceptAll = () => {
     if (acceptedCount === 0 || hasAcceptedBatch) return;
     setHasAcceptedBatch(true);
-    onAcceptRemaining(acceptedTasks);
+    onAcceptRemaining(tasks, acceptedTasks);
+  };
+
+  const handleCompleteAllRejected = () => {
+    if (hasAcceptedBatch) return;
+    setHasAcceptedBatch(true);
+    onAcceptRemaining(tasks, []);
   };
 
   return (
@@ -338,6 +366,12 @@ export function GeneratedTasksReviewModal({
                           Suggested: To Do
                         </span>
 
+                        {t.isEdited && (
+                          <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-teal-500/15 text-teal-700 dark:text-teal-400 border border-teal-500/30 flex items-center gap-1">
+                            <Edit3 className="w-2.5 h-2.5" /> Edited
+                          </span>
+                        )}
+
                         {t.isRejected && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-danger/15 text-danger border border-danger/25 uppercase">
                             Excluded from Acceptance
@@ -453,11 +487,16 @@ export function GeneratedTasksReviewModal({
 
           {acceptedCount === 0 ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-danger font-semibold flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" /> No tasks available to accept.
+              <span className="text-xs text-amber-600 font-semibold flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> All tasks rejected. None will be added to project.
               </span>
-              <Button variant="primary" size="sm" disabled>
-                Accept Tasks
+              <Button
+                variant="primary"
+                size="sm"
+                disabled={hasAcceptedBatch}
+                onClick={handleCompleteAllRejected}
+              >
+                Complete Review (Save History)
               </Button>
             </div>
           ) : (

@@ -3,13 +3,20 @@ import type { TaskPriority, TaskType } from '@/types';
 export interface SrsSuggestedTask {
   id: string;
   title: string;
+  originalTitle?: string;
   description: string;
+  originalDescription?: string;
   acceptanceCriteria: string;
+  originalAcceptanceCriteria?: string;
   priority: TaskPriority;
+  originalPriority?: TaskPriority;
   status: 'todo';
   type: TaskType;
+  originalType?: TaskType;
   sourceSection: string;
   isRejected: boolean;
+  isEdited?: boolean;
+  rejectionReason?: string;
   points: number;
   tags: string[];
 }
@@ -23,10 +30,11 @@ export function generateSuggestedTasksFromSrs(
   projectName: string,
   projectKey: string
 ): SrsSuggestedTask[] {
+  const ts = Date.now();
   // Flash Sign / Core e-signature platform tasks
-  return [
+  const rawTasks: Array<Omit<SrsSuggestedTask, 'originalTitle' | 'originalDescription' | 'originalPriority' | 'originalType' | 'originalAcceptanceCriteria' | 'isEdited'>> = [
     {
-      id: `sugg-${Date.now()}-1`,
+      id: `sugg-${ts}-1`,
       title: 'Multi-Party Cryptographic Signature Verification',
       description:
         'Implement cryptographic verification for X.509 PKI certificates to validate document integrity and tamper evidence across multi-signer sequential workflows.',
@@ -41,7 +49,7 @@ export function generateSuggestedTasksFromSrs(
       tags: ['security', 'cryptography', 'srs-generated'],
     },
     {
-      id: `sugg-${Date.now()}-2`,
+      id: `sugg-${ts}-2`,
       title: 'HTML5 Signature Canvas Biometric Stroke & Pressure Capture',
       description:
         'Capture stroke velocity, timestamped vectors, and normalized pressure values on touch and stylus screens during handwritten signature capture for fraud mitigation.',
@@ -56,7 +64,7 @@ export function generateSuggestedTasksFromSrs(
       tags: ['frontend', 'canvas', 'srs-generated'],
     },
     {
-      id: `sugg-${Date.now()}-3`,
+      id: `sugg-${ts}-3`,
       title: 'Automated Multi-Channel Signer Reminder & Escalation Queue',
       description:
         'Build background notification scheduling with customizable reminder intervals (24h, 48h, 7d) and automatic manager escalation for pending signature requests.',
@@ -71,7 +79,7 @@ export function generateSuggestedTasksFromSrs(
       tags: ['notifications', 'backend', 'srs-generated'],
     },
     {
-      id: `sugg-${Date.now()}-4`,
+      id: `sugg-${ts}-4`,
       title: 'SOC 2 & HIPAA Tamper-Evident Audit Certificate PDF Appendix',
       description:
         'Automatically generate a certified, tamper-evident audit trail certificate appended as the final page of completed document packages upon final recipient signature.',
@@ -86,7 +94,7 @@ export function generateSuggestedTasksFromSrs(
       tags: ['compliance', 'audit', 'srs-generated'],
     },
     {
-      id: `sugg-${Date.now()}-5`,
+      id: `sugg-${ts}-5`,
       title: 'Smart Field Anchor Auto-Detection for PDF Placeholders',
       description:
         'Analyze uploaded documents for standard text tags like {{signature}}, {{date}}, and {{signer_name}} and automatically place corresponding interactive input fields.',
@@ -101,7 +109,7 @@ export function generateSuggestedTasksFromSrs(
       tags: ['ai-engine', 'pdf-processing', 'srs-generated'],
     },
     {
-      id: `sugg-${Date.now()}-6`,
+      id: `sugg-${ts}-6`,
       title: 'Mobile Responsive Signer Interface with Offline State Cache',
       description:
         'Deliver a streamlined mobile signing view with touch-optimized controls and IndexedDB offline caching for contract review during intermittent network conditions.',
@@ -116,4 +124,15 @@ export function generateSuggestedTasksFromSrs(
       tags: ['mobile', 'offline', 'srs-generated'],
     },
   ];
+
+  return rawTasks.map((t) => ({
+    ...t,
+    originalTitle: t.title,
+    originalDescription: t.description,
+    originalPriority: t.priority,
+    originalType: t.type,
+    originalAcceptanceCriteria: t.acceptanceCriteria,
+    isEdited: false,
+  }));
 }
+
