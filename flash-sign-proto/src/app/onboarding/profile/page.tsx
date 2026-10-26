@@ -35,9 +35,12 @@ const DEPARTMENT_OPTIONS = [
   'Sales & Client Relations',
 ];
 
+import { DEMO_PRESET_USERS } from '@/types/demo-auth';
+
 export default function ProfileSetupPage() {
   const router = useRouter();
-  const { currentUser, updateProfile } = useDemoAuth();
+  const { currentUser: authUser, updateProfile } = useDemoAuth();
+  const currentUser = authUser || DEMO_PRESET_USERS[0];
 
   const [avatarColor, setAvatarColor] = useState(currentUser.avatarColor || '#00c2a8');
   const [avatarImage, setAvatarImage] = useState<string | undefined>(undefined);

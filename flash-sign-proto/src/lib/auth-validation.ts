@@ -30,11 +30,11 @@ export const resetPasswordSchema = z
 
 export type ResetPasswordFormData = z.infer<typeof resetPasswordSchema>;
 
-export const registerSchema = z
+export const signUpSchema = z
   .object({
     fullName: z.string().min(2, 'Full name must be at least 2 characters'),
-    email: z.string().min(1, 'Work email is required').email('Please enter a valid work email address'),
-    companyName: z.string().optional(),
+    email: z.string().min(1, 'Work email is required').email('Please enter a valid email address'),
+    jobTitle: z.string().optional(),
     password: z
       .string()
       .min(8, 'Password must be at least 8 characters')
@@ -50,7 +50,58 @@ export const registerSchema = z
     path: ['confirmPassword'],
   });
 
-export type RegisterFormData = z.infer<typeof registerSchema>;
+export type SignUpFormData = z.infer<typeof signUpSchema>;
+
+export const ORGANIZATION_SIZES = [
+  'Just Me',
+  '2–10 Employees',
+  '11–50 Employees',
+  '51–200 Employees',
+  '201–500 Employees',
+  '500+ Employees',
+] as const;
+
+export const ORGANIZATION_INDUSTRIES = [
+  'Software & SaaS',
+  'Information Technology & Services',
+  'Financial Services & Fintech',
+  'Healthcare & Biotechnology',
+  'E-commerce & Retail',
+  'Education & Edtech',
+  'Media & Entertainment',
+  'Manufacturing & Hardware',
+  'Consulting & Professional Services',
+  'Other',
+] as const;
+
+export const createOrganizationSchema = z.object({
+  name: z.string().min(2, 'Organization name must be at least 2 characters'),
+  slug: z
+    .string()
+    .min(2, 'Workspace slug must be at least 2 characters')
+    .max(50, 'Workspace slug must be under 50 characters')
+    .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug can only contain lowercase letters, numbers, and single hyphens'),
+  industry: z.string().min(1, 'Please select an industry'),
+  size: z.string().min(1, 'Please select organization size'),
+  website: z
+    .string()
+    .optional()
+    .refine((val) => !val || /^https?:\/\/.+/.test(val) || /^[\w-]+\.[a-z]{2,}/i.test(val), {
+      message: 'Please enter a valid website URL (e.g. flashsign.com or https://flashsign.com)',
+    }),
+  description: z.string().max(300, 'Description must be under 300 characters').optional(),
+});
+
+export type CreateOrganizationFormData = z.infer<typeof createOrganizationSchema>;
+
+export function generateSlug(name: string): string {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^\w\s-]/g, '')
+    .replace(/[\s_-]+/g, '-')
+    .replace(/^-+|-+$/g, '');
+}
 
 export const workspaceCreateSchema = z.object({
   name: z.string().min(2, 'Workspace name must be at least 2 characters'),

@@ -14,13 +14,18 @@ export interface DemoUser {
   id: string;
   fullName: string;
   email: string;
+  password?: string;
   jobTitle?: string;
   department?: string;
   timezone?: string;
   bio?: string;
   role: DemoRole;
+  organizationId?: string | null;
+  registrationCompleted?: boolean;
+  organizationSetupCompleted?: boolean;
   avatarColor?: string;
   avatarInitials?: string;
+  createdAt?: string;
 }
 
 export interface DemoWorkspace {
@@ -28,12 +33,17 @@ export interface DemoWorkspace {
   name: string;
   description?: string;
   type?: string;
+  industry?: string;
+  size?: string;
   companySize?: string;
+  website?: string;
   slug: string;
+  ownerId?: string;
   memberCount: number;
   activeProjectCount: number;
   accentColor?: string;
   initials?: string;
+  createdAt?: string;
 }
 
 export interface DemoPreferences {
@@ -129,40 +139,72 @@ export const DEMO_ROLE_OPTIONS: RoleOption[] = [
 
 export const INITIAL_DEMO_WORKSPACES: DemoWorkspace[] = [
   {
+    id: 'ws-flash',
+    name: 'Flash Technologies',
+    description: 'Unified project management, digital agreements, and AI agent execution suite.',
+    type: 'Software Development',
+    industry: 'Software & Technology',
+    size: '51–200 Employees',
+    companySize: '51–200 Employees',
+    website: 'https://flashsign.com',
+    slug: 'flash-technologies',
+    ownerId: 'user-demo',
+    memberCount: 52,
+    activeProjectCount: 14,
+    accentColor: '#00c2a8',
+    initials: 'FT',
+    createdAt: '2026-01-15T09:00:00Z',
+  },
+  {
     id: 'ws-acme',
     name: 'Acme Digital',
     description: 'Enterprise digital engineering & cloud solutions group.',
     type: 'Software Development',
-    companySize: '51–200 employees',
+    industry: 'Software & Technology',
+    size: '51–200 Employees',
+    companySize: '51–200 Employees',
+    website: 'https://acmedigital.io',
     slug: 'acme-digital',
+    ownerId: 'user-sarah',
     memberCount: 48,
     activeProjectCount: 12,
     accentColor: '#00c2a8',
     initials: 'AD',
+    createdAt: '2026-01-10T09:00:00Z',
   },
   {
     id: 'ws-northstar',
     name: 'Northstar Software',
     description: 'B2B SaaS product studio building next-generation fintech tools.',
     type: 'Technology Startup',
-    companySize: '11–50 employees',
+    industry: 'Financial Services & Fintech',
+    size: '11–50 Employees',
+    companySize: '11–50 Employees',
+    website: 'https://northstar.io',
     slug: 'northstar-sw',
+    ownerId: 'user-alex',
     memberCount: 24,
     activeProjectCount: 7,
     accentColor: '#3b82f6',
     initials: 'NS',
+    createdAt: '2026-02-01T09:00:00Z',
   },
   {
     id: 'ws-vertex',
     name: 'Vertex Labs',
     description: 'Applied AI research & production agent orchestration laboratory.',
     type: 'Consulting',
-    companySize: '1–10 employees',
+    industry: 'Consulting & Professional Services',
+    size: 'Just Me',
+    companySize: 'Just Me',
+    website: 'https://vertexlabs.ai',
     slug: 'vertex-labs',
+    ownerId: 'user-elena',
     memberCount: 16,
     activeProjectCount: 5,
     accentColor: '#8b5cf6',
     initials: 'VL',
+    createdAt: '2026-02-15T09:00:00Z',
   },
 ];
 
@@ -177,39 +219,88 @@ export const PRESET_AVATAR_COLORS = [
 
 export const DEMO_PRESET_USERS: DemoUser[] = [
   {
+    id: 'user-demo',
+    fullName: 'Demo User',
+    email: 'demo@flashsign.com',
+    password: 'Demo123!',
+    jobTitle: 'Product Director',
+    department: 'Product Delivery',
+    timezone: 'America/New_York (UTC-5)',
+    bio: 'Primary demo account for evaluating Flash Sign onboarding, management, and e-signatures.',
+    role: 'org_admin',
+    organizationId: 'ws-flash',
+    registrationCompleted: true,
+    organizationSetupCompleted: true,
+    avatarColor: '#00c2a8',
+    avatarInitials: 'DU',
+    createdAt: '2026-01-01T09:00:00Z',
+  },
+  {
     id: 'user-sarah',
     fullName: 'Sarah Chen',
     email: 'sarah.chen@acmedigital.com',
+    password: 'Demo123!',
     jobTitle: 'VP of Product',
     department: 'Product & Design',
     timezone: 'America/New_York (UTC-5)',
     bio: 'Overseeing core platform roadmap, cross-functional sprints, and customer deliverables.',
     role: 'product_owner',
+    organizationId: 'ws-acme',
+    registrationCompleted: true,
+    organizationSetupCompleted: true,
     avatarColor: '#00c2a8',
     avatarInitials: 'SC',
+    createdAt: '2026-01-10T09:00:00Z',
   },
   {
     id: 'user-alex',
     fullName: 'Alex Rivera',
     email: 'alex.rivera@acmedigital.com',
+    password: 'Demo123!',
     jobTitle: 'Staff Software Architect',
     department: 'Engineering',
     timezone: 'America/Los_Angeles (UTC-8)',
     bio: 'Lead architect building AI-agent workflows and high-concurrency microservices.',
     role: 'engineering_lead',
+    organizationId: 'ws-acme',
+    registrationCompleted: true,
+    organizationSetupCompleted: true,
     avatarColor: '#2563eb',
     avatarInitials: 'AR',
+    createdAt: '2026-01-10T09:00:00Z',
   },
   {
     id: 'user-elena',
     fullName: 'Elena Rostova',
     email: 'elena.r@acmedigital.com',
+    password: 'Demo123!',
     jobTitle: 'Head of Legal & Compliance',
     department: 'Legal Operations',
     timezone: 'Europe/London (UTC+0)',
     bio: 'Managing enterprise agreements, digital signature audit trails, and data governance.',
     role: 'document_manager',
+    organizationId: 'ws-acme',
+    registrationCompleted: true,
+    organizationSetupCompleted: true,
     avatarColor: '#7c3aed',
     avatarInitials: 'ER',
+    createdAt: '2026-01-10T09:00:00Z',
+  },
+  {
+    id: 'user-incomplete',
+    fullName: 'Taylor Morgan',
+    email: 'incomplete@flashsign.com',
+    password: 'Demo123!',
+    jobTitle: 'Founder & CEO',
+    department: 'Executive',
+    timezone: 'America/New_York (UTC-5)',
+    bio: 'New user registered without completing organization setup.',
+    role: 'org_admin',
+    organizationId: null,
+    registrationCompleted: true,
+    organizationSetupCompleted: false,
+    avatarColor: '#d97706',
+    avatarInitials: 'TM',
+    createdAt: '2026-03-01T09:00:00Z',
   },
 ];

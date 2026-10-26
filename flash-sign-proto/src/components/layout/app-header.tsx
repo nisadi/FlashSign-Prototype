@@ -1,11 +1,12 @@
 'use client';
 
 import { useState } from 'react';
-import { usePathname } from 'next/navigation';
+import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bell, Search, Plus, HelpCircle, ChevronRight, Menu, Check } from 'lucide-react';
+import { Bell, Search, Plus, HelpCircle, ChevronRight, Menu, Check, LogOut, Building2, User as UserIcon, ChevronDown } from 'lucide-react';
 import { cn, formatRelative } from '@/lib/utils';
 import { useApp, useCurrentUser, useNotifications } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
 import { QuickCreateDialog } from '@/components/shared/quick-create-dialog';
 import { SearchCommand } from '@/components/shared/search-command';
 
@@ -54,14 +55,23 @@ function Breadcrumbs() {
 }
 
 export function AppHeader() {
+  const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
+  const [userMenuOpen, setUserMenuOpen] = useState(false);
 
   const currentUser = useCurrentUser();
+  const { org, markAllNotificationsRead, toggleSidebar } = useApp();
+  const { logout, selectedWorkspace } = useDemoAuth();
   const notifications = useNotifications();
-  const { markAllNotificationsRead, toggleSidebar } = useApp();
   const unreadCount = notifications.filter(n => !n.isRead).length;
+
+  const handleLogout = () => {
+    setUserMenuOpen(false);
+    logout();
+    router.replace('/login');
+  };
 
   return (
     <>
@@ -157,19 +167,58 @@ export function AppHeader() {
           )}
         </div>
 
-        {/* User Avatar */}
+        {/* User Profile & Menu */}
         {currentUser && (
-          <div className="flex items-center gap-2 pl-2 border-l border-line">
-            <div
-              className="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-xs"
-              style={{ backgroundColor: currentUser.color || '#00c2a8' }}
+          <div className="relative pl-2 border-l border-line">
+            <button
+              onClick={() => setUserMenuOpen(v => !v)}
+              className="flex items-center gap-2 p-1 rounded-lg hover:bg-mist/50 transition-colors cursor-pointer text-left"
+              aria-label="User profile menu"
             >
-              {currentUser.initials}
-            </div>
-            <div className="hidden xl:block text-left text-xs leading-tight">
-              <p className="font-semibold text-ink">{currentUser.name}</p>
-              <p className="text-[10px] text-muted capitalize">{currentUser.role.replace('_', ' ')}</p>
-            </div>
+              <div
+                className="w-7 h-7 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-xs"
+                style={{ backgroundColor: currentUser.color || '#00c2a8' }}
+              >
+                {currentUser.initials}
+              </div>
+              <div className="hidden xl:block text-left text-xs leading-tight">
+                <p className="font-semibold text-ink leading-none">{currentUser.name}</p>
+                <p className="text-[10px] text-muted capitalize mt-0.5">{selectedWorkspace?.name || org.name}</p>
+              </div>
+              <ChevronDown className="w-3 h-3 text-muted hidden xl:block" />
+            </button>
+
+            {userMenuOpen && (
+              <div className="absolute right-0 top-12 w-64 bg-paper-elevated rounded-xl shadow-2xl border border-line z-50 overflow-hidden animate-fade-up">
+                <div className="p-3 border-b border-line bg-paper">
+                  <p className="font-bold text-xs text-ink truncate">{currentUser.name}</p>
+                  <p className="text-[11px] text-muted truncate mt-0.5">{currentUser.email}</p>
+                  <div className="mt-2 flex items-center gap-1.5 text-[10px] text-ink-soft bg-mist/60 px-2 py-1 rounded-md font-medium">
+                    <Building2 className="w-3 h-3 text-flash-deep shrink-0" />
+                    <span className="truncate">{selectedWorkspace?.name || org.name}</span>
+                  </div>
+                </div>
+
+                <div className="p-1">
+                  <Link
+                    href="/settings/profile"
+                    onClick={() => setUserMenuOpen(false)}
+                    className="flex items-center gap-2 px-3 py-2 text-xs font-medium text-ink hover:bg-mist/40 rounded-lg transition-colors"
+                  >
+                    <UserIcon className="w-3.5 h-3.5 text-muted" />
+                    <span>Profile Settings</span>
+                  </Link>
+
+                  <button
+                    onClick={handleLogout}
+                    className="w-full flex items-center gap-2 px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer text-left"
+                  >
+                    <LogOut className="w-3.5 h-3.5" />
+                    <span>Sign out</span>
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </header>

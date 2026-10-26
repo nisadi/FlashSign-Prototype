@@ -35,9 +35,13 @@ export function safeStorageRemove(key: string): void {
 
 export const STORAGE_KEYS = {
   USER: 'flashsign_demo_user',
+  USERS: 'flashsign_demo_users_list',
   WORKSPACES: 'flashsign_demo_workspaces',
   SELECTED_WORKSPACE: 'flashsign_demo_selected_workspace',
   PREFERENCES: 'flashsign_demo_preferences',
   COMPLETED_STEPS: 'flashsign_demo_completed_steps',
   SESSION_ACTIVE: 'flashsign_demo_session_active',
+  PENDING_SIGNUP: 'flashsign_demo_pending_signup',
+  AUTH_SUCCESS_MSG: 'flashsign_demo_auth_success_msg',
 } as const;
+

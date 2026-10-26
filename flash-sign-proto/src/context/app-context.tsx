@@ -33,6 +33,7 @@ import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGE
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
+import { useDemoAuth } from '@/context/demo-auth-context';
 
 // ── State Shape ────────────────────────────────────────────────────────────────
 export type CreateProjectInput = Partial<Project> & { name: string };
@@ -373,6 +374,60 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (hydrated) saveState(state);
   }, [state, hydrated]);
+
+  const { currentUser: authUser, selectedWorkspace: authOrg, isAuthenticated } = useDemoAuth();
+
+  useEffect(() => {
+    if (!authUser || !isAuthenticated) return;
+
+    setState((prev) => {
+      const existingUserIdx = prev.users.findIndex(
+        (u) => u.id === authUser.id || u.email.toLowerCase() === authUser.email.toLowerCase()
+      );
+
+      const mappedRole: DemoRole =
+        authUser.role === 'executive'
+          ? 'ceo'
+          : authUser.role === 'qa'
+          ? 'qa_tester'
+          : (authUser.role as unknown as DemoRole);
+
+      const mappedUser: User = {
+        id: authUser.id,
+        name: authUser.fullName,
+        email: authUser.email,
+        initials: authUser.avatarInitials || authUser.fullName.slice(0, 2).toUpperCase(),
+        role: mappedRole,
+        title: authUser.jobTitle || 'Team Member',
+        department: authUser.department || 'Executive',
+        color: authUser.avatarColor || '#00c2a8',
+        isActive: true,
+        timeZone: authUser.timezone || 'America/New_York (EST)',
+        createdAt: authUser.createdAt || new Date().toISOString(),
+      };
+
+      let nextUsers = [...prev.users];
+      if (existingUserIdx >= 0) {
+        nextUsers[existingUserIdx] = { ...nextUsers[existingUserIdx], ...mappedUser };
+      } else {
+        nextUsers = [mappedUser, ...nextUsers];
+      }
+
+      const nextOrg: Organization = {
+        ...prev.org,
+        name: authOrg?.name || prev.org.name,
+        slug: authOrg?.slug || prev.org.slug,
+      };
+
+      return {
+        ...prev,
+        currentUserId: authUser.id,
+        demoRole: mappedRole,
+        users: nextUsers,
+        org: nextOrg,
+      };
+    });
+  }, [authUser, authOrg, isAuthenticated]);
 
   const update = useCallback((updater: (prev: AppState) => AppState) => {
     setState(updater);

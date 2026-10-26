@@ -8,6 +8,7 @@ import { WorkspaceCard } from '@/components/workspace/workspace-card';
 import { CreateWorkspaceDialog } from '@/components/workspace/create-workspace-dialog';
 import { PrototypeNotice } from '@/components/shared/prototype-notice';
 import { useDemoAuth } from '@/context/demo-auth-context';
+import { DEMO_PRESET_USERS } from '@/types/demo-auth';
 import {
   Plus,
   LogOut,
@@ -21,7 +22,7 @@ import {
 export default function WorkspaceSelectionPage() {
   const router = useRouter();
   const {
-    currentUser,
+    currentUser: authUser,
     workspaces,
     selectedWorkspace,
     selectWorkspace,
@@ -29,6 +30,7 @@ export default function WorkspaceSelectionPage() {
     logout,
     resetDemo,
   } = useDemoAuth();
+  const currentUser = authUser || DEMO_PRESET_USERS[0];
 
   const [isDialogOpen, setIsDialogOpen] = useState(false);
 

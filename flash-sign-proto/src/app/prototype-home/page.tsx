@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { FlashSignLogo } from '@/components/shared/flash-sign-logo';
 import { PrototypeNotice } from '@/components/shared/prototype-notice';
 import { useDemoAuth } from '@/context/demo-auth-context';
+import { DEMO_PRESET_USERS } from '@/types/demo-auth';
 import {
   Building2,
   User,
@@ -24,12 +25,13 @@ import {
 export default function PrototypeHomePage() {
   const router = useRouter();
   const {
-    currentUser,
+    currentUser: authUser,
     selectedWorkspace,
     preferences,
     logout,
     resetDemo,
   } = useDemoAuth();
+  const currentUser = authUser || DEMO_PRESET_USERS[0];
 
   const handleLogout = () => {
     logout();

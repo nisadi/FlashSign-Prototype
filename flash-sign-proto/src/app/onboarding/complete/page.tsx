@@ -17,9 +17,12 @@ import {
   Check,
 } from 'lucide-react';
 
+import { DEMO_PRESET_USERS } from '@/types/demo-auth';
+
 export default function OnboardingCompletePage() {
   const router = useRouter();
-  const { currentUser, selectedWorkspace, preferences } = useDemoAuth();
+  const { currentUser: authUser, selectedWorkspace, preferences } = useDemoAuth();
+  const currentUser = authUser || DEMO_PRESET_USERS[0];
 
   return (
     <OnboardingStepLayout
