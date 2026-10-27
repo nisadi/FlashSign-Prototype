@@ -223,17 +223,23 @@ export const MOCK_PROJECTS: Project[] = [
   {
     id: 'p1', name: 'Flash Sign v2.0', key: 'FSV2', description: 'Next-generation e-signature platform with AI-assisted document preparation.',
     status: 'active', health: 'on_track', ownerId: 'u2', teamIds: ['t1', 't2', 't3'], memberIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
-    startDate: d(-60), endDate: d(30), progress: 68, priority: 'critical', tags: ['platform', 'core'],
+    startDate: d(-60), endDate: d(46), progress: 68, priority: 'critical', tags: ['platform', 'core'],
     isFavorite: true, isArchived: false, group: 'Core Platform', accentColor: '#00c2a8',
     goals: ['Launch v2 public beta by end of month', 'Reach <1s document render latency', 'Complete eIDAS compliance checks'],
+    originalStartDate: d(-60), originalEndDate: d(30), originalDuration: 90,
+    currentStartDate: d(-60), currentEndDate: d(46), currentDuration: 106,
+    timelineDifference: 16, timelineStatus: 'extended', totalWorkDays: 98,
     createdAt: d(-60), updatedAt: d(-1),
   },
   {
     id: 'p-mvhmnblw', name: 'Flash Sign v2.0', key: 'FSV2', description: 'Next-generation e-signature platform with AI-assisted document preparation.',
     status: 'active', health: 'on_track', ownerId: 'u2', teamIds: ['t1', 't2', 't3'], memberIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
-    startDate: d(-60), endDate: d(30), progress: 68, priority: 'critical', tags: ['platform', 'core'],
+    startDate: d(-60), endDate: d(46), progress: 68, priority: 'critical', tags: ['platform', 'core'],
     isFavorite: true, isArchived: false, group: 'Core Platform', accentColor: '#00c2a8',
     goals: ['Launch v2 public beta by end of month', 'Reach <1s document render latency', 'Complete eIDAS compliance checks'],
+    originalStartDate: d(-60), originalEndDate: d(30), originalDuration: 90,
+    currentStartDate: d(-60), currentEndDate: d(46), currentDuration: 106,
+    timelineDifference: 16, timelineStatus: 'extended', totalWorkDays: 98,
     createdAt: d(-60), updatedAt: d(-1),
   },
   {
@@ -242,6 +248,9 @@ export const MOCK_PROJECTS: Project[] = [
     startDate: d(-30), endDate: d(14), progress: 42, priority: 'high', tags: ['client', 'integration'],
     isFavorite: true, isArchived: false, group: 'Client Engagements', accentColor: '#3b82f6',
     goals: ['Production deployment for 2,000 corporate users', '100% test coverage on webhook queues'],
+    originalStartDate: d(-30), originalEndDate: d(14), originalDuration: 44,
+    currentStartDate: d(-30), currentEndDate: d(14), currentDuration: 44,
+    timelineDifference: 0, timelineStatus: 'on_schedule', totalWorkDays: 32,
     createdAt: d(-30), updatedAt: d(-2),
   },
   {
@@ -250,22 +259,31 @@ export const MOCK_PROJECTS: Project[] = [
     startDate: d(-45), endDate: d(45), progress: 55, priority: 'high', tags: ['ai', 'platform'],
     isFavorite: true, isArchived: false, group: 'AI & Automation', accentColor: '#8b5cf6',
     goals: ['Autonomous bug triaging pipeline', 'Multi-model fallback support (Claude + Gemini)'],
+    originalStartDate: d(-45), originalEndDate: d(45), originalDuration: 90,
+    currentStartDate: d(-45), currentEndDate: d(45), currentDuration: 90,
+    timelineDifference: 0, timelineStatus: 'on_schedule', totalWorkDays: 52,
     createdAt: d(-45), updatedAt: d(-3),
   },
   {
     id: 'p4', name: 'Mobile App Beta', key: 'MOB', description: 'iOS and Android mobile client for document signing on the go.',
     status: 'planning', health: 'on_track', ownerId: 'u3', teamIds: ['t2', 't3'], memberIds: ['u3', 'u6', 'u7'],
-    startDate: d(5), endDate: d(90), progress: 8, priority: 'medium', tags: ['mobile', 'beta'],
+    startDate: d(5), endDate: d(78), progress: 8, priority: 'medium', tags: ['mobile', 'beta'],
     isFavorite: false, isArchived: false, group: 'Product Studio', accentColor: '#ec4899',
     goals: ['TestFlight beta with 500 external signers', 'Biometric sign unlock'],
+    originalStartDate: d(5), originalEndDate: d(85), originalDuration: 80,
+    currentStartDate: d(5), currentEndDate: d(78), currentDuration: 73,
+    timelineDifference: -7, timelineStatus: 'shortened', totalWorkDays: 45,
     createdAt: d(-10), updatedAt: d(-1),
   },
   {
     id: 'p5', name: 'Security Hardening Q4', key: 'SEC', description: 'Pen testing, SOC 2 gap analysis, and remediation for Q4 audit.',
     status: 'active', health: 'off_track', ownerId: 'u8', teamIds: ['t1', 't4'], memberIds: ['u8', 'u4', 'u14'],
-    startDate: d(-20), endDate: d(10), progress: 30, priority: 'critical', tags: ['security', 'compliance'],
+    startDate: d(-20), endDate: d(20), progress: 30, priority: 'critical', tags: ['security', 'compliance'],
     isFavorite: false, isArchived: false, group: 'Compliance & IT', accentColor: '#ef4444',
     goals: ['Zero high-severity findings on re-test', 'Complete SOC 2 Type II audit report'],
+    originalStartDate: d(-20), originalEndDate: d(10), originalDuration: 30,
+    currentStartDate: d(-20), currentEndDate: d(20), currentDuration: 40,
+    timelineDifference: 10, timelineStatus: 'extended', totalWorkDays: 28,
     createdAt: d(-20), updatedAt: d(-1),
   },
   {
@@ -274,6 +292,9 @@ export const MOCK_PROJECTS: Project[] = [
     startDate: d(-90), endDate: d(-15), progress: 100, priority: 'medium', tags: ['ux', 'growth'],
     isFavorite: false, isArchived: false, group: 'Growth & UX', accentColor: '#10b981',
     goals: ['Increase first-envelope completion rate by 25%'],
+    originalStartDate: d(-90), originalEndDate: d(-15), originalDuration: 75,
+    currentStartDate: d(-90), currentEndDate: d(-15), currentDuration: 75,
+    timelineDifference: 0, timelineStatus: 'completed', totalWorkDays: 40,
     createdAt: d(-90), updatedAt: d(-15),
   },
 ];
@@ -289,15 +310,15 @@ export const MOCK_SPRINTS: Sprint[] = [
 
 // ── Milestones ────────────────────────────────────────────────────────────────
 export const MOCK_MILESTONES: Milestone[] = [
-  { id: 'm1', projectId: 'p1', name: 'Beta Launch', description: 'Public beta for v2.0 signing platform', dueDate: d(14), status: 'upcoming', progress: 72 },
-  { id: 'm2', projectId: 'p1', name: 'GA Release', description: 'General availability of Flash Sign v2.0', dueDate: d(30), status: 'upcoming', progress: 45 },
-  { id: 'm3', projectId: 'p2', name: 'ACME Go-Live', description: 'ACME Corp production deployment', dueDate: d(14), status: 'at_risk', progress: 42 },
-  { id: 'm4', projectId: 'p3', name: 'Agent MVP', description: 'Multi-agent task execution for developers', dueDate: d(21), status: 'upcoming', progress: 55 },
-  { id: 'm5', projectId: 'p5', name: 'SOC 2 Report', description: 'External auditor delivers final report', dueDate: d(10), status: 'at_risk', progress: 30 },
-  { id: 'm6', projectId: 'p6', name: 'Onboarding v2 Live', description: 'New onboarding flow deployed to production', dueDate: d(-15), status: 'completed', progress: 100 },
-  { id: 'm7', projectId: 'p4', name: 'Mobile Prototype Alpha', description: 'Internal testing build on TestFlight & Play Beta', dueDate: d(25), status: 'upcoming', progress: 15 },
-  { id: 'm8', projectId: 'p2', name: 'API Contract Finalization', description: 'Sign-off on REST OpenAPI specs with ACME architects', dueDate: d(2), status: 'completed', progress: 100 },
-  { id: 'm9', projectId: 'p1', name: 'Audit Compliance Baseline', description: 'Cryptographic hash verification for agreement trails', dueDate: d(18), status: 'upcoming', progress: 60 },
+  { id: 'm1', projectId: 'p1', name: 'Beta Launch', description: 'Public beta for v2.0 signing platform with core canvas', startDate: d(-60), endDate: d(14), dueDate: d(14), status: 'upcoming', progress: 72, estimatedDuration: 45 },
+  { id: 'm2', projectId: 'p1', name: 'GA Release', description: 'General availability of Flash Sign v2.0 with bulk send & performance', startDate: d(15), endDate: d(46), dueDate: d(46), status: 'upcoming', progress: 45, estimatedDuration: 40 },
+  { id: 'm9', projectId: 'p1', name: 'Audit Compliance Baseline', description: 'Cryptographic hash verification for agreement trails', startDate: d(-40), endDate: d(18), dueDate: d(18), status: 'upcoming', progress: 60, estimatedDuration: 30 },
+  { id: 'm3', projectId: 'p2', name: 'ACME Go-Live', description: 'ACME Corp production deployment', startDate: d(-30), endDate: d(14), dueDate: d(14), status: 'at_risk', progress: 42, estimatedDuration: 44 },
+  { id: 'm4', projectId: 'p3', name: 'Agent MVP', description: 'Multi-agent task execution for developers', startDate: d(-45), endDate: d(21), dueDate: d(21), status: 'upcoming', progress: 55, estimatedDuration: 66 },
+  { id: 'm5', projectId: 'p5', name: 'SOC 2 Report', description: 'External auditor delivers final report', startDate: d(-20), endDate: d(20), dueDate: d(20), status: 'at_risk', progress: 30, estimatedDuration: 40 },
+  { id: 'm6', projectId: 'p6', name: 'Onboarding v2 Live', description: 'New onboarding flow deployed to production', startDate: d(-90), endDate: d(-15), dueDate: d(-15), status: 'completed', progress: 100, estimatedDuration: 75 },
+  { id: 'm7', projectId: 'p4', name: 'Mobile Prototype Alpha', description: 'Internal testing build on TestFlight & Play Beta', startDate: d(5), endDate: d(25), dueDate: d(25), status: 'upcoming', progress: 15, estimatedDuration: 20 },
+  { id: 'm8', projectId: 'p2', name: 'API Contract Finalization', description: 'Sign-off on REST OpenAPI specs with ACME architects', startDate: d(-25), endDate: d(2), dueDate: d(2), status: 'completed', progress: 100, estimatedDuration: 27 },
 ];
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
@@ -307,6 +328,7 @@ export const MOCK_TASKS: Task[] = [
     id: 'task1', key: 'FSV2-101', title: 'Redesign signature placement canvas',
     description: 'Implement a drag-and-drop canvas for placing signature, date, and text fields on PDF documents.',
     type: 'story', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u6', reporterId: 'u3',
+    milestoneId: 'm1', estimatedDuration: 14,
     storyPoints: 8, startDate: d(-14), dueDate: d(-3), tags: ['ui', 'canvas'],
     checklist: [
       { id: 'chk1', text: 'Touch device support for tablet users', completed: true },
@@ -317,11 +339,28 @@ export const MOCK_TASKS: Task[] = [
     attachments: ['Canvas_Spec_v2.pdf'], acceptanceCriteria: 'Users can drag fields onto PDF. Fields snap to grid. Mobile-responsive.',
     createdAt: d(-14), updatedAt: d(-2),
   },
+  // Subtasks for task1 (derived duration = 6 + 8 = 14 days)
+  {
+    id: 'sub1', key: 'FSV2-101-1', title: 'Canvas coordinate engine & snapping',
+    description: 'Grid snapping logic and matrix transformation for multi-DPI displays',
+    type: 'subtask', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u6', reporterId: 'u6',
+    parentId: 'task1', milestoneId: 'm1', estimatedDuration: 6, startDate: d(-14), dueDate: d(-8),
+    tags: ['canvas'], comments: [], attachments: [], createdAt: d(-14), updatedAt: d(-8),
+  },
+  {
+    id: 'sub2', key: 'FSV2-101-2', title: 'Touch & stylus gesture calibration',
+    description: 'Apple Pencil and Android tablet stylus curve smoothing and pressure thresholds',
+    type: 'subtask', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u6', reporterId: 'u6',
+    parentId: 'task1', milestoneId: 'm1', estimatedDuration: 8, startDate: d(-8), dueDate: d(-3),
+    tags: ['tablet'], comments: [], attachments: [], createdAt: d(-8), updatedAt: d(-3),
+  },
+
   {
     id: 'task2', key: 'FSV2-102', title: 'AI field auto-detection',
     description: 'Use Claude to auto-suggest signature, date, and initials fields based on document content.',
     type: 'story', status: 'in_progress', priority: 'critical', projectId: 'p1', sprintId: 's1', assigneeId: 'u5', reporterId: 'u3',
-    storyPoints: 13, startDate: d(-10), dueDate: d(1), tags: ['ai', 'ml'],
+    milestoneId: 'm1', estimatedDuration: 20,
+    storyPoints: 13, startDate: d(-10), dueDate: d(10), tags: ['ai', 'ml'],
     checklist: [
       { id: 'chk4', text: 'Document tokenization pipeline', completed: true },
       { id: 'chk5', text: 'Bounding box precision verification', completed: false },
@@ -329,10 +368,27 @@ export const MOCK_TASKS: Task[] = [
     comments: [], attachments: [], acceptanceCriteria: 'AI detects ≥85% of signature fields. User can accept or dismiss suggestions.',
     createdAt: d(-14), updatedAt: d(-1),
   },
+  // Subtasks for task2 (derived duration = 8 + 12 = 20 days)
+  {
+    id: 'sub3', key: 'FSV2-102-1', title: 'OCR & bounding box parsing pipeline',
+    description: 'Extract text bounding boxes and line anchors from PDF pages',
+    type: 'subtask', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u5', reporterId: 'u3',
+    parentId: 'task2', milestoneId: 'm1', estimatedDuration: 8, startDate: d(-10), dueDate: d(-2),
+    tags: ['ai'], comments: [], attachments: [], createdAt: d(-10), updatedAt: d(-2),
+  },
+  {
+    id: 'sub4', key: 'FSV2-102-2', title: 'Claude vision prompt tuning & scoring',
+    description: 'System prompt iteration to improve accuracy on non-standard NDA templates',
+    type: 'subtask', status: 'in_progress', priority: 'critical', projectId: 'p1', sprintId: 's1', assigneeId: 'u5', reporterId: 'u3',
+    parentId: 'task2', milestoneId: 'm1', estimatedDuration: 12, startDate: d(-2), dueDate: d(10),
+    tags: ['ai', 'claude'], comments: [], attachments: [], createdAt: d(-2), updatedAt: d(-1),
+  },
+
   {
     id: 'task3', key: 'FSV2-103', title: 'Fix email delivery latency',
     description: 'Signing invitation emails take >3 minutes to deliver in production.',
     type: 'bug', status: 'in_progress', priority: 'critical', projectId: 'p1', sprintId: 's1', assigneeId: 'u14', reporterId: 'u7',
+    milestoneId: 'm1', estimatedDuration: 5,
     storyPoints: 5, startDate: d(-5), dueDate: d(0), tags: ['email', 'infra'],
     checklist: [
       { id: 'chk6', text: 'SES rate limit audit', completed: true },
@@ -345,6 +401,7 @@ export const MOCK_TASKS: Task[] = [
     id: 'task4', key: 'FSV2-104', title: 'Audit log for signing events',
     description: 'Record IP address, timestamp, and geolocation for every signing action.',
     type: 'story', status: 'review', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u5', reporterId: 'u9',
+    milestoneId: 'm9', estimatedDuration: 8,
     storyPoints: 5, startDate: d(-12), dueDate: d(2), tags: ['audit', 'compliance'],
     checklist: [
       { id: 'chk8', text: 'Cryptographic SHA-256 event chaining', completed: true },
@@ -356,24 +413,43 @@ export const MOCK_TASKS: Task[] = [
     id: 'task5', key: 'FSV2-105', title: 'Bulk send agreements',
     description: 'Allow document managers to send a template to multiple recipients in one operation.',
     type: 'story', status: 'todo', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
-    storyPoints: 8, startDate: d(1), dueDate: d(10), tags: ['bulk', 'feature'],
+    milestoneId: 'm2', estimatedDuration: 18,
+    storyPoints: 8, startDate: d(1), dueDate: d(19), tags: ['bulk', 'feature'],
     checklist: [
       { id: 'chk10', text: 'CSV recipient list parsing', completed: false },
       { id: 'chk11', text: 'Per-recipient custom tag merge', completed: false },
     ],
     comments: [], attachments: [], createdAt: d(-5), updatedAt: d(-5),
   },
+  // Subtasks for task5 (derived duration = 6 + 12 = 18 days)
+  {
+    id: 'sub5', key: 'FSV2-105-1', title: 'CSV recipient parsing & schema validation',
+    description: 'Sanitize emails, names, custom field values from uploaded CSV files',
+    type: 'subtask', status: 'todo', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
+    parentId: 'task5', milestoneId: 'm2', estimatedDuration: 6, startDate: d(1), dueDate: d(7),
+    tags: ['bulk'], comments: [], attachments: [], createdAt: d(-5), updatedAt: d(-5),
+  },
+  {
+    id: 'sub6', key: 'FSV2-105-2', title: 'Parallel envelope dispatch queue worker',
+    description: 'High-throughput async background worker with exponential backoff on bounce',
+    type: 'subtask', status: 'todo', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u4', reporterId: 'u3',
+    parentId: 'task5', milestoneId: 'm2', estimatedDuration: 12, startDate: d(7), dueDate: d(19),
+    tags: ['queue'], comments: [], attachments: [], createdAt: d(-5), updatedAt: d(-5),
+  },
+
   {
     id: 'task6', key: 'FSV2-106', title: 'Dark mode support',
     description: 'Implement system-aware and manual dark mode for the signing portal.',
     type: 'task', status: 'todo', priority: 'low', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
-    storyPoints: 3, startDate: d(3), dueDate: d(12), tags: ['ui', 'theme'],
+    milestoneId: 'm2', estimatedDuration: 6,
+    storyPoints: 3, startDate: d(3), dueDate: d(9), tags: ['ui', 'theme'],
     checklist: [], comments: [], attachments: [], createdAt: d(-4), updatedAt: d(-4),
   },
   {
     id: 'task7', key: 'FSV2-107', title: 'Signing certificate PDF',
     description: 'Generate a verifiable PDF certificate after all parties have signed.',
     type: 'story', status: 'blocked', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u14', reporterId: 'u9',
+    milestoneId: 'm2', estimatedDuration: 12,
     storyPoints: 8, startDate: d(-12), dueDate: d(3), tags: ['certificate', 'legal'],
     checklist: [
       { id: 'chk12', text: 'Certificate QR code verification link', completed: true },
@@ -386,7 +462,8 @@ export const MOCK_TASKS: Task[] = [
     id: 'task8', key: 'FSV2-108', title: 'Optimize PDF rendering performance',
     description: 'PDF pages take 4–8 seconds to render. Target <1 second for typical 20-page documents.',
     type: 'task', status: 'todo', priority: 'high', projectId: 'p1', assigneeId: 'u5', reporterId: 'u4',
-    storyPoints: 5, startDate: d(4), dueDate: d(14), tags: ['performance', 'pdf'],
+    milestoneId: 'm2', estimatedDuration: 27,
+    storyPoints: 5, startDate: d(19), dueDate: d(46), tags: ['performance', 'pdf'],
     checklist: [], comments: [], attachments: [], createdAt: d(-3), updatedAt: d(-3),
   },
 

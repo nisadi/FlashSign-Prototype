@@ -35,6 +35,7 @@ import { ROLE_CONFIGS } from '@/lib/permissions';
 import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
 import { useDemoAuth } from '@/context/demo-auth-context';
+import { calculateProjectTimeline, diffCalendarDays } from '@/lib/timeline-calculator';
 
 // ── State Shape ────────────────────────────────────────────────────────────────
 export type CreateProjectInput = Partial<Project> & { name: string };
@@ -335,9 +336,18 @@ function loadState(): AppState {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (!raw) return getInitialState();
     const saved = JSON.parse(raw) as Partial<AppState>;
+    const initial = getInitialState();
+    const tasks = saved.tasks && saved.tasks.length > 0 ? saved.tasks : initial.tasks;
+    const milestones = saved.milestones && saved.milestones.length > 0 ? saved.milestones : initial.milestones;
+    const rawProjects = saved.projects && saved.projects.length > 0 ? saved.projects : initial.projects;
+    const hydratedProjects = rawProjects.map(p => calculateProjectTimeline(p, tasks, milestones));
+
     return {
-      ...getInitialState(),
+      ...initial,
       ...saved,
+      projects: hydratedProjects,
+      tasks,
+      milestones,
       // A role saved from an earlier session is ignored while the switcher is hidden
       ...(FEATURES.roleSwitcher ? {} : { demoRole: FIXED_DEMO_ROLE, currentUserId: DEMO_ROLE_USERS[FIXED_DEMO_ROLE] }),
       srsTaskHistories: saved.srsTaskHistories || INITIAL_SRS_TASK_HISTORY,
@@ -512,7 +522,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
     // Projects
     addProject: (p) => update(s => {
-      const newProject: Project = {
+      const startDate = p.startDate || new Date().toISOString().split('T')[0];
+      const endDate = p.endDate || p.dueDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0];
+      const duration = Math.max(1, p.originalDuration || diffCalendarDays(startDate, endDate) || 90);
+
+      const baseProject: Project = {
         id: p.id || `p-${Date.now()}`,
         name: p.name,
         key: p.key || p.name.substring(0, 3).toUpperCase(),
@@ -522,9 +536,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ownerId: p.ownerId || s.currentUserId,
         teamIds: p.teamIds || [],
         memberIds: p.memberIds || [s.currentUserId],
-        startDate: p.startDate || new Date().toISOString().split('T')[0],
-        endDate: p.endDate || p.dueDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
-        dueDate: p.dueDate || p.endDate || new Date(Date.now() + 90 * 86400000).toISOString().split('T')[0],
+        startDate,
+        endDate,
+        dueDate: p.dueDate || endDate,
         progress: p.progress || 0,
         priority: p.priority || 'medium',
         tags: p.tags || [],
@@ -534,18 +548,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isArchived: p.isArchived,
         accentColor: p.accentColor,
         goals: p.goals,
+        originalStartDate: p.originalStartDate || startDate,
+        originalEndDate: p.originalEndDate || endDate,
+        originalDuration: duration,
+        currentStartDate: p.currentStartDate || startDate,
+        currentEndDate: p.currentEndDate || endDate,
+        currentDuration: duration,
+        timelineDifference: p.timelineDifference || 0,
+        timelineStatus: p.timelineStatus || 'on_schedule',
+        totalWorkDays: p.totalWorkDays || 0,
         createdAt: p.createdAt || new Date().toISOString(),
         updatedAt: new Date().toISOString(),
       };
+
+      const calculatedProject = calculateProjectTimeline(baseProject, s.tasks, s.milestones);
+
       return {
         ...s,
-        projects: [newProject, ...s.projects],
-        recentProjectIds: [newProject.id, ...s.recentProjectIds.filter(id => id !== newProject.id)],
+        projects: [calculatedProject, ...s.projects],
+        recentProjectIds: [calculatedProject.id, ...s.recentProjectIds.filter(id => id !== calculatedProject.id)],
       };
     }),
     updateProject: (id, updates) => update(s => ({
       ...s,
-      projects: s.projects.map(p => p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p),
+      projects: s.projects.map(p => {
+        if (p.id !== id) return p;
+        const merged = { ...p, ...updates, updatedAt: new Date().toISOString() };
+        return calculateProjectTimeline(merged, s.tasks, s.milestones);
+      }),
     })),
     deleteProject: (id) => update(s => ({
       ...s,
@@ -578,7 +608,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         key: t.key || `FS-${s.tasks.length + 1}`,
         title: t.title,
         description: t.description || '',
-        type: t.type || 'task',
+        type: t.type || (t.parentId ? 'subtask' : 'task'),
         status: t.status || 'todo',
         priority: t.priority || 'medium',
         projectId: t.projectId,
@@ -586,6 +616,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         assigneeId: t.assigneeId,
         reporterId: t.reporterId || s.currentUserId,
         parentId: t.parentId,
+        milestoneId: t.milestoneId,
+        estimatedDuration: Math.max(1, Number(t.estimatedDuration) || Number(t.points) || 3),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
         startDate: t.startDate,
@@ -604,14 +636,21 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatedAt: new Date().toISOString(),
       };
       const nextTasks = [newTask, ...s.tasks];
-      // Recalculate project progress
+      // Recalculate project progress & dynamic timeline
       const projectTasks = nextTasks.filter(item => item.projectId === newTask.projectId);
       const doneCount = projectTasks.filter(item => item.status === 'done').length;
       const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+      
+      const nextProjects = s.projects.map(p => {
+        if (p.id !== newTask.projectId) return p;
+        const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
+        return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+      });
+
       return {
         ...s,
         tasks: nextTasks,
-        projects: s.projects.map(p => p.id === newTask.projectId ? { ...p, progress, updatedAt: new Date().toISOString() } : p),
+        projects: nextProjects,
       };
     }),
     addTasks: (newTaskList) => update(s => {
@@ -620,7 +659,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         key: t.key || `FS-${s.tasks.length + idx + 1}`,
         title: t.title,
         description: t.description || '',
-        type: t.type || 'task',
+        type: t.type || (t.parentId ? 'subtask' : 'task'),
         status: t.status || 'todo',
         priority: t.priority || 'medium',
         projectId: t.projectId,
@@ -628,6 +667,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         assigneeId: t.assigneeId,
         reporterId: t.reporterId || s.currentUserId,
         parentId: t.parentId,
+        milestoneId: t.milestoneId,
+        estimatedDuration: Math.max(1, Number(t.estimatedDuration) || Number(t.points) || 3),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
         startDate: t.startDate,
@@ -653,7 +694,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const projectTasks = nextTasks.filter(item => item.projectId === p.id);
         const doneCount = projectTasks.filter(item => item.status === 'done').length;
         const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
-        return { ...p, progress, updatedAt: new Date().toISOString() };
+        const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
+        return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
       });
 
       return {
@@ -676,7 +718,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const projectTasks = nextTasks.filter(t => t.projectId === projectId);
         const doneCount = projectTasks.filter(t => t.status === 'done').length;
         const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
-        nextProjects = s.projects.map(p => p.id === projectId ? { ...p, progress, updatedAt: new Date().toISOString() } : p);
+        nextProjects = s.projects.map(p => {
+          if (p.id !== projectId) return p;
+          const updatedP = { ...p, progress, updatedAt: now };
+          return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+        });
       }
       return {
         ...s,
@@ -687,14 +733,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }),
     deleteTask: (id) => update(s => {
       const taskToDelete = s.tasks.find(t => t.id === id);
-      const nextTasks = s.tasks.filter(t => t.id !== id);
+      // If deleting a main task, delete all its subtasks as well
+      const nextTasks = s.tasks.filter(t => t.id !== id && t.parentId !== id);
       const projectId = taskToDelete?.projectId;
       let nextProjects = s.projects;
       if (projectId) {
         const projectTasks = nextTasks.filter(t => t.projectId === projectId);
         const doneCount = projectTasks.filter(t => t.status === 'done').length;
         const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
-        nextProjects = s.projects.map(p => p.id === projectId ? { ...p, progress } : p);
+        nextProjects = s.projects.map(p => {
+          if (p.id !== projectId) return p;
+          const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
+          return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+        });
       }
       return {
         ...s,
@@ -736,18 +787,43 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name: m.name,
         description: m.description || '',
         projectId: m.projectId,
-        dueDate: m.dueDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
+        startDate: m.startDate,
+        endDate: m.endDate || m.dueDate,
+        dueDate: m.dueDate || m.endDate || new Date(Date.now() + 30 * 86400000).toISOString().split('T')[0],
         status: m.status || 'pending',
         progress: m.progress || 0,
         taskIds: m.taskIds || [],
+        estimatedDuration: m.estimatedDuration,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
-      return { ...s, milestones: [...s.milestones, newMilestone] };
+      const nextMilestones = [...s.milestones, newMilestone];
+      const nextProjects = s.projects.map(p => {
+        if (p.id !== m.projectId) return p;
+        return calculateProjectTimeline(p, s.tasks, nextMilestones);
+      });
+      return { ...s, milestones: nextMilestones, projects: nextProjects };
     }),
-    updateMilestone: (id, updates) => update(s => ({
-      ...s,
-      milestones: s.milestones.map(m => m.id === id ? { ...m, ...updates } : m),
-    })),
-    deleteMilestone: (id) => update(s => ({ ...s, milestones: s.milestones.filter(m => m.id !== id) })),
+    updateMilestone: (id, updates) => update(s => {
+      const nextMilestones = s.milestones.map(m => m.id === id ? { ...m, ...updates, updatedAt: new Date().toISOString() } : m);
+      const updated = nextMilestones.find(m => m.id === id);
+      const projectId = updated?.projectId;
+      const nextProjects = s.projects.map(p => {
+        if (p.id !== projectId) return p;
+        return calculateProjectTimeline(p, s.tasks, nextMilestones);
+      });
+      return { ...s, milestones: nextMilestones, projects: nextProjects };
+    }),
+    deleteMilestone: (id) => update(s => {
+      const target = s.milestones.find(m => m.id === id);
+      const nextMilestones = s.milestones.filter(m => m.id !== id);
+      const nextTasks = s.tasks.map(t => t.milestoneId === id ? { ...t, milestoneId: undefined } : t);
+      const nextProjects = s.projects.map(p => {
+        if (p.id !== target?.projectId) return p;
+        return calculateProjectTimeline(p, nextTasks, nextMilestones);
+      });
+      return { ...s, milestones: nextMilestones, tasks: nextTasks, projects: nextProjects };
+    }),
 
     // Files
     addFile: (f) => update(s => {

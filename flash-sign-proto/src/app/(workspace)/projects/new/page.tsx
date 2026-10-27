@@ -47,10 +47,17 @@ export default function CreateProjectPage() {
   const [group, setGroup] = useState(SPACES[0]);
   const [priority, setPriority] = useState<ProjectPriority>('high');
   const [status, setStatus] = useState<ProjectStatus>('active');
-  const [startDate, setStartDate] = useState(new Date().toISOString().split('T')[0]);
-  const [endDate, setEndDate] = useState(
-    new Date(Date.now() + 45 * 24 * 3600 * 1000).toISOString().split('T')[0]
-  );
+  const initialStart = new Date().toISOString().split('T')[0];
+  const initialDuration = 90;
+  const calcEnd = (start: string, days: number) => {
+    const d = new Date(start);
+    d.setDate(d.getDate() + days);
+    return d.toISOString().split('T')[0];
+  };
+
+  const [startDate, setStartDate] = useState(initialStart);
+  const [duration, setDuration] = useState(initialDuration);
+  const [endDate, setEndDate] = useState(calcEnd(initialStart, initialDuration));
   const [template, setTemplate] = useState('scrum');
   const [visibility, setVisibility] = useState('workspace');
   const [goalText, setGoalText] = useState('');
@@ -59,6 +66,38 @@ export default function CreateProjectPage() {
     'Achieve zero high-priority blocker defects',
   ]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Synchronize Start Date change -> update End Date
+  const handleStartDateChange = (newStart: string) => {
+    setStartDate(newStart);
+    if (newStart && duration > 0) {
+      setEndDate(calcEnd(newStart, duration));
+    }
+  };
+
+  // Synchronize Duration change -> update End Date
+  const handleDurationChange = (newDurationStr: string) => {
+    const days = parseInt(newDurationStr, 10);
+    if (!isNaN(days) && days > 0) {
+      setDuration(days);
+      setEndDate(calcEnd(startDate, days));
+      if (errors.duration) setErrors(prev => ({ ...prev, duration: '' }));
+    } else {
+      setDuration(0);
+    }
+  };
+
+  // Synchronize End Date change -> update Duration
+  const handleEndDateChange = (newEnd: string) => {
+    setEndDate(newEnd);
+    if (newEnd && startDate) {
+      const diff = Math.round((new Date(newEnd).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
+      if (diff > 0) {
+        setDuration(diff);
+        if (errors.endDate) setErrors(prev => ({ ...prev, endDate: '' }));
+      }
+    }
+  };
 
   const handleToggleMember = (userId: string) => {
     if (selectedMemberIds.includes(userId)) {
@@ -91,6 +130,9 @@ export default function CreateProjectPage() {
     if (!key.trim() || key.trim().length < 2) {
       newErrors.key = 'Project key must be 2–6 characters.';
     }
+    if (duration <= 0) {
+      newErrors.duration = 'Project duration must be at least 1 calendar day.';
+    }
     if (new Date(endDate) < new Date(startDate)) {
       newErrors.endDate = 'Target end date cannot be earlier than start date.';
     }
@@ -113,6 +155,7 @@ export default function CreateProjectPage() {
       memberIds: selectedMemberIds,
       startDate: new Date(startDate).toISOString(),
       endDate: new Date(endDate).toISOString(),
+      dueDate: new Date(endDate).toISOString(),
       progress: 0,
       priority,
       tags: [template, visibility],
@@ -121,6 +164,16 @@ export default function CreateProjectPage() {
       goals,
       isFavorite: false,
       isArchived: false,
+      // Timeline Baseline & Initial Calculated Values
+      originalStartDate: startDate,
+      originalEndDate: endDate,
+      originalDuration: duration,
+      currentStartDate: startDate,
+      currentEndDate: endDate,
+      currentDuration: duration,
+      timelineDifference: 0,
+      timelineStatus: 'on_schedule' as const,
+      totalWorkDays: 0,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
@@ -334,33 +387,73 @@ export default function CreateProjectPage() {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1">
-                Target Start Date
-              </label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => setStartDate(e.target.value)}
-                className="w-full px-3 py-2 text-xs rounded-lg border border-line bg-paper text-ink"
-              />
+          {/* Original Project Timeline Definition */}
+          <div className="p-4 rounded-xl border border-line bg-mist/20 space-y-3">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1">
+              <div>
+                <label className="block text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+                  <Calendar className="w-3.5 h-3.5 text-flash-deep" />
+                  Original Project Timeline
+                </label>
+                <p className="text-[11px] text-muted">
+                  Defines the immutable planned baseline to compare against task progress.
+                </p>
+              </div>
+              <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-paper-elevated border border-line text-[11px] font-mono text-ink">
+                <span className="w-2 h-2 rounded-full bg-flash-deep" />
+                <span>Baseline: {duration} days</span>
+              </div>
             </div>
 
-            <div>
-              <label className="block text-xs font-semibold text-ink mb-1">
-                Target Deadline
-              </label>
-              <input
-                type="date"
-                value={endDate}
-                onChange={e => setEndDate(e.target.value)}
-                className={`w-full px-3 py-2 text-xs rounded-lg border bg-paper text-ink ${
-                  errors.endDate ? 'border-danger' : 'border-line'
-                }`}
-              />
-              {errors.endDate && <p className="text-xs text-danger mt-1">{errors.endDate}</p>}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
+              <div>
+                <label className="block text-[11px] font-semibold text-ink mb-1">
+                  Start Date <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={e => handleStartDateChange(e.target.value)}
+                  className="w-full px-3 py-2 text-xs rounded-lg border border-line bg-paper text-ink font-mono focus:border-flash focus:ring-1 focus:ring-flash"
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-ink mb-1">
+                  Planned Duration (Days) <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="number"
+                  min="1"
+                  max="1825"
+                  value={duration || ''}
+                  onChange={e => handleDurationChange(e.target.value)}
+                  placeholder="e.g. 90"
+                  className={`w-full px-3 py-2 text-xs rounded-lg border bg-paper text-ink font-mono focus:border-flash focus:ring-1 focus:ring-flash ${
+                    errors.duration ? 'border-danger ring-1 ring-danger' : 'border-line'
+                  }`}
+                />
+                {errors.duration && <p className="text-[10px] text-danger mt-1">{errors.duration}</p>}
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-semibold text-ink mb-1">
+                  Target End Date <span className="text-danger">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={e => handleEndDateChange(e.target.value)}
+                  className={`w-full px-3 py-2 text-xs rounded-lg border bg-paper text-ink font-mono focus:border-flash focus:ring-1 focus:ring-flash ${
+                    errors.endDate ? 'border-danger ring-1 ring-danger' : 'border-line'
+                  }`}
+                />
+                {errors.endDate && <p className="text-[10px] text-danger mt-1">{errors.endDate}</p>}
+              </div>
             </div>
+            <p className="text-[11px] text-muted italic">
+              Tip: Modifying duration automatically adjusts the target end date, and vice versa.
+            </p>
           </div>
 
           {/* Members Multi-select pills */}

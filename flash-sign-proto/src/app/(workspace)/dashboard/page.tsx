@@ -126,9 +126,22 @@ export default function DashboardPage() {
                       <ProgressBar value={project.progress} height={4} />
                     </div>
                     <div className="hidden md:flex items-center gap-3 shrink-0">
+                      {project.timelineDifference !== undefined && project.timelineDifference > 0 ? (
+                        <span className="text-[10px] font-bold text-danger bg-danger/10 px-2 py-0.5 rounded">
+                          +{project.timelineDifference}d extended
+                        </span>
+                      ) : project.timelineDifference !== undefined && project.timelineDifference < 0 ? (
+                        <span className="text-[10px] font-bold text-flash-deep bg-flash/10 px-2 py-0.5 rounded">
+                          {project.timelineDifference}d ahead
+                        </span>
+                      ) : (
+                        <span className="text-[10px] font-medium text-muted bg-mist/60 px-2 py-0.5 rounded">
+                          On schedule
+                        </span>
+                      )}
                       <AvatarGroup users={projectUsers} max={3} size="xs" />
                       <HealthBadge health={project.health} />
-                      <span className="text-xs text-muted">{project.progress}%</span>
+                      <span className="text-xs text-muted font-medium">{project.progress}%</span>
                     </div>
                   </Link>
                 );

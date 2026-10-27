@@ -15,13 +15,15 @@ import { ClientPortal, Modal } from '@/components/shared/modal';
 export function TaskDetailDrawer() {
   const {
     activeTaskDrawerId, closeTaskDrawer, tasks, updateTask, deleteTask,
-    users, projects, sprints, addActivity
+    users, projects, sprints, milestones, addTask, openTaskDrawer, addActivity
   } = useApp();
 
   const currentUser = useCurrentUser();
   const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'attachments'>('details');
   const [newChecklistText, setNewChecklistText] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
+  const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
+  const [newSubtaskDuration, setNewSubtaskDuration] = useState(2);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!activeTaskDrawerId) return null;
@@ -33,6 +35,10 @@ export function TaskDetailDrawer() {
   const assignee = users.find(u => u.id === task.assigneeId);
   const reporter = users.find(u => u.id === task.reporterId);
   const sprint = sprints.find(s => s.id === task.sprintId);
+  const projectMilestones = milestones.filter(m => m.projectId === task.projectId);
+  const milestone = milestones.find(m => m.id === task.milestoneId);
+  const parentTask = task.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
+  const subtasks = tasks.filter(t => t.parentId === task.id);
 
   const handleStatusChange = (status: TaskStatus) => {
     updateTask(task.id, { status });
@@ -146,8 +152,26 @@ export function TaskDetailDrawer() {
           </div>
         </div>
 
+        {/* Parent Task Banner if Subtask */}
+        {parentTask && (
+          <div className="px-4 py-2.5 bg-emerald-500/10 border-b border-emerald-500/20 flex items-center justify-between text-xs">
+            <div className="flex items-center gap-2 text-ink">
+              <span className="text-[10px] uppercase font-bold text-flash-deep">Parent Task:</span>
+              <span className="font-mono text-[11px] font-bold text-muted">{parentTask.key}</span>
+              <span className="font-semibold truncate max-w-xs">{parentTask.title}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => openTaskDrawer(parentTask.id)}
+              className="text-xs text-flash-deep font-semibold hover:underline"
+            >
+              View Parent Task →
+            </button>
+          </div>
+        )}
+
         {/* Quick Attribute Bar */}
-        <div className="p-4 sm:px-6 border-b border-line grid grid-cols-2 sm:grid-cols-4 gap-3 bg-paper-elevated text-xs">
+        <div className="p-4 sm:px-6 border-b border-line grid grid-cols-2 sm:grid-cols-5 gap-3 bg-paper-elevated text-xs">
           {/* Status */}
           <div>
             <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Status</label>
@@ -179,6 +203,43 @@ export function TaskDetailDrawer() {
             </select>
           </div>
 
+          {/* Estimated Duration (Live Timeline Recalculation!) */}
+          <div>
+            <label className="block text-[10px] font-semibold text-muted uppercase mb-1 flex items-center gap-1">
+              <Clock className="w-2.5 h-2.5 text-flash-deep" />
+              Duration
+            </label>
+            <div className="flex items-center gap-1">
+              <input
+                type="number"
+                min="1"
+                max="365"
+                value={task.estimatedDuration || task.points || 3}
+                onChange={e => {
+                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
+                  updateTask(task.id, { estimatedDuration: val, points: val });
+                }}
+                className="w-full text-xs font-mono font-bold px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
+              />
+              <span className="text-[10px] text-muted">d</span>
+            </div>
+          </div>
+
+          {/* Milestone Association */}
+          <div>
+            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Milestone</label>
+            <select
+              value={task.milestoneId || ''}
+              onChange={e => updateTask(task.id, { milestoneId: e.target.value || undefined })}
+              className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash truncate"
+            >
+              <option value="">No Milestone</option>
+              {projectMilestones.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+          </div>
+
           {/* Assignee */}
           <div>
             <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Assignee</label>
@@ -192,14 +253,6 @@ export function TaskDetailDrawer() {
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
-          </div>
-
-          {/* Due Date */}
-          <div>
-            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Due Date</label>
-            <span className="block text-xs font-medium px-2 py-1 rounded bg-paper border border-line text-ink">
-              {task.dueDate ? formatDate(task.dueDate) : 'No deadline'}
-            </span>
           </div>
         </div>
 
@@ -344,48 +397,149 @@ export function TaskDetailDrawer() {
           )}
 
           {activeTab === 'checklist' && (
-            <div className="space-y-4">
-              <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold text-ink uppercase tracking-wider">Subtasks & Checklist</h4>
-                <span className="text-xs text-muted">
-                  {task.checklist ? `${task.checklist.filter(c => c.completed).length} of ${task.checklist.length} done` : '0 items'}
-                </span>
-              </div>
+            <div className="space-y-6">
+              {/* Hierarchical Subtasks Section */}
+              <div className="space-y-3">
+                <div className="flex items-center justify-between pb-1 border-b border-line">
+                  <h4 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
+                    <CheckSquare className="w-3.5 h-3.5 text-flash-deep" />
+                    Hierarchical Subtasks ({subtasks.length})
+                  </h4>
+                  <span className="text-xs text-muted">
+                    {subtasks.filter(s => s.status === 'done').length} of {subtasks.length} done
+                  </span>
+                </div>
 
-              <div className="space-y-2">
-                {(task.checklist || []).map((item, idx) => (
-                  <label
-                    key={item.id}
-                    className="flex items-center gap-3 p-2.5 rounded-lg border border-line bg-paper hover:bg-mist/40 transition-colors cursor-pointer"
-                  >
-                    <input
-                      type="checkbox"
-                      checked={item.completed}
-                      onChange={() => handleToggleChecklist(idx)}
-                      className="w-4 h-4 rounded text-flash-deep focus:ring-flash"
-                    />
-                    <span className={`text-xs flex-1 ${item.completed ? 'line-through text-muted' : 'text-ink font-medium'}`}>
-                      {item.text}
-                    </span>
-                  </label>
-                ))}
-              </div>
+                {subtasks.length === 0 ? (
+                  <p className="text-xs text-muted italic py-2">
+                    No detailed subtasks created for this task yet. Add subtasks below to schedule granular work.
+                  </p>
+                ) : (
+                  <div className="space-y-2">
+                    {subtasks.map(sub => (
+                      <div
+                        key={sub.id}
+                        className="p-2.5 rounded-xl border border-line bg-paper flex items-center justify-between gap-2 text-xs"
+                      >
+                        <div
+                          className="flex items-center gap-2 cursor-pointer flex-1 min-w-0"
+                          onClick={() => openTaskDrawer(sub.id)}
+                        >
+                          <span className="font-mono text-[10px] font-bold text-muted">{sub.key}</span>
+                          <span className="font-semibold text-ink truncate hover:text-flash-deep">{sub.title}</span>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-mist text-ink">
+                            {sub.estimatedDuration || 1}d
+                          </span>
+                          <TaskStatusBadge status={sub.status} />
+                          <button
+                            type="button"
+                            onClick={() => deleteTask(sub.id)}
+                            className="p-1 text-muted hover:text-danger rounded"
+                            title="Delete subtask"
+                          >
+                            <Trash2 className="w-3 h-3" />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
 
-              <form onSubmit={handleAddChecklist} className="flex gap-2 pt-2">
-                <input
-                  type="text"
-                  value={newChecklistText}
-                  onChange={e => setNewChecklistText(e.target.value)}
-                  placeholder="Add a subtask or checklist item..."
-                  className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-flash"
-                />
-                <button
-                  type="submit"
-                  className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"
+                {/* Quick Add Subtask Form */}
+                <form
+                  onSubmit={e => {
+                    e.preventDefault();
+                    if (!newSubtaskTitle.trim() || newSubtaskDuration <= 0) return;
+                    addTask({
+                      title: newSubtaskTitle.trim(),
+                      projectId: task.projectId,
+                      parentId: task.id,
+                      milestoneId: task.milestoneId,
+                      estimatedDuration: Number(newSubtaskDuration),
+                      points: Number(newSubtaskDuration),
+                      status: 'todo',
+                      priority: 'medium',
+                      type: 'subtask',
+                    });
+                    setNewSubtaskTitle('');
+                    setNewSubtaskDuration(2);
+                  }}
+                  className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2"
                 >
-                  Add
-                </button>
-              </form>
+                  <input
+                    type="text"
+                    value={newSubtaskTitle}
+                    onChange={e => setNewSubtaskTitle(e.target.value)}
+                    placeholder="New subtask title..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-flash"
+                  />
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <input
+                      type="number"
+                      min="1"
+                      max="100"
+                      value={newSubtaskDuration}
+                      onChange={e => setNewSubtaskDuration(Math.max(1, parseInt(e.target.value, 10) || 1))}
+                      title="Estimated Duration in Days"
+                      className="w-16 px-2 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink font-mono"
+                    />
+                    <span className="text-xs text-muted">days</span>
+                    <button
+                      type="submit"
+                      className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"
+                    >
+                      Add Subtask
+                    </button>
+                  </div>
+                </form>
+              </div>
+
+              {/* Checklist Items */}
+              <div className="space-y-3 pt-3 border-t border-line">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-xs font-bold text-ink uppercase tracking-wider">Quick Checklist</h4>
+                  <span className="text-xs text-muted">
+                    {task.checklist ? `${task.checklist.filter(c => c.completed).length} of ${task.checklist.length} done` : '0 items'}
+                  </span>
+                </div>
+
+                <div className="space-y-2">
+                  {(task.checklist || []).map((item, idx) => (
+                    <label
+                      key={item.id}
+                      className="flex items-center gap-3 p-2.5 rounded-lg border border-line bg-paper hover:bg-mist/40 transition-colors cursor-pointer"
+                    >
+                      <input
+                        type="checkbox"
+                        checked={item.completed}
+                        onChange={() => handleToggleChecklist(idx)}
+                        className="w-4 h-4 rounded text-flash-deep focus:ring-flash"
+                      />
+                      <span className={`text-xs flex-1 ${item.completed ? 'line-through text-muted' : 'text-ink font-medium'}`}>
+                        {item.text}
+                      </span>
+                    </label>
+                  ))}
+                </div>
+
+                <form onSubmit={handleAddChecklist} className="flex gap-2 pt-1">
+                  <input
+                    type="text"
+                    value={newChecklistText}
+                    onChange={e => setNewChecklistText(e.target.value)}
+                    placeholder="Add checklist item..."
+                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-flash"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-mist hover:bg-line text-ink transition-colors"
+                  >
+                    Add
+                  </button>
+                </form>
+              </div>
             </div>
           )}
 

@@ -274,7 +274,7 @@ function ProjectCardItem({
         </p>
 
         {/* Progress Bar */}
-        <div className="mb-4 bg-paper p-3 rounded-xl border border-line/60 space-y-1.5">
+        <div className="mb-4 bg-paper p-3 rounded-xl border border-line/60 space-y-2">
           <div className="flex items-center justify-between text-xs">
             <span className="text-muted text-[11px] font-medium flex items-center gap-1">
               <CheckSquare className="w-3.5 h-3.5 text-flash-deep" />
@@ -287,6 +287,26 @@ function ProjectCardItem({
             color={healthColors[project.health]}
             height={6}
           />
+          {/* Timeline variance badge */}
+          <div className="flex items-center justify-between pt-1 border-t border-line/40 text-[10px]">
+            <span className="text-muted flex items-center gap-1">
+              <Clock className="w-3 h-3 text-muted" />
+              <span>Timeline</span>
+            </span>
+            {project.timelineDifference !== undefined && project.timelineDifference > 0 ? (
+              <span className="font-bold text-danger bg-danger/10 px-1.5 py-0.5 rounded">
+                +{project.timelineDifference}d extended ({project.currentDuration}d total)
+              </span>
+            ) : project.timelineDifference !== undefined && project.timelineDifference < 0 ? (
+              <span className="font-bold text-flash-deep bg-flash/10 px-1.5 py-0.5 rounded">
+                {project.timelineDifference}d shortened ({project.currentDuration}d)
+              </span>
+            ) : (
+              <span className="text-muted font-medium bg-mist/60 px-1.5 py-0.5 rounded">
+                On schedule ({project.originalDuration || 90}d)
+              </span>
+            )}
+          </div>
         </div>
       </div>
 
@@ -327,9 +347,10 @@ function ProjectTable({
               <th className="py-3 px-4">Status</th>
               <th className="py-3 px-4">Priority</th>
               <th className="py-3 px-4">Progress</th>
+              <th className="py-3 px-4">Timeline</th>
               <th className="py-3 px-4">Owner</th>
               <th className="py-3 px-4">Team</th>
-              <th className="py-3 px-4">Due Date</th>
+              <th className="py-3 px-4">Planned End</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-line/60">
@@ -359,12 +380,27 @@ function ProjectTable({
                     <PriorityBadge priority={p.priority} />
                   </td>
                   <td className="py-3 px-4">
-                    <div className="flex items-center gap-2 w-32">
+                    <div className="flex items-center gap-2 w-28">
                       <div className="flex-1 h-1.5 rounded-full bg-line overflow-hidden">
                         <div className="h-full bg-flash-deep" style={{ width: `${p.progress}%` }} />
                       </div>
                       <span className="text-[10px] font-bold text-ink">{p.progress}%</span>
                     </div>
+                  </td>
+                  <td className="py-3 px-4 whitespace-nowrap">
+                    {p.timelineDifference !== undefined && p.timelineDifference > 0 ? (
+                      <span className="inline-flex items-center gap-1 font-bold text-danger bg-danger/10 px-2 py-0.5 rounded text-[10px]">
+                        +{p.timelineDifference}d extended
+                      </span>
+                    ) : p.timelineDifference !== undefined && p.timelineDifference < 0 ? (
+                      <span className="inline-flex items-center gap-1 font-bold text-flash-deep bg-flash/10 px-2 py-0.5 rounded text-[10px]">
+                        {p.timelineDifference}d shortened
+                      </span>
+                    ) : (
+                      <span className="inline-flex items-center gap-1 text-muted font-medium bg-mist/60 px-2 py-0.5 rounded text-[10px]">
+                        On schedule
+                      </span>
+                    )}
                   </td>
                   <td className="py-3 px-4 text-muted truncate max-w-[120px]">
                     {owner?.name || '-'}
@@ -373,7 +409,12 @@ function ProjectTable({
                     <AvatarGroup users={members} max={3} size="xs" />
                   </td>
                   <td className="py-3 px-4 text-muted whitespace-nowrap">
-                    {formatDate(p.endDate)}
+                    <div>
+                      <span className="font-medium text-ink">{formatDate(p.currentEndDate || p.endDate)}</span>
+                      {p.originalEndDate && p.originalEndDate !== (p.currentEndDate || p.endDate) && (
+                        <div className="text-[9px] text-muted line-through">Base: {formatDate(p.originalEndDate)}</div>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

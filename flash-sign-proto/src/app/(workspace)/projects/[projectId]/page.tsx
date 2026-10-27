@@ -6,6 +6,7 @@ import { useRouter } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
+import { ProjectTimelineSummary } from '@/components/projects/project-timeline-summary';
 import { Card, StatCard, Button, ProgressBar } from '@/components/shared/ui';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { AvatarGroup, Avatar } from '@/components/shared/avatar';
@@ -141,6 +142,13 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
             iconColor="var(--danger)"
           />
         </div>
+
+        {/* Project Timeline Summary (Original vs Current Planned Timeline) */}
+        <ProjectTimelineSummary
+          project={project}
+          milestones={projectMilestones}
+          tasks={projectTasks}
+        />
 
         {/* Main Grid */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">

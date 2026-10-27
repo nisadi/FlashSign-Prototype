@@ -56,6 +56,7 @@ export interface Organization {
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled' | 'archived';
 export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track' | 'delayed';
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
+export type TimelineStatus = 'on_schedule' | 'extended' | 'shortened' | 'completed';
 
 export interface Project {
   id: string;
@@ -82,6 +83,16 @@ export interface Project {
   group?: string;
   createdAt: string;
   updatedAt: string;
+  // Timeline management (Original vs Current Calculated)
+  originalStartDate?: string;
+  originalEndDate?: string;
+  originalDuration?: number; // calendar days
+  currentStartDate?: string;
+  currentEndDate?: string;
+  currentDuration?: number; // calendar days
+  timelineDifference?: number; // calendar days diff (positive = extended, negative = shortened)
+  timelineStatus?: TimelineStatus;
+  totalWorkDays?: number; // sum of estimated work durations, distinguished from calendar span
 }
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
@@ -134,6 +145,8 @@ export interface Task {
   assigneeId?: string;
   reporterId: string;
   parentId?: string;
+  milestoneId?: string;
+  estimatedDuration?: number; // Duration in calendar/work days
   storyPoints?: number;
   points?: number;
   startDate?: string;
@@ -225,10 +238,15 @@ export interface Milestone {
   projectId: string;
   name: string;
   description: string;
+  startDate?: string;
+  endDate?: string;
   dueDate: string;
   status: 'upcoming' | 'at_risk' | 'completed' | 'missed' | 'pending' | 'achieved';
   progress?: number;
   taskIds?: string[];
+  estimatedDuration?: number;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 // ─── AI Agents ───────────────────────────────────────────────────────────────
