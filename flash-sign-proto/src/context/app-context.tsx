@@ -6,7 +6,7 @@ import type {
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
-  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange,
+  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
@@ -31,6 +31,7 @@ import type {
 import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
 import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS, MOCK_STATUS_CHANGES } from '@/data/mock-agent-activity';
 import { applyAutoStops } from '@/lib/task-time';
+import { boardColumnsFor, columnOfTask } from '@/lib/board-columns';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
@@ -147,6 +148,12 @@ interface AppActions {
   // Projects
   addProject: (project: CreateProjectInput) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
+  /**
+   * Replace a project's Kanban columns. Cards in a removed column go to the column named in
+   * `moves` (removed column id → target column id); a card whose column now counts as a
+   * different stage changes status, with the usual timer handling.
+   */
+  setBoardColumns: (projectId: string, columns: BoardColumn[], moves: Record<string, string>) => void;
   deleteProject: (id: string) => void;
   archiveProject: (id: string) => void;
   toggleFavoriteProject: (id: string) => void;
@@ -547,6 +554,34 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ...s,
       projects: s.projects.map(p => p.id === id ? { ...p, ...updates, updatedAt: new Date().toISOString() } : p),
     })),
+    setBoardColumns: (projectId, columns, moves) => update(s => {
+      const project = s.projects.find(p => p.id === projectId);
+      if (!project) return s;
+      const before = boardColumnsFor(project);
+      const now = new Date().toISOString();
+      let timing: Pick<AppState, 'workSessions' | 'taskStatusChanges'> = {
+        workSessions: s.workSessions,
+        taskStatusChanges: s.taskStatusChanges,
+      };
+      const nextTasks = s.tasks.map(t => {
+        if (t.projectId !== projectId) return t;
+        const from = columnOfTask(t, before);
+        const targetId = from ? moves[from.id] ?? from.id : undefined;
+        const to = columns.find(c => c.id === targetId) ?? columnOfTask(t, columns);
+        if (!to || (to.status === t.status && columnOfTask(t, columns)?.id === to.id)) return t;
+        if (to.status !== t.status) timing = trackStatusMove({ ...s, ...timing }, t, to.status, now);
+        return { ...t, status: to.status, columnId: to.id, updatedAt: now };
+      });
+      const projectTasks = nextTasks.filter(t => t.projectId === projectId);
+      const doneCount = projectTasks.filter(t => t.status === 'done').length;
+      const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+      return {
+        ...s,
+        ...timing,
+        tasks: nextTasks,
+        projects: s.projects.map(p => p.id === projectId ? { ...p, boardColumns: columns, progress, updatedAt: now } : p),
+      };
+    }),
     deleteProject: (id) => update(s => ({
       ...s,
       projects: s.projects.filter(p => p.id !== id),
@@ -580,6 +615,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         description: t.description || '',
         type: t.type || 'task',
         status: t.status || 'todo',
+        columnId: t.columnId,
         priority: t.priority || 'medium',
         projectId: t.projectId,
         sprintId: t.sprintId,
@@ -622,6 +658,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         description: t.description || '',
         type: t.type || 'task',
         status: t.status || 'todo',
+        columnId: t.columnId,
         priority: t.priority || 'medium',
         projectId: t.projectId,
         sprintId: t.sprintId,

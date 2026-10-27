@@ -80,8 +80,21 @@ export interface Project {
   accentColor?: string;
   goals?: string[];
   group?: string;
+  /** This project's Kanban columns, in board order. Missing = the five default columns. */
+  boardColumns?: BoardColumn[];
   createdAt: string;
   updatedAt: string;
+}
+
+/**
+ * A column on a project's Kanban board. Teams name and order their own columns; each one
+ * counts as one of the fixed task stages, which keeps timing, agents and reports working.
+ */
+export interface BoardColumn {
+  id: string;
+  name: string;
+  color: string;
+  status: TaskStatus;
 }
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
@@ -128,6 +141,8 @@ export interface Task {
   description: string;
   type: TaskType;
   status: TaskStatus;
+  /** The board column the card sits in, when its stage has more than one column */
+  columnId?: string;
   priority: TaskPriority;
   projectId: string;
   sprintId?: string;

@@ -5,7 +5,8 @@ import { useApp, useCurrentUser } from '@/context/app-context';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate, formatRelative } from '@/lib/utils';
-import type { TaskStatus, TaskPriority } from '@/types';
+import { boardColumnsFor, columnOfTask } from '@/lib/board-columns';
+import type { BoardColumn, TaskPriority } from '@/types';
 import {
   X, Trash2, CheckSquare, MessageSquare, Paperclip, Clock, Tag,
   Calendar, User as UserIcon, Plus, Check, AlertCircle, FileText, Sparkles,
@@ -33,9 +34,10 @@ export function TaskDetailDrawer() {
   const assignee = users.find(u => u.id === task.assigneeId);
   const reporter = users.find(u => u.id === task.reporterId);
   const sprint = sprints.find(s => s.id === task.sprintId);
+  const columns = boardColumnsFor(project);
 
-  const handleStatusChange = (status: TaskStatus) => {
-    updateTask(task.id, { status });
+  const handleStatusChange = (col: BoardColumn) => {
+    updateTask(task.id, { status: col.status, columnId: col.id });
     addActivity({
       id: `act-${Date.now()}`,
       actorId: currentUser?.id || 'u2',
@@ -43,7 +45,7 @@ export function TaskDetailDrawer() {
       action: 'task.status.changed',
       resource: 'Task',
       resourceId: task.id,
-      detail: `Changed status to ${status.replace('_', ' ')}`,
+      detail: `Moved to ${col.name}`,
       timestamp: new Date().toISOString(),
     });
   };
@@ -152,15 +154,16 @@ export function TaskDetailDrawer() {
           <div>
             <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Status</label>
             <select
-              value={task.status}
-              onChange={e => handleStatusChange(e.target.value as TaskStatus)}
+              value={columnOfTask(task, columns)?.id}
+              onChange={e => {
+                const col = columns.find(c => c.id === e.target.value);
+                if (col) handleStatusChange(col);
+              }}
               className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
             >
-              <option value="todo">To Do</option>
-              <option value="in_progress">In Progress</option>
-              <option value="review">In Review</option>
-              <option value="done">Done</option>
-              <option value="blocked">Blocked</option>
+              {columns.map(col => (
+                <option key={col.id} value={col.id}>{col.name}</option>
+              ))}
             </select>
           </div>
 

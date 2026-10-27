@@ -18,7 +18,8 @@ import {
   AlertCircle,
   Zap,
 } from 'lucide-react';
-import type { TaskStatus, TaskPriority } from '@/types';
+import type { TaskPriority } from '@/types';
+import { boardColumnsFor } from '@/lib/board-columns';
 
 export default function CreateTaskPage({
   params,
@@ -34,11 +35,12 @@ export default function CreateTaskPage({
 
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
   const projectSprints = sprints.filter((s) => s.projectId === projectId);
+  const columns = boardColumnsFor(project);
 
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<TaskStatus>('todo');
+  const [columnId, setColumnId] = useState(columns[0].id);
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [assigneeId, setAssigneeId] = useState(projectMembers[0]?.id || users[0]?.id || '');
   const [sprintId, setSprintId] = useState('');
@@ -103,7 +105,8 @@ export default function CreateTaskPage({
       title: title.trim(),
       description: description.trim(),
       projectId,
-      status,
+      status: (columns.find((c) => c.id === columnId) ?? columns[0]).status,
+      columnId,
       priority,
       assigneeId: assigneeId || undefined,
       sprintId: sprintId || undefined,
@@ -177,15 +180,15 @@ export default function CreateTaskPage({
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">Initial Status</label>
                 <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as TaskStatus)}
+                  value={columnId}
+                  onChange={(e) => setColumnId(e.target.value)}
                   className="w-full px-3 py-2 bg-paper text-xs rounded-xl border border-line outline-none focus:border-flash text-ink"
                 >
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="review">In Review</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="done">Done</option>
+                  {columns.map((col) => (
+                    <option key={col.id} value={col.id}>
+                      {col.name}
+                    </option>
+                  ))}
                 </select>
               </div>
 

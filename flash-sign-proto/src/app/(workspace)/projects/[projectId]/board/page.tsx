@@ -4,6 +4,9 @@ import { use, useState, useCallback, useMemo } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
+import { canCreateProject } from '@/lib/permissions';
+import { boardColumnsFor, columnOfTask, stageLabel } from '@/lib/board-columns';
+import { BoardColumnsModal } from '@/components/projects/board-columns-modal';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
@@ -19,17 +22,10 @@ import {
   GripVertical,
   ChevronDown,
   Sparkles,
+  Columns3,
 } from 'lucide-react';
 import { formatDate, cn } from '@/lib/utils';
-import type { Task, TaskStatus, TaskPriority } from '@/types';
-
-const COLUMNS: { id: TaskStatus; label: string; color: string }[] = [
-  { id: 'todo', label: 'To Do', color: 'var(--muted)' },
-  { id: 'in_progress', label: 'In Progress', color: '#42a5f5' },
-  { id: 'review', label: 'In Review', color: 'var(--waiting)' },
-  { id: 'done', label: 'Done', color: 'var(--flash)' },
-  { id: 'blocked', label: 'Blocked', color: 'var(--danger)' },
-];
+import type { BoardColumn } from '@/types';
 
 export default function KanbanBoardPage({
   params,
@@ -37,17 +33,20 @@ export default function KanbanBoardPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, tasks, users, updateTask, openTaskDrawer, addTask } = useApp();
+  const { projects, tasks, users, updateTask, openTaskDrawer, addTask, demoRole } = useApp();
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
-  const [dragOverCol, setDragOverCol] = useState<TaskStatus | null>(null);
+  const [dragOverCol, setDragOverCol] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [assigneeFilter, setAssigneeFilter] = useState('all');
   const [priorityFilter, setPriorityFilter] = useState('all');
 
   // Quick task modal state
-  const [quickAddCol, setQuickAddCol] = useState<TaskStatus | null>(null);
+  const [quickAddCol, setQuickAddCol] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState('');
+
+  // Column editor: closed, open, or open with a new column added
+  const [columnsEditor, setColumnsEditor] = useState<'closed' | 'edit' | 'add'>('closed');
 
   const project =
     projects.find((p) => p.id === projectId) ||
@@ -60,6 +59,8 @@ export default function KanbanBoardPage({
       : projectId;
   const projectTasks = tasks.filter((t) => t.projectId === projectId || t.projectId === effectiveId);
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
+  const columns = boardColumnsFor(project);
+  const canEditColumns = canCreateProject(demoRole);
 
   // Filter tasks
   const filteredTasks = useMemo(() => {
@@ -77,10 +78,14 @@ export default function KanbanBoardPage({
 
   const onDragStart = (id: string) => setDraggedId(id);
 
+  // A card takes the column's stage as its status; moves between columns of one stage keep the timer as is
+  const moveToColumn = (taskId: string, col: BoardColumn) =>
+    updateTask(taskId, { status: col.status, columnId: col.id });
+
   const onDrop = useCallback(
-    (status: TaskStatus) => {
+    (col: BoardColumn) => {
       if (draggedId) {
-        updateTask(draggedId, { status });
+        updateTask(draggedId, { status: col.status, columnId: col.id });
         setDraggedId(null);
         setDragOverCol(null);
       }
@@ -88,12 +93,13 @@ export default function KanbanBoardPage({
     [draggedId, updateTask]
   );
 
-  const handleQuickAdd = (status: TaskStatus) => {
+  const handleQuickAdd = (col: BoardColumn) => {
     if (!quickTitle.trim()) return;
     addTask({
       title: quickTitle.trim(),
       projectId,
-      status,
+      status: col.status,
+      columnId: col.id,
       priority: 'medium',
       labels: ['Feature'],
       points: 2,
@@ -150,6 +156,11 @@ export default function KanbanBoardPage({
             <span className="text-xs text-muted font-mono">
               {filteredTasks.length} / {projectTasks.length} tasks
             </span>
+            {canEditColumns && (
+              <Button variant="secondary" size="sm" icon={Columns3} onClick={() => setColumnsEditor('edit')}>
+                Columns
+              </Button>
+            )}
             <Link href={`/projects/${projectId}/tasks/new`}>
               <Button variant="primary" size="sm" icon={Plus}>
                 New Task
@@ -161,8 +172,8 @@ export default function KanbanBoardPage({
         {/* Board Columns */}
         <div className="flex-1 overflow-x-auto pb-4">
           <div className="flex gap-4 h-[calc(100vh-250px)] min-h-[500px]">
-            {COLUMNS.map((col) => {
-              const colTasks = filteredTasks.filter((t) => t.status === col.id);
+            {columns.map((col) => {
+              const colTasks = filteredTasks.filter((t) => columnOfTask(t, columns)?.id === col.id);
               const isOver = dragOverCol === col.id;
 
               return (
@@ -177,22 +188,30 @@ export default function KanbanBoardPage({
                     setDragOverCol(col.id);
                   }}
                   onDragLeave={() => setDragOverCol(null)}
-                  onDrop={() => onDrop(col.id)}
+                  onDrop={() => onDrop(col)}
                 >
                   {/* Column Header */}
                   <div className="flex items-center justify-between px-3.5 py-3 border-b border-line bg-paper/60">
-                    <div className="flex items-center gap-2">
-                      <span className="w-2.5 h-2.5 rounded-full" style={{ background: col.color }} />
-                      <span className="text-xs font-bold text-ink">{col.label}</span>
+                    <div className="flex items-center gap-2 min-w-0">
+                      <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: col.color }} />
+                      <span className="text-xs font-bold text-ink truncate">{col.name}</span>
                       <span className="text-[10px] font-mono text-muted bg-mist px-1.5 py-0.5 rounded-full">
                         {colTasks.length}
                       </span>
+                      {col.name !== stageLabel(col.status) && (
+                        <span
+                          className="text-[9px] uppercase tracking-wider text-muted border border-line px-1.5 py-0.5 rounded-full shrink-0"
+                          title={`Counts as ${stageLabel(col.status)}`}
+                        >
+                          {stageLabel(col.status)}
+                        </span>
+                      )}
                     </div>
                     <button
                       type="button"
                       onClick={() => setQuickAddCol(quickAddCol === col.id ? null : col.id)}
                       className="p-1 text-muted hover:text-ink hover:bg-mist rounded-md transition-colors"
-                      title={`Quick add to ${col.label}`}
+                      title={`Quick add to ${col.name}`}
                     >
                       <Plus className="w-4 h-4" />
                     </button>
@@ -207,7 +226,7 @@ export default function KanbanBoardPage({
                         value={quickTitle}
                         onChange={(e) => setQuickTitle(e.target.value)}
                         onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleQuickAdd(col.id);
+                          if (e.key === 'Enter') handleQuickAdd(col);
                           if (e.key === 'Escape') setQuickAddCol(null);
                         }}
                         placeholder="Task title…"
@@ -224,7 +243,7 @@ export default function KanbanBoardPage({
                         <Button
                           variant="primary"
                           size="xs"
-                          onClick={() => handleQuickAdd(col.id)}
+                          onClick={() => handleQuickAdd(col)}
                         >
                           Add
                         </Button>
@@ -273,15 +292,16 @@ export default function KanbanBoardPage({
                               className="relative"
                             >
                               <select
-                                value={task.status}
-                                onChange={(e) =>
-                                  updateTask(task.id, { status: e.target.value as TaskStatus })
-                                }
+                                value={col.id}
+                                onChange={(e) => {
+                                  const target = columns.find((c) => c.id === e.target.value);
+                                  if (target) moveToColumn(task.id, target);
+                                }}
                                 className="text-[10px] bg-paper-elevated border border-line rounded px-1.5 py-0.5 text-muted hover:text-ink cursor-pointer outline-none focus:border-flash"
                               >
-                                {COLUMNS.map((c) => (
+                                {columns.map((c) => (
                                   <option key={c.id} value={c.id}>
-                                    Move: {c.label}
+                                    Move: {c.name}
                                   </option>
                                 ))}
                               </select>
@@ -346,9 +366,29 @@ export default function KanbanBoardPage({
                 </div>
               );
             })}
+
+            {canEditColumns && (
+              <button
+                type="button"
+                onClick={() => setColumnsEditor('add')}
+                className="w-56 shrink-0 self-start flex items-center justify-center gap-1.5 py-3 text-xs font-semibold text-muted hover:text-ink border-2 border-dashed border-line hover:border-flash/50 rounded-2xl transition-colors"
+              >
+                <Plus className="w-4 h-4" />
+                Add column
+              </button>
+            )}
           </div>
         </div>
       </div>
+
+      {columnsEditor !== 'closed' && (
+        <BoardColumnsModal
+          project={project}
+          tasks={projectTasks}
+          startWithNewColumn={columnsEditor === 'add'}
+          onClose={() => setColumnsEditor('closed')}
+        />
+      )}
     </div>
   );
 }
