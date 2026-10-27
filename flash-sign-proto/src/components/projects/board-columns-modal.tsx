@@ -1,7 +1,7 @@
 'use client';
 
-import { useMemo, useState } from 'react';
-import { Columns3, ChevronUp, ChevronDown, Trash2, Plus, RotateCcw, AlertCircle, ArrowRight } from 'lucide-react';
+import { useState } from 'react';
+import { Columns3, ChevronUp, ChevronDown, Trash2, Plus, RotateCcw, AlertCircle, ArrowRight, Info } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/shared/modal';
 import { Button } from '@/components/shared/ui';
@@ -10,9 +10,11 @@ import {
   DEFAULT_BOARD_COLUMNS,
   REQUIRED_STAGES,
   TASK_STAGES,
-  boardColumnsFor,
+  boardOfTask,
+  boardsSharingColumns,
   columnOfTask,
   missingStages,
+  projectBoards,
   stageLabel,
 } from '@/lib/board-columns';
 import { cn } from '@/lib/utils';
@@ -20,6 +22,9 @@ import type { BoardColumn, Project, Task, TaskStatus } from '@/types';
 
 interface BoardColumnsModalProps {
   project: Project;
+  /** The board whose columns are edited */
+  boardId: string;
+  /** All of the project's tasks */
   tasks: Task[];
   onClose: () => void;
   /** Open with a fresh column already added (the board's "Add column" tile) */
@@ -44,12 +49,19 @@ function insertColumn(columns: BoardColumn[], column: BoardColumn): BoardColumn[
 }
 
 /**
- * Add, rename, recolour, reorder and remove the columns of one project's Kanban board.
+ * Add, rename, recolour, reorder and remove the columns of one board in a project.
  * Changes stay in the dialog until Save; cards in a removed column move to a column you pick.
  */
-export function BoardColumnsModal({ project, tasks, onClose, startWithNewColumn }: BoardColumnsModalProps) {
+export function BoardColumnsModal({ project, boardId, tasks: projectTasks, onClose, startWithNewColumn }: BoardColumnsModalProps) {
   const { setBoardColumns } = useApp();
-  const saved = boardColumnsFor(project);
+  const boards = projectBoards(project);
+  const board = boards.find(b => b.id === boardId) ?? boards[0];
+  const saved = board.columns;
+  const mainBoard = boards[0];
+  const mirrors = board.isMain ? boards.filter(b => b.mirrorsMain) : [];
+  // Cards these columns hold: the main board's edit carries its mirrors along; a mirroring board's edit is its own
+  const sharingIds = new Set(board.mirrorsMain ? [board.id] : boardsSharingColumns(board.id, boards).map(b => b.id));
+  const tasks = projectTasks.filter(t => sharingIds.has(boardOfTask(t, boards).id));
 
   const [draft, setDraft] = useState<BoardColumn[]>(() =>
     startWithNewColumn ? insertColumn(saved, newColumn(saved)) : saved
@@ -63,19 +75,16 @@ export function BoardColumnsModal({ project, tasks, onClose, startWithNewColumn 
   const [moveTargetId, setMoveTargetId] = useState('');
 
   // How many cards each draft column will hold, following any moves out of removed columns
-  const counts = useMemo(() => {
-    const result: Record<string, number> = {};
-    for (const task of tasks) {
-      let id = columnOfTask(task, saved)?.id;
-      const seen = new Set<string>();
-      while (id && moves[id] && !seen.has(id)) {
-        seen.add(id);
-        id = moves[id];
-      }
-      if (id) result[id] = (result[id] ?? 0) + 1;
+  const counts: Record<string, number> = {};
+  for (const task of tasks) {
+    let id = columnOfTask(task, saved)?.id;
+    const seen = new Set<string>();
+    while (id && moves[id] && !seen.has(id)) {
+      seen.add(id);
+      id = moves[id];
     }
-    return result;
-  }, [tasks, saved, moves]);
+    if (id) counts[id] = (counts[id] ?? 0) + 1;
+  }
 
   const missing = missingStages(draft);
   const hasBlankName = draft.some(c => !c.name.trim());
@@ -136,7 +145,7 @@ export function BoardColumnsModal({ project, tasks, onClose, startWithNewColumn 
 
   const save = () => {
     if (!canSave) return;
-    setBoardColumns(project.id, draft.map(c => ({ ...c, name: c.name.trim() })), moves);
+    setBoardColumns(project.id, board.id, draft.map(c => ({ ...c, name: c.name.trim() })), moves);
     onClose();
   };
 
@@ -144,13 +153,22 @@ export function BoardColumnsModal({ project, tasks, onClose, startWithNewColumn 
     <Modal isOpen onClose={onClose} size="lg" aria-labelledby="board-columns-title">
       <ModalHeader
         id="board-columns-title"
-        title="Board columns"
-        description={`Set up the columns on the ${project.name} board. Each column counts as a task stage, so time tracking, AI agents and reports keep working.`}
+        title={boards.length > 1 ? `Columns · ${board.name}` : 'Board columns'}
+        description={`Set up the columns ${boards.length > 1 ? `of ${board.name}` : `on the ${project.name} board`}. Each column counts as a task stage, so time tracking, AI agents and reports keep working.`}
         icon={Columns3}
         onClose={onClose}
       />
 
       <ModalBody className="space-y-3">
+        {(board.mirrorsMain || mirrors.length > 0) && (
+          <p className="flex items-start gap-1.5 rounded-lg border border-line bg-mist/40 px-3 py-2 text-[11px] text-ink-soft">
+            <Info className="w-3.5 h-3.5 shrink-0 mt-px text-muted" />
+            {board.mirrorsMain
+              ? `This board mirrors ${mainBoard.name}. Saving here gives it its own columns, and it stops following ${mainBoard.name}.`
+              : `${mirrors.map(b => b.name).join(', ')} mirror${mirrors.length === 1 ? 's' : ''} this board, so ${mirrors.length === 1 ? 'it changes' : 'they change'} too. Card counts include ${mirrors.length === 1 ? 'that board' : 'those boards'}.`}
+          </p>
+        )}
+
         <ul className="space-y-2">
           {draft.map((col, index) => {
             const original = saved.find(s => s.id === col.id);

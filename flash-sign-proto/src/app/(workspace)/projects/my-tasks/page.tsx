@@ -22,6 +22,7 @@ import {
   Plus,
 } from 'lucide-react';
 import type { Task, TaskStatus, TaskPriority } from '@/types';
+import { placementOf, projectBoards } from '@/lib/board-columns';
 
 export default function MyTasksPage() {
   const { tasks, projects, updateTask, openTaskDrawer, currentUserId, users } = useApp();
@@ -287,7 +288,10 @@ export default function MyTasksPage() {
                           {task.title}
                         </p>
                         {project && (
-                          <span className="text-[10px] text-muted block">{project.name}</span>
+                          <span className="text-[10px] text-muted block">
+                            {project.name}
+                            {project.extraBoards?.length ? ` · ${placementOf(task, projectBoards(project)).board.name}` : ''}
+                          </span>
                         )}
                       </div>
                     </div>

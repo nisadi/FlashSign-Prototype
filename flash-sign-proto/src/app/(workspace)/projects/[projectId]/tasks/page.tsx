@@ -9,7 +9,8 @@ import { Button, Card, EmptyState } from '@/components/shared/ui';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate } from '@/lib/utils';
-import { boardColumnsFor, columnOfTask } from '@/lib/board-columns';
+import { placeIn, placementOf, projectBoards } from '@/lib/board-columns';
+import { PlacementSelect } from '@/components/tasks/placement-select';
 import {
   Plus,
   Search,
@@ -56,7 +57,7 @@ export default function ProjectTasksListPage({
       : projectId;
   const projectTasks = tasks.filter((t) => t.projectId === projectId || t.projectId === effectiveId);
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
-  const columns = boardColumnsFor(project);
+  const boards = projectBoards(project);
 
   // Filtered & Sorted Tasks
   const filteredTasks = useMemo(() => {
@@ -426,20 +427,24 @@ export default function ProjectTasksListPage({
                           </div>
                         </td>
                         <td className="py-3 px-3" onClick={(e) => e.stopPropagation()}>
-                          <select
-                            value={columnOfTask(task, columns)?.id}
-                            onChange={(e) => {
-                              const col = columns.find((c) => c.id === e.target.value);
-                              if (col) updateTask(task.id, { status: col.status, columnId: col.id });
-                            }}
-                            className="bg-transparent border border-transparent hover:border-line rounded px-1.5 py-0.5 text-xs text-ink cursor-pointer focus:bg-paper-elevated focus:border-flash outline-none"
-                          >
-                            {columns.map((col) => (
-                              <option key={col.id} value={col.id}>
-                                {col.name}
-                              </option>
-                            ))}
-                          </select>
+                          {(() => {
+                            const at = placementOf(task, boards);
+                            return (
+                              <div className="flex flex-col items-start gap-0.5">
+                                <PlacementSelect
+                                  boards={boards}
+                                  boardId={at.board.id}
+                                  columnId={at.column?.id}
+                                  onChange={(b, c) => updateTask(task.id, placeIn(b, c))}
+                                  aria-label={`Status of ${task.key}`}
+                                  className="bg-transparent border border-transparent hover:border-line rounded px-1.5 py-0.5 text-xs text-ink cursor-pointer focus:bg-paper-elevated focus:border-flash outline-none"
+                                />
+                                {boards.length > 1 && (
+                                  <span className="px-1.5 text-[10px] text-muted">{at.board.name}</span>
+                                )}
+                              </div>
+                            );
+                          })()}
                         </td>
                         <td className="py-3 px-3">
                           <PriorityBadge priority={task.priority} />

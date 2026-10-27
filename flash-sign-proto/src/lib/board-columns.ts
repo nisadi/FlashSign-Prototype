@@ -52,3 +52,53 @@ export function columnOfTask(task: Pick<Task, 'status' | 'columnId'>, columns: B
 export function missingStages(columns: BoardColumn[]): TaskStatus[] {
   return REQUIRED_STAGES.filter(stage => !columns.some(c => c.status === stage));
 }
+
+// ── Boards ───────────────────────────────────────────────────────────────────
+// A project has a main board and can add more below it (e.g. Testing). A card lives on one
+// board at a time and moves between them.
+
+export const MAIN_BOARD_ID = 'main';
+
+/** A board with its columns worked out: a mirroring board uses the main board's columns. */
+export interface ResolvedBoard {
+  id: string;
+  name: string;
+  columns: BoardColumn[];
+  isMain: boolean;
+  mirrorsMain: boolean;
+}
+
+export function projectBoards(project?: Pick<Project, 'boardColumns' | 'mainBoardName' | 'extraBoards'>): ResolvedBoard[] {
+  const mainColumns = boardColumnsFor(project);
+  return [
+    { id: MAIN_BOARD_ID, name: project?.mainBoardName || 'Main board', columns: mainColumns, isMain: true, mirrorsMain: false },
+    ...(project?.extraBoards ?? []).map(b => ({
+      id: b.id,
+      name: b.name,
+      columns: b.columns?.length ? b.columns : mainColumns,
+      isMain: false,
+      mirrorsMain: !b.columns?.length,
+    })),
+  ];
+}
+
+/** The board a card is on; cards without one (or on a removed board) are on the main board. */
+export function boardOfTask(task: Pick<Task, 'boardId'>, boards: ResolvedBoard[]): ResolvedBoard {
+  return boards.find(b => b.id === task.boardId) ?? boards[0];
+}
+
+/** Where a card sits: its board and the column on that board. */
+export function placementOf(task: Pick<Task, 'boardId' | 'status' | 'columnId'>, boards: ResolvedBoard[]) {
+  const board = boardOfTask(task, boards);
+  return { board, column: columnOfTask(task, board.columns) };
+}
+
+/** The task fields for putting a card in a column: the column's stage becomes its status. */
+export function placeIn(board: ResolvedBoard, column: BoardColumn): Pick<Task, 'boardId' | 'columnId' | 'status'> {
+  return { boardId: board.id, columnId: column.id, status: column.status };
+}
+
+/** Boards that change when this board's columns are edited: the main board takes its mirrors along. */
+export function boardsSharingColumns(boardId: string, boards: ResolvedBoard[]): ResolvedBoard[] {
+  return boardId === MAIN_BOARD_ID ? boards.filter(b => b.isMain || b.mirrorsMain) : boards.filter(b => b.id === boardId);
+}
