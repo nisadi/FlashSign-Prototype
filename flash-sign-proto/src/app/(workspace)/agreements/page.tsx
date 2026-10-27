@@ -8,53 +8,92 @@ import {
   PenLine,
   LayoutTemplate,
   FilePlus2,
-  Building2,
-  FileSignature,
-  FileText,
   ArrowRight,
+  Clock,
+  Eye,
+  FileWarning,
+  FilePen,
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
+import type { SignatureRequest } from '@/types';
 import { cn } from '@/lib/utils';
 
 const DAY_MS = 1000 * 60 * 60 * 24;
+const EXPIRING_SOON_DAYS = 7;
 
 const START_ACTIONS = [
   { label: 'Get Signatures', shortLabel: 'Get Signatures', description: 'Send a document for others to sign', href: '/signatures/new', icon: Send },
   { label: 'Sign a Document', shortLabel: 'Sign Document', description: 'Sign a document yourself', href: '/signatures/new', icon: PenLine },
   { label: 'Use a Template', shortLabel: 'Use Template', description: 'Start from a saved template', href: '/documents/templates', icon: LayoutTemplate },
   { label: 'New Document', shortLabel: 'New Document', description: 'Write or upload a document', href: '/documents/new', icon: FilePlus2 },
-  { label: 'New Contract', shortLabel: 'New Contract', description: 'Create a contract record', href: '/contracts/new', icon: Building2 },
 ];
+
+const IN_FLIGHT = ['sent', 'viewed', 'partially_signed'];
 
 interface DraftRow {
   id: string;
-  kind: 'Signature request' | 'Document' | 'Contract';
+  kind: 'Signature request' | 'Document';
   title: string;
   updatedAt: string;
   href: string;
 }
 
+const formatDate = (date: string) => new Date(date).toLocaleDateString();
+
+const signedCount = (request: SignatureRequest) => request.signers.filter(s => s.status === 'signed').length;
+
 export default function AgreementsHomePage() {
-  const { signatureRequests, contracts, documentItems } = useApp();
+  const { signatureRequests, documentItems, users } = useApp();
   const currentUser = useCurrentUser();
   const [startOpen, setStartOpen] = useState(false);
 
   const firstName = currentUser?.name.split(' ')[0];
 
-  // Requests where the current user still has to sign (same rule as /signatures/waiting)
-  const tasks = useMemo(() => {
-    return signatureRequests
-      .filter(s => !['draft', 'completed', 'declined', 'cancelled', 'expired'].includes(s.status))
-      .map(request => ({
-        request,
-        signer: request.signers.find(signer =>
-          signer.email === currentUser?.email &&
-          signer.status !== 'signed' && signer.status !== 'declined'
-        ),
-      }))
-      .filter(t => t.signer)
-      .sort((a, b) => new Date(a.request.expiresAt).getTime() - new Date(b.request.expiresAt).getTime());
+  // Older seed requests carry only senderId
+  const senderOf = (request: SignatureRequest) =>
+    request.senderName || users.find(u => u.id === request.senderId)?.name || 'Unknown sender';
+
+  const data = useMemo(() => {
+    const now = new Date().getTime();
+    const daysLeft = (date: string) => Math.ceil((new Date(date).getTime() - now) / DAY_MS);
+    const byExpiry = (a: SignatureRequest, b: SignatureRequest) =>
+      new Date(a.expiresAt).getTime() - new Date(b.expiresAt).getTime();
+
+    const sent = signatureRequests.filter(s => s.status !== 'draft');
+    const completed = sent.filter(s => s.status === 'completed');
+    const inFlight = sent.filter(s => IN_FLIGHT.includes(s.status)).sort(byExpiry);
+
+    // Requests where it is the current user's turn to sign (same rule as /signatures/waiting)
+    const myTurn = new Set(
+      inFlight
+        .filter(r => r.signers.some(s => s.email === currentUser?.email && (s.status === 'pending' || s.status === 'viewed')))
+        .map(r => r.id)
+    );
+
+    const signaturesTotal = inFlight.reduce((sum, r) => sum + r.signers.length, 0);
+    const signaturesDone = inFlight.reduce((sum, r) => sum + signedCount(r), 0);
+
+    return {
+      daysLeft,
+      myTurn,
+      inFlight,
+      stats: {
+        sent: sent.length,
+        drafts: signatureRequests.length - sent.length,
+        completed: completed.length,
+        completionRate: sent.length ? Math.round((completed.length / sent.length) * 100) : 0,
+        inProgress: inFlight.length,
+        signaturesDone,
+        signaturesLeft: signaturesTotal - signaturesDone,
+        needsMe: myTurn.size,
+        expiringSoon: inFlight.filter(r => daysLeft(r.expiresAt) <= EXPIRING_SOON_DAYS).length,
+        closedOut: sent.filter(s => ['declined', 'expired', 'cancelled'].includes(s.status)).length,
+      },
+      recent: [...sent]
+        .sort((a, b) => new Date(b.sentAt || b.createdAt).getTime() - new Date(a.sentAt || a.createdAt).getTime())
+        .slice(0, 5),
+    };
   }, [signatureRequests, currentUser]);
 
   const drafts = useMemo(() => {
@@ -65,49 +104,11 @@ export default function AgreementsHomePage() {
       ...documentItems.filter(d => d.status === 'draft').map(d => ({
         id: d.id, kind: 'Document' as const, title: d.title, updatedAt: d.updatedAt, href: `/documents/${d.id}`,
       })),
-      ...contracts.filter(c => c.status === 'draft').map(c => ({
-        id: c.id, kind: 'Contract' as const, title: c.title, updatedAt: c.updatedAt, href: `/contracts/${c.id}`,
-      })),
     ];
     return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
-  }, [signatureRequests, documentItems, contracts]);
+  }, [signatureRequests, documentItems]);
 
-  const activity = useMemo(() => {
-    return signatureRequests
-      .filter(s => s.status !== 'draft')
-      .sort((a, b) => new Date(b.sentAt || b.createdAt).getTime() - new Date(a.sentAt || a.createdAt).getTime())
-      .slice(0, 6);
-  }, [signatureRequests]);
-
-  const overview = useMemo(() => {
-    const now = new Date().getTime();
-    const daysUntil = (date?: string) => (date ? (new Date(date).getTime() - now) / DAY_MS : Infinity);
-    const inFlight = signatureRequests.filter(s => ['sent', 'viewed', 'partially_signed'].includes(s.status));
-
-    return {
-      signatures: [
-        { label: 'Drafts', value: signatureRequests.filter(s => s.status === 'draft').length, href: '/signatures/drafts' },
-        { label: 'Waiting for others', value: inFlight.length, href: '/signatures/all' },
-        { label: 'Expiring soon', value: inFlight.filter(s => daysUntil(s.expiresAt) <= 7).length, href: '/signatures/all' },
-        { label: 'Completed', value: signatureRequests.filter(s => s.status === 'completed').length, href: '/signatures/completed' },
-      ],
-      contracts: [
-        { label: 'Awaiting signature', value: contracts.filter(c => c.status === 'awaiting_signature').length, href: '/contracts/awaiting' },
-        {
-          label: 'Expiring within 90 days',
-          value: contracts.filter(c =>
-            ['active', 'expiring', 'expired'].includes(c.status) && daysUntil(c.expiryDate) <= 90
-          ).length,
-          href: '/contracts/expiring',
-        },
-        { label: 'Active', value: contracts.filter(c => c.status === 'active').length, href: '/contracts/active' },
-      ],
-      documents: [
-        { label: 'Awaiting action', value: documentItems.filter(d => d.status === 'pending' || d.status === 'in_review').length, href: '/documents/all' },
-        { label: 'Drafts', value: documentItems.filter(d => d.status === 'draft').length, href: '/documents/mine' },
-      ],
-    };
-  }, [signatureRequests, contracts, documentItems]);
+  const { stats, inFlight, myTurn, recent, daysLeft } = data;
 
   return (
     <div className="min-h-full bg-paper pb-16">
@@ -119,7 +120,7 @@ export default function AgreementsHomePage() {
             {firstName ? `Welcome back, ${firstName}` : 'Welcome back'}
           </p>
           <p className="text-sm text-white/60 mt-2">
-            Send agreements, collect signatures, and keep every deal moving.
+            Send documents for signature, track who has signed, and see what is still outstanding.
           </p>
 
           <div className="flex flex-wrap items-center gap-3 mt-8">
@@ -181,157 +182,307 @@ export default function AgreementsHomePage() {
         </div>
       </section>
 
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-10 grid grid-cols-1 lg:grid-cols-3 gap-10">
-        {/* Left column */}
-        <div className="lg:col-span-2 space-y-10">
-          <HomeSection title="Tasks" count={tasks.length} href="/signatures/waiting">
-            {tasks.length === 0 ? (
-              <EmptyRow text="Nothing is waiting for your signature." />
-            ) : (
-              tasks.slice(0, 5).map(({ request, signer }) => {
-                const myTurn = signer?.status === 'pending' || signer?.status === 'viewed';
-                return (
-                  <div key={request.id} className="py-3.5 flex items-center justify-between gap-4">
-                    <div className="min-w-0">
-                      <Link href={`/signatures/${request.id}`} className="text-sm font-semibold text-ink hover:text-flash-deep truncate block">
-                        {request.title}
-                      </Link>
-                      <p className="text-xs text-muted mt-0.5">
-                        From {request.senderName || 'Unknown sender'} · Expires {new Date(request.expiresAt).toLocaleDateString()}
-                      </p>
-                    </div>
-                    {myTurn ? (
-                      <Link
-                        href={`/signatures/sign/${request.id}`}
-                        className="shrink-0 px-3.5 py-1.5 rounded-lg bg-flash text-ink text-xs font-semibold hover:bg-flash-deep hover:text-white transition-colors"
-                      >
-                        Sign
-                      </Link>
-                    ) : (
-                      <span className="shrink-0 text-xs font-medium text-muted">Waiting for your turn</span>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </HomeSection>
-
-          <HomeSection title="Drafts" count={drafts.length}>
-            {drafts.length === 0 ? (
-              <EmptyRow text="No drafts. Use Start to begin a new agreement." />
-            ) : (
-              drafts.slice(0, 6).map(draft => (
-                <Link
-                  key={`${draft.kind}-${draft.id}`}
-                  href={draft.href}
-                  className="py-3.5 flex items-center justify-between gap-4 group"
-                >
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-ink group-hover:text-flash-deep truncate">{draft.title}</p>
-                    <p className="text-xs text-muted mt-0.5">
-                      {draft.kind} · Updated {new Date(draft.updatedAt).toLocaleDateString()}
-                    </p>
-                  </div>
-                  <span className="shrink-0 text-xs font-semibold text-flash-deep inline-flex items-center gap-1">
-                    Continue <ArrowRight className="w-3.5 h-3.5" />
-                  </span>
-                </Link>
-              ))
-            )}
-          </HomeSection>
-
-          <HomeSection title="Agreement Activity" href="/signatures/all">
-            {activity.length === 0 ? (
-              <EmptyRow text="Requests you send will show their progress here." />
-            ) : (
-              activity.map(request => {
-                const signed = request.signers.filter(s => s.status === 'signed').length;
-                const total = request.signers.length;
-                return (
-                  <Link key={request.id} href={`/signatures/${request.id}`} className="py-3.5 flex items-center gap-4 group">
-                    <div className="min-w-0 flex-1">
-                      <p className="text-sm font-semibold text-ink group-hover:text-flash-deep truncate">{request.title}</p>
-                      <div className="flex items-center gap-2 mt-1.5">
-                        <div className="h-1.5 w-32 rounded-full bg-mist overflow-hidden">
-                          <div className="h-full rounded-full bg-flash" style={{ width: `${total ? (signed / total) * 100 : 0}%` }} />
-                        </div>
-                        <span className="text-xs text-muted">{signed} of {total} signed</span>
-                      </div>
-                    </div>
-                    <SignatureRequestStatusBadge status={request.status} />
-                  </Link>
-                );
-              })
-            )}
-          </HomeSection>
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 pt-8 space-y-6">
+        {/* Summary metric cards */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3.5">
+          <MetricCard
+            href="/signatures/all"
+            label="All Requests"
+            value={stats.sent}
+            note={`${stats.drafts} draft${stats.drafts === 1 ? '' : 's'} not sent yet`}
+          />
+          <MetricCard
+            href="/signatures/completed"
+            tone="emerald"
+            label="Completed"
+            value={stats.completed}
+            note={`${stats.completionRate}% of sent requests`}
+          />
+          <MetricCard
+            href="/signatures/all"
+            tone="sky"
+            label="In Progress"
+            value={stats.inProgress}
+            note={`${stats.signaturesDone} signed · ${stats.signaturesLeft} left`}
+          />
+          <MetricCard
+            href="/signatures/waiting"
+            tone="amber"
+            label="Needs Your Signature"
+            value={stats.needsMe}
+            note="Waiting on you"
+          />
+          <MetricCard
+            href="/signatures/all"
+            tone="rose"
+            label="Expiring Soon"
+            value={stats.expiringSoon}
+            note={`Within ${EXPIRING_SOON_DAYS} days`}
+          />
+          <MetricCard
+            href="/signatures/declined"
+            label="Declined / Expired"
+            value={stats.closedOut}
+            note="Need a new request"
+          />
         </div>
 
-        {/* Right column: overview */}
-        <aside className="space-y-10">
-          <OverviewList title="Overview" icon={FileSignature} rows={overview.signatures} />
-          <OverviewList title="Contracts" icon={Building2} rows={overview.contracts} />
-          <OverviewList title="Documents" icon={FileText} rows={overview.documents} />
-        </aside>
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+          {/* Main column */}
+          <div className="lg:col-span-2 space-y-6">
+            {/* Awaiting signature */}
+            <Card>
+              <CardHeader
+                icon={<Clock className="w-4 h-4 text-amber-600" />}
+                title="Awaiting Signature"
+                href="/signatures/waiting"
+                linkLabel="View Queue"
+              />
+              {inFlight.length === 0 ? (
+                <EmptyRow text="Nothing is out for signature right now." />
+              ) : (
+                <div className="divide-y divide-line/60">
+                  {inFlight.slice(0, 5).map(request => (
+                    <div key={request.id} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                      <div className="min-w-0 flex-1">
+                        <Link href={`/signatures/${request.id}`} className="font-bold text-ink hover:text-flash-deep truncate block">
+                          {request.title}
+                        </Link>
+                        <div className="text-[11px] text-muted flex flex-wrap items-center gap-x-2 mt-0.5">
+                          <span>From {senderOf(request)}</span>
+                          <span>•</span>
+                          <span>{signedCount(request)} of {request.signers.length} signed</span>
+                          <span>•</span>
+                          <span>Expires {formatDate(request.expiresAt)}</span>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-2 shrink-0">
+                        <SignatureRequestStatusBadge status={request.status} />
+                        {myTurn.has(request.id) ? (
+                          <Link
+                            href={`/signatures/sign/${request.id}`}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-md bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"
+                          >
+                            Sign
+                          </Link>
+                        ) : (
+                          <Link
+                            href={`/signatures/${request.id}`}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-md bg-paper border border-line text-ink hover:bg-mist/30 transition-colors"
+                          >
+                            View
+                          </Link>
+                        )}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+
+            {/* Recent activity */}
+            <Card>
+              <CardHeader
+                title="Recent Activity"
+                subtitle="Latest requests and how far each one has got"
+                href="/signatures/all"
+                linkLabel="All Requests"
+              />
+              {recent.length === 0 ? (
+                <EmptyRow text="Requests you send will show their progress here." />
+              ) : (
+                <div className="divide-y divide-line/60">
+                  {recent.map(request => {
+                    const signed = signedCount(request);
+                    const total = request.signers.length;
+                    return (
+                      <div
+                        key={request.id}
+                        className="py-3 flex items-center justify-between gap-3 text-xs hover:bg-paper/40 px-2 rounded-lg transition-colors"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <Link href={`/signatures/${request.id}`} className="font-bold text-ink hover:text-flash-deep truncate block">
+                            {request.title}
+                          </Link>
+                          <div className="text-[11px] text-muted flex flex-wrap items-center gap-x-2 mt-0.5">
+                            <span className="font-semibold text-ink-soft">{senderOf(request)}</span>
+                            <span>•</span>
+                            <span>Sent {formatDate(request.sentAt || request.createdAt)}</span>
+                            {request.completedAt && (
+                              <>
+                                <span>•</span>
+                                <span>Completed {formatDate(request.completedAt)}</span>
+                              </>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2 mt-1.5">
+                            <div className="h-1.5 w-32 rounded-full bg-mist overflow-hidden">
+                              <div className="h-full rounded-full bg-flash" style={{ width: `${total ? (signed / total) * 100 : 0}%` }} />
+                            </div>
+                            <span className="text-[11px] text-muted">{signed} of {total} signed</span>
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-2 shrink-0">
+                          <SignatureRequestStatusBadge status={request.status} />
+                          <Link
+                            href={`/signatures/${request.id}`}
+                            aria-label={`Open ${request.title}`}
+                            className="p-1.5 rounded-lg border border-line text-muted hover:text-ink hover:bg-paper"
+                          >
+                            <Eye className="w-3.5 h-3.5" />
+                          </Link>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+          </div>
+
+          {/* Right column */}
+          <div className="space-y-6">
+            {/* Upcoming expirations: the next in-flight requests to run out */}
+            <Card className="border-rose-200/80">
+              <CardHeader
+                icon={<FileWarning className="w-4 h-4 text-rose-600" />}
+                title="Upcoming Expirations"
+                href="/signatures/all"
+                linkLabel="Manage"
+              />
+              {inFlight.length === 0 ? (
+                <p className="text-xs text-muted italic">No requests are waiting on signers.</p>
+              ) : (
+                <div className="space-y-2.5">
+                  {inFlight.slice(0, 4).map(request => {
+                    const days = daysLeft(request.expiresAt);
+                    const urgent = days <= EXPIRING_SOON_DAYS;
+                    return (
+                      <Link
+                        key={request.id}
+                        href={`/signatures/${request.id}`}
+                        className={cn(
+                          'block p-3 border rounded-xl space-y-1 text-xs transition-colors',
+                          urgent ? 'bg-rose-50/50 border-rose-200 hover:border-rose-400' : 'bg-paper/40 border-line/60 hover:border-line'
+                        )}
+                      >
+                        <div className="font-bold text-ink truncate">{request.title}</div>
+                        <div className={cn('text-[11px] flex items-center justify-between gap-2', urgent ? 'text-rose-800' : 'text-muted')}>
+                          <span>{signedCount(request)} of {request.signers.length} signed</span>
+                          <span className="font-mono font-semibold">
+                            {days <= 0 ? 'Due today' : `${days} day${days === 1 ? '' : 's'} left`}
+                          </span>
+                        </div>
+                      </Link>
+                    );
+                  })}
+                </div>
+              )}
+            </Card>
+
+            {/* Drafts */}
+            <Card>
+              <CardHeader
+                icon={<FilePen className="w-4 h-4 text-flash-deep" />}
+                title={`Drafts (${drafts.length})`}
+                href="/signatures/drafts"
+                linkLabel="View all"
+              />
+              {drafts.length === 0 ? (
+                <p className="text-xs text-muted italic">No drafts. Use Start to begin a new request.</p>
+              ) : (
+                <div className="space-y-1.5 text-xs">
+                  {drafts.slice(0, 5).map(draft => (
+                    <Link
+                      key={`${draft.kind}-${draft.id}`}
+                      href={draft.href}
+                      className="flex items-center justify-between gap-3 p-2.5 rounded-lg border border-line/60 bg-paper/40 hover:bg-paper transition-colors group"
+                    >
+                      <span className="min-w-0">
+                        <span className="block font-semibold text-ink truncate group-hover:text-flash-deep">{draft.title}</span>
+                        <span className="block text-[11px] text-muted">{draft.kind} · Updated {formatDate(draft.updatedAt)}</span>
+                      </span>
+                      <ArrowRight className="w-3.5 h-3.5 text-muted shrink-0" />
+                    </Link>
+                  ))}
+                </div>
+              )}
+            </Card>
+          </div>
+        </div>
       </div>
     </div>
   );
 }
 
-function HomeSection({
-  title,
-  count,
+const METRIC_TONES = {
+  neutral: { card: 'border-line/70 bg-white hover:border-flash', label: 'text-muted', value: 'text-ink', note: 'text-muted' },
+  emerald: { card: 'border-emerald-200 bg-emerald-50/25 hover:border-emerald-400', label: 'text-emerald-800', value: 'text-emerald-700', note: 'text-emerald-700' },
+  sky: { card: 'border-sky-200 bg-sky-50/25 hover:border-sky-400', label: 'text-sky-800', value: 'text-sky-700', note: 'text-sky-700' },
+  amber: { card: 'border-amber-200 bg-amber-50/25 hover:border-amber-400', label: 'text-amber-800', value: 'text-amber-700', note: 'text-amber-700' },
+  rose: { card: 'border-rose-200 bg-rose-50/25 hover:border-rose-400', label: 'text-rose-800', value: 'text-rose-700', note: 'text-rose-700' },
+};
+
+function MetricCard({
   href,
-  children,
+  label,
+  value,
+  note,
+  tone = 'neutral',
 }: {
+  href: string;
+  label: string;
+  value: number;
+  note: string;
+  tone?: keyof typeof METRIC_TONES;
+}) {
+  const t = METRIC_TONES[tone];
+  return (
+    <Link href={href} className={cn('p-4 rounded-xl border hover:shadow-xs transition-all text-left', t.card)}>
+      <span className={cn('text-xs font-semibold block', t.label)}>{label}</span>
+      <div className={cn('text-2xl font-bold mt-1', t.value)}>{value}</div>
+      <p className={cn('text-[11px] mt-0.5', t.note)}>{note}</p>
+    </Link>
+  );
+}
+
+function Card({ className, children }: { className?: string; children: React.ReactNode }) {
+  return (
+    <section className={cn('bg-white border border-line/70 rounded-2xl p-5 shadow-xs space-y-3', className)}>
+      {children}
+    </section>
+  );
+}
+
+function CardHeader({
+  icon,
+  title,
+  subtitle,
+  href,
+  linkLabel,
+}: {
+  icon?: React.ReactNode;
   title: string;
-  count?: number;
-  href?: string;
-  children: React.ReactNode;
+  subtitle?: string;
+  href: string;
+  linkLabel: string;
 }) {
   return (
-    <section>
-      <div className="flex items-center justify-between pb-3 border-b border-line">
-        <h2 className="text-xs font-bold tracking-[0.2em] uppercase text-ink-soft">
-          {title}{count !== undefined && ` (${count})`}
-        </h2>
-        {href && (
-          <Link href={href} className="text-xs font-semibold text-flash-deep hover:underline inline-flex items-center gap-1">
-            View all <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
-        )}
+    <div className="flex items-center justify-between gap-3">
+      <div>
+        <div className="flex items-center gap-2">
+          {icon}
+          <h2 className="text-sm font-bold text-ink">{title}</h2>
+        </div>
+        {subtitle && <p className="text-xs text-muted">{subtitle}</p>}
       </div>
-      <div className="divide-y divide-line border-b border-line">{children}</div>
-    </section>
+      <Link href={href} className="text-xs font-semibold text-flash-deep hover:underline inline-flex items-center gap-1 shrink-0">
+        {linkLabel} <ArrowRight className="w-3.5 h-3.5" />
+      </Link>
+    </div>
   );
 }
 
 function EmptyRow({ text }: { text: string }) {
-  return <p className="py-8 text-center text-sm text-muted">{text}</p>;
-}
-
-function OverviewList({
-  title,
-  icon: Icon,
-  rows,
-}: {
-  title: string;
-  icon: React.ElementType;
-  rows: { label: string; value: number; href: string }[];
-}) {
-  return (
-    <section>
-      <h2 className="flex items-center gap-2 pb-3 border-b border-line text-xs font-bold tracking-[0.2em] uppercase text-ink-soft">
-        <Icon className="w-3.5 h-3.5 text-flash-deep" />
-        {title}
-      </h2>
-      <div className="divide-y divide-line border-b border-line">
-        {rows.map(row => (
-          <Link key={row.label} href={row.href} className="flex items-center justify-between py-4 group">
-            <span className="text-sm text-ink group-hover:text-flash-deep">{row.label}</span>
-            <span className="text-2xl font-bold text-ink">{row.value}</span>
-          </Link>
-        ))}
-      </div>
-    </section>
-  );
+  return <p className="py-6 text-center text-xs text-muted">{text}</p>;
 }

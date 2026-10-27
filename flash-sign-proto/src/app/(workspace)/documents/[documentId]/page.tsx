@@ -27,6 +27,7 @@ import {
   ExternalLink
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { FEATURES } from '@/lib/features';
 import { DocumentStatusBadge, DocumentTypeBadge } from '@/components/documents/document-badges';
 import { MoveFolderDialog } from '@/components/documents/move-folder-dialog';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
@@ -144,7 +145,7 @@ export default function DocumentDetailsPage({
               Edit Content
             </Link>
             <Link
-              href={`/signatures/new?docId=${doc.id}`}
+              href={`/signatures/new?documentId=${doc.id}`}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-flash hover:bg-flash-deep text-ink hover:text-white transition-colors shadow-xs"
             >
               <FileSignature className="w-4 h-4" />
@@ -395,7 +396,7 @@ export default function DocumentDetailsPage({
             </div>
 
             {/* Related Contract Card */}
-            {contract ? (
+            {FEATURES.contracts && (contract ? (
               <div className="bg-white border border-line/70 rounded-2xl p-5 shadow-xs space-y-3">
                 <div className="flex items-center gap-2">
                   <Building2 className="w-4 h-4 text-flash-deep" />
@@ -425,7 +426,7 @@ export default function DocumentDetailsPage({
                   Create Contract Record
                 </Link>
               </div>
-            )}
+            ))}
           </div>
         </div>
 

@@ -25,6 +25,7 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { FEATURES } from '@/lib/features';
 import {
   SignatureRequestStatusBadge,
   SignerStatusBadge
@@ -58,7 +59,7 @@ export default function SigningProgressPage() {
   }, [request, documentItems]);
 
   const linkedContract = useMemo(() => {
-    if (!request?.contractId) return null;
+    if (!FEATURES.contracts || !request?.contractId) return null;
     return contracts.find(c => c.id === request.contractId);
   }, [request, contracts]);
 

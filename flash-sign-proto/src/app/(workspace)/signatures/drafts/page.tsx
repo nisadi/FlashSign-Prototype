@@ -4,6 +4,7 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { FilePen, Search, Eye, Plus, LayoutTemplate } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { FEATURES } from '@/lib/features';
 import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 
@@ -91,7 +92,7 @@ export default function DraftSignaturesPage() {
             <div className="divide-y divide-line">
               {filteredRequests.map((req) => {
                 const linkedDoc = req.documentId ? documentItems.find(d => d.id === req.documentId) : undefined;
-                const linkedContract = req.contractId ? contracts.find(c => c.id === req.contractId) : undefined;
+                const linkedContract = FEATURES.contracts && req.contractId ? contracts.find(c => c.id === req.contractId) : undefined;
                 return (
                   <div
                     key={req.id}

@@ -27,6 +27,7 @@ import { useApp, useCurrentUser } from '@/context/app-context';
 import { SignatureSigner, SignatureField, SigningOrder, ReminderFrequency } from '@/types/documents';
 import { REMINDER_OPTIONS, EXPIRY_PRESETS, reminderIntervalDays } from '@/lib/signing-options';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
+import { FEATURES } from '@/lib/features';
 
 interface SignerForm {
   id: string;
@@ -343,7 +344,7 @@ function WizardContent() {
         {/* Step 1: Select Document */}
         {currentStep === 1 && (
           <div className="bg-paper-elevated border border-line rounded-xl p-6 shadow-sm space-y-5">
-            <h3 className="text-lg font-bold text-ink">Step 1 — Select Document or Contract</h3>
+            <h3 className="text-lg font-bold text-ink">Step 1 — Select Document{FEATURES.contracts && ' or Contract'}</h3>
 
             <div className="space-y-4">
               <div>
@@ -359,7 +360,7 @@ function WizardContent() {
                 />
               </div>
 
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className={`grid grid-cols-1 gap-4 ${FEATURES.contracts ? 'sm:grid-cols-2' : ''}`}>
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-muted block mb-1.5">
                     Link Existing Document
@@ -376,6 +377,7 @@ function WizardContent() {
                   </select>
                 </div>
 
+                {FEATURES.contracts && (
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-muted block mb-1.5">
                     Link Contract Record
@@ -391,6 +393,7 @@ function WizardContent() {
                     ))}
                   </select>
                 </div>
+                )}
               </div>
 
               {selectedDocument && (

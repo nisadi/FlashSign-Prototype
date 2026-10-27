@@ -12,6 +12,13 @@ export const FEATURES = {
    */
   teams: false,
   /**
+   * Contracts as a separate record type: the Contracts tab under Documents, linking
+   * a contract to a signature request, and contract counts in Agreements reports.
+   * Off because everything here is simply a document to sign; contract data in the
+   * store is untouched.
+   */
+  contracts: false,
+  /**
    * The "Role: …" demo persona switcher in the sidebar. Off for the stakeholder demo:
    * the app always runs as FIXED_DEMO_ROLE. Turn on to switch roles again.
    */
