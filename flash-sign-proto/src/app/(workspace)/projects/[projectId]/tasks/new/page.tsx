@@ -20,7 +20,9 @@ import {
   Clock,
   Flag,
 } from 'lucide-react';
-import type { TaskStatus, TaskPriority } from '@/types';
+import type { TaskPriority } from '@/types';
+import { placeIn, projectBoards } from '@/lib/board-columns';
+import { PlacementSelect } from '@/components/tasks/placement-select';
 
 export default function CreateTaskPage({
   params,
@@ -38,11 +40,12 @@ export default function CreateTaskPage({
   const projectSprints = sprints.filter((s) => s.projectId === projectId);
   const projectMilestones = milestones.filter((m) => m.projectId === projectId);
   const existingMainTasks = tasks.filter((t) => t.projectId === projectId && !t.parentId);
+  const boards = projectBoards(project);
 
   // Form State
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [status, setStatus] = useState<TaskStatus>('todo');
+  const [placement, setPlacement] = useState({ boardId: boards[0].id, columnId: boards[0].columns[0].id });
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [assigneeId, setAssigneeId] = useState(projectMembers[0]?.id || users[0]?.id || '');
   const [sprintId, setSprintId] = useState('');
@@ -115,7 +118,12 @@ export default function CreateTaskPage({
       description: description.trim(),
       projectId,
       type: parentId ? 'subtask' : 'task',
-      status,
+      ...(parentId
+        ? { status }
+        : (() => {
+            const board = boards.find((b) => b.id === placement.boardId) ?? boards[0];
+            return placeIn(board, board.columns.find((c) => c.id === placement.columnId) ?? board.columns[0]);
+          })()),
       priority,
       assigneeId: assigneeId || undefined,
       sprintId: sprintId || undefined,
@@ -191,17 +199,14 @@ export default function CreateTaskPage({
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">Initial Status</label>
-                <select
-                  value={status}
-                  onChange={(e) => setStatus(e.target.value as TaskStatus)}
+                <PlacementSelect
+                  boards={boards}
+                  boardId={placement.boardId}
+                  columnId={placement.columnId}
+                  onChange={(b, c) => setPlacement({ boardId: b.id, columnId: c.id })}
+                  aria-label="Initial status"
                   className="w-full px-3 py-2 bg-paper text-xs rounded-xl border border-line outline-none focus:border-flash text-ink"
-                >
-                  <option value="todo">To Do</option>
-                  <option value="in_progress">In Progress</option>
-                  <option value="review">In Review</option>
-                  <option value="blocked">Blocked</option>
-                  <option value="done">Done</option>
-                </select>
+                />
               </div>
 
               <div>

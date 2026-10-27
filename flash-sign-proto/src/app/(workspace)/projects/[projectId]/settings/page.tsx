@@ -6,6 +6,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
+import { ProjectBoardsSettings } from '@/components/projects/project-boards-settings';
+import { canCreateProject } from '@/lib/permissions';
 import { Card, Button } from '@/components/shared/ui';
 import { Avatar } from '@/components/shared/avatar';
 import {
@@ -40,7 +42,7 @@ export default function ProjectSettingsPage({
 }) {
   const { projectId } = use(params);
   const router = useRouter();
-  const { projects, users, updateProject, deleteProject, archiveProject } = useApp();
+  const { projects, users, tasks, demoRole, updateProject, deleteProject, archiveProject } = useApp();
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) return notFound();
@@ -261,6 +263,12 @@ export default function ProjectSettingsPage({
             </div>
           </Card>
         </form>
+
+        <ProjectBoardsSettings
+          project={project}
+          tasks={tasks.filter((t) => t.projectId === project.id)}
+          canEdit={canCreateProject(demoRole)}
+        />
 
         {/* Danger Zone: Archive & Delete */}
         <Card className="p-6 border-danger/30 space-y-4">

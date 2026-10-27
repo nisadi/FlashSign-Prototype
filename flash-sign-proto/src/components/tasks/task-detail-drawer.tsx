@@ -5,7 +5,12 @@ import { useApp, useCurrentUser } from '@/context/app-context';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate, formatRelative } from '@/lib/utils';
-import type { TaskStatus, TaskPriority } from '@/types';
+import { placeIn, placementOf, projectBoards, type ResolvedBoard } from '@/lib/board-columns';
+import { boardNameAt, taskJourney } from '@/lib/task-journey';
+import { useNow } from '@/lib/use-now';
+import { PlacementSelect } from '@/components/tasks/placement-select';
+import { TaskJourney } from '@/components/tasks/task-journey';
+import type { BoardColumn, TaskPriority } from '@/types';
 import {
   X, Trash2, CheckSquare, MessageSquare, Paperclip, Clock, Tag,
   Calendar, User as UserIcon, Plus, Check, AlertCircle, FileText, Sparkles,
@@ -15,11 +20,12 @@ import { ClientPortal, Modal } from '@/components/shared/modal';
 export function TaskDetailDrawer() {
   const {
     activeTaskDrawerId, closeTaskDrawer, tasks, updateTask, deleteTask,
-    users, projects, sprints, milestones, addTask, openTaskDrawer, addActivity
+    users, projects, sprints, milestones, addTask, openTaskDrawer, addActivity, taskStatusChanges, workSessions
   } = useApp();
+  const now = useNow();
 
   const currentUser = useCurrentUser();
-  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'attachments'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'attachments' | 'journey'>('details');
   const [newChecklistText, setNewChecklistText] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -39,9 +45,13 @@ export function TaskDetailDrawer() {
   const milestone = milestones.find(m => m.id === task.milestoneId);
   const parentTask = task.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
   const subtasks = tasks.filter(t => t.parentId === task.id);
+  const boards = projectBoards(project);
+  const placement = placementOf(task, boards);
+  // The Journey matters once a project has more than one board
+  const journey = boards.length > 1 ? taskJourney(task, boards, taskStatusChanges, workSessions, now ?? 0) : [];
 
-  const handleStatusChange = (status: TaskStatus) => {
-    updateTask(task.id, { status });
+  const handleStatusChange = (board: ResolvedBoard, col: BoardColumn) => {
+    updateTask(task.id, placeIn(board, col));
     addActivity({
       id: `act-${Date.now()}`,
       actorId: currentUser?.id || 'u2',
@@ -49,7 +59,7 @@ export function TaskDetailDrawer() {
       action: 'task.status.changed',
       resource: 'Task',
       resourceId: task.id,
-      detail: `Changed status to ${status.replace('_', ' ')}`,
+      detail: board.id === placement.board.id ? `Moved to ${col.name}` : `Moved to ${board.name} · ${col.name}`,
       timestamp: new Date().toISOString(),
     });
   };
@@ -174,18 +184,17 @@ export function TaskDetailDrawer() {
         <div className="p-4 sm:px-6 border-b border-line grid grid-cols-2 sm:grid-cols-5 gap-3 bg-paper-elevated text-xs">
           {/* Status */}
           <div>
-            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Status</label>
-            <select
-              value={task.status}
-              onChange={e => handleStatusChange(e.target.value as TaskStatus)}
+            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">
+              {boards.length > 1 ? `Status · ${placement.board.name}` : 'Status'}
+            </label>
+            <PlacementSelect
+              boards={boards}
+              boardId={placement.board.id}
+              columnId={placement.column?.id}
+              onChange={handleStatusChange}
+              aria-label="Status"
               className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
-            >
-              <option value="todo">To Do</option>
-              <option value="in_progress">In Progress</option>
-              <option value="review">In Review</option>
-              <option value="done">Done</option>
-              <option value="blocked">Blocked</option>
-            </select>
+            />
           </div>
 
           {/* Priority */}
@@ -303,6 +312,19 @@ export function TaskDetailDrawer() {
               </span>
             )}
           </button>
+          {journey.length > 0 && (
+            <button
+              onClick={() => setActiveTab('journey')}
+              className={`py-3 border-b-2 transition-colors flex items-center gap-1.5 ${
+                activeTab === 'journey' ? 'border-flash-deep text-ink' : 'border-transparent text-muted hover:text-ink'
+              }`}
+            >
+              <span>Journey</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-mist text-ink-soft" title="Boards this card has been on">
+                {journey.length}
+              </span>
+            </button>
+          )}
         </div>
 
         {/* Tab Body */}
@@ -551,10 +573,18 @@ export function TaskDetailDrawer() {
                 ) : (
                   task.comments.map(c => {
                     const author = users.find(u => u.id === c.authorId);
+                    const onBoard = journey.length > 0 ? boardNameAt(journey, c.createdAt) : undefined;
                     return (
                       <div key={c.id} className="p-3 rounded-lg border border-line bg-paper space-y-1.5">
                         <div className="flex items-center justify-between text-xs">
-                          <span className="font-bold text-ink">{author?.name || 'Team Member'}</span>
+                          <span className="font-bold text-ink flex items-center gap-1.5">
+                            {author?.name || 'Team Member'}
+                            {onBoard && (
+                              <span className="text-[9px] font-medium text-muted border border-line px-1.5 py-0.5 rounded-full">
+                                {onBoard}
+                              </span>
+                            )}
+                          </span>
                           <span className="text-[10px] text-muted">{formatRelative(c.createdAt)}</span>
                         </div>
                         <p className="text-xs text-ink-soft leading-relaxed">{c.body}</p>
@@ -580,6 +610,11 @@ export function TaskDetailDrawer() {
                 </button>
               </form>
             </div>
+          )}
+
+          {/* The boards a card has been on (only when the project has more than one board) */}
+          {activeTab === 'journey' && journey.length > 0 && (
+            <TaskJourney stages={journey} boards={boards} />
           )}
 
           {activeTab === 'attachments' && (

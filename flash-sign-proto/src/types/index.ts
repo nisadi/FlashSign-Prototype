@@ -81,6 +81,12 @@ export interface Project {
   accentColor?: string;
   goals?: string[];
   group?: string;
+  /** This project's Kanban columns, in board order. Missing = the five default columns. */
+  boardColumns?: BoardColumn[];
+  /** Name of the main board. Missing = "Main board". */
+  mainBoardName?: string;
+  /** Extra boards shown below the main board, in order (e.g. a Testing board) */
+  extraBoards?: ProjectBoard[];
   createdAt: string;
   updatedAt: string;
   // Timeline management (Original vs Current Calculated)
@@ -93,6 +99,28 @@ export interface Project {
   timelineDifference?: number; // calendar days diff (positive = extended, negative = shortened)
   timelineStatus?: TimelineStatus;
   totalWorkDays?: number; // sum of estimated work durations, distinguished from calendar span
+}
+
+/**
+ * A column on a project's Kanban board. Teams name and order their own columns; each one
+ * counts as one of the fixed task stages, which keeps timing, agents and reports working.
+ */
+export interface BoardColumn {
+  id: string;
+  name: string;
+  color: string;
+  status: TaskStatus;
+}
+
+/**
+ * An extra board in a project. A card lives on exactly one board and moves between boards,
+ * taking its comments and history with it.
+ */
+export interface ProjectBoard {
+  id: string;
+  name: string;
+  /** Its own columns. Missing = mirrors the main board's columns, following any change to them. */
+  columns?: BoardColumn[];
 }
 
 // ─── Teams ──────────────────────────────────────────────────────────────────
@@ -139,6 +167,10 @@ export interface Task {
   description: string;
   type: TaskType;
   status: TaskStatus;
+  /** The board the card is on. Missing = the project's main board. */
+  boardId?: string;
+  /** The board column the card sits in, when its stage has more than one column */
+  columnId?: string;
   priority: TaskPriority;
   projectId: string;
   sprintId?: string;
@@ -446,6 +478,9 @@ export interface TaskStatusChange {
   /** Who moved it (for an agent, the person it works for) */
   byUserId: string;
   via: AgentClient | 'web';
+  /** Set when the card moved to another board */
+  fromBoardId?: string;
+  toBoardId?: string;
 }
 
 export type AgentEventAction =

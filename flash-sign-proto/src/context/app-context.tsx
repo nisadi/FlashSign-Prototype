@@ -6,7 +6,7 @@ import type {
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
-  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange,
+  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
@@ -31,6 +31,9 @@ import type {
 import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
 import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS, MOCK_STATUS_CHANGES } from '@/data/mock-agent-activity';
 import { applyAutoStops } from '@/lib/task-time';
+import {
+  MAIN_BOARD_ID, boardColumnsFor, boardOfTask, boardsSharingColumns, columnOfTask, projectBoards,
+} from '@/lib/board-columns';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
@@ -108,21 +111,32 @@ function agentEvent(
   return { id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, userId, taskId, agent, action, detail, at: new Date().toISOString() };
 }
 
-function statusChange(taskId: string, from: TaskStatus, to: TaskStatus, byUserId: string, via: TaskStatusChange['via'], at: string): TaskStatusChange {
-  return { id: `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, taskId, from, to, at, byUserId, via };
+function statusChange(
+  taskId: string, from: TaskStatus, to: TaskStatus, byUserId: string, via: TaskStatusChange['via'], at: string,
+  boardMove?: BoardMove
+): TaskStatusChange {
+  return {
+    id: `sc-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`, taskId, from, to, at, byUserId, via,
+    ...(boardMove && { fromBoardId: boardMove.from, toBoardId: boardMove.to }),
+  };
 }
+
+type BoardMove = { from: string; to: string };
 
 /**
  * A card moved on the board (or in a task view). Moving into In Progress starts the worker's
  * timer (pausing any other one they have running); moving out of In Progress stops it,
- * as finished when it goes to In Review / Done. Every move is recorded for Reports > Task time.
+ * as finished when it goes to In Review / Done. Moving to another board starts a new timer
+ * there, so time splits by board. Every move is recorded for Reports > Task time.
  */
-function trackStatusMove(s: AppState, task: Task, to: TaskStatus, now: string): Pick<AppState, 'workSessions' | 'taskStatusChanges'> {
+function trackStatusMove(
+  s: AppState, task: Task, to: TaskStatus, now: string, boardMove?: BoardMove
+): Pick<AppState, 'workSessions' | 'taskStatusChanges'> {
   const from = task.status;
   const workerId = task.assigneeId ?? s.currentUserId;
   let workSessions = s.workSessions;
 
-  if (from === 'in_progress') {
+  if (from === 'in_progress' && (to !== 'in_progress' || boardMove)) {
     const endReason = to === 'review' || to === 'done' ? ('finished' as const) : ('paused' as const);
     workSessions = workSessions.map(w =>
       w.taskId === task.id && !w.endedAt ? { ...w, endedAt: now, lastActivityAt: now, endReason } : w
@@ -138,9 +152,70 @@ function trackStatusMove(s: AppState, task: Task, to: TaskStatus, now: string): 
   }
   return {
     workSessions,
-    taskStatusChanges: [...s.taskStatusChanges, statusChange(task.id, from, to, s.currentUserId, 'web', now)],
+    taskStatusChanges: [...s.taskStatusChanges, statusChange(task.id, from, to, s.currentUserId, 'web', now, boardMove)],
   };
 }
+
+function progressOf(tasks: Task[], projectId: string): number {
+  const projectTasks = tasks.filter(t => t.projectId === projectId);
+  const doneCount = projectTasks.filter(t => t.status === 'done').length;
+  return projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+}
+
+/**
+ * Change a project's boards and re-place its cards to match. Cards follow `columnMoves` out of
+ * removed columns (only on the boards in `columnBoards`) and `boardMoves` out of removed boards;
+ * otherwise they keep their column, or take the first column of their stage.
+ */
+function relayoutProject(
+  s: AppState,
+  projectId: string,
+  change: (p: Project) => Project,
+  opts: { columnMoves?: Record<string, string>; columnBoards?: string[]; boardMoves?: Record<string, string> } = {}
+): AppState {
+  const project = s.projects.find(p => p.id === projectId);
+  if (!project) return s;
+  const now = new Date().toISOString();
+  const nextProject = change(project);
+  const before = projectBoards(project);
+  const after = projectBoards(nextProject);
+  let timing: Pick<AppState, 'workSessions' | 'taskStatusChanges'> = {
+    workSessions: s.workSessions,
+    taskStatusChanges: s.taskStatusChanges,
+  };
+
+  const nextTasks = s.tasks.map(t => {
+    if (t.projectId !== projectId) return t;
+    const fromBoard = boardOfTask(t, before);
+    const fromColumn = columnOfTask(t, fromBoard.columns);
+    const board = after.find(b => b.id === (opts.boardMoves?.[fromBoard.id] ?? fromBoard.id)) ?? after[0];
+    const movedTo = fromColumn && opts.columnBoards?.includes(fromBoard.id) ? opts.columnMoves?.[fromColumn.id] : undefined;
+    const column = board.columns.find(c => c.id === (movedTo ?? fromColumn?.id)) ?? columnOfTask({ status: t.status }, board.columns);
+    if (!column) return t;
+
+    const nowOn = boardOfTask(t, after);
+    if (nowOn.id === board.id && columnOfTask(t, nowOn.columns)?.id === column.id) return t;
+    const boardMove = board.id !== fromBoard.id ? { from: fromBoard.id, to: board.id } : undefined;
+    if (column.status !== t.status || boardMove) {
+      timing = trackStatusMove({ ...s, ...timing }, t, column.status, now, boardMove);
+    }
+    return { ...t, boardId: board.id, columnId: column.id, status: column.status, updatedAt: now };
+  });
+
+  return {
+    ...s,
+    ...timing,
+    tasks: nextTasks,
+    projects: s.projects.map(p =>
+      p.id === projectId ? { ...nextProject, progress: progressOf(nextTasks, projectId), updatedAt: now } : p
+    ),
+  };
+}
+
+const withExtraBoards = (p: Project, map: (boards: NonNullable<Project['extraBoards']>) => Project['extraBoards']): Project => ({
+  ...p,
+  extraBoards: map(p.extraBoards ?? []),
+});
 
 // ── Actions ────────────────────────────────────────────────────────────────────
 interface AppActions {
@@ -148,6 +223,22 @@ interface AppActions {
   // Projects
   addProject: (project: CreateProjectInput) => void;
   updateProject: (id: string, updates: Partial<Project>) => void;
+  /**
+   * Replace one board's columns. Cards in a removed column go to the column named in `moves`
+   * (removed column id → target column id); a card whose column now counts as a different
+   * stage changes status, with the usual timer handling. Editing the main board also changes
+   * the boards that mirror it; editing a mirroring board gives it its own columns.
+   */
+  setBoardColumns: (projectId: string, boardId: string, columns: BoardColumn[], moves: Record<string, string>) => void;
+  /** Add a board below the others; it mirrors the main board's columns */
+  addBoard: (projectId: string, name: string) => void;
+  renameBoard: (projectId: string, boardId: string, name: string) => void;
+  /** Move an extra board up or down (the main board always stays first) */
+  moveBoard: (projectId: string, boardId: string, delta: -1 | 1) => void;
+  /** Mirror the main board's columns again, or take a copy of them to customise */
+  setBoardMirroring: (projectId: string, boardId: string, mirror: boolean) => void;
+  /** Remove an extra board; its cards move to `targetBoardId` */
+  deleteBoard: (projectId: string, boardId: string, targetBoardId: string) => void;
   deleteProject: (id: string) => void;
   archiveProject: (id: string) => void;
   toggleFavoriteProject: (id: string) => void;
@@ -577,6 +668,62 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return calculateProjectTimeline(merged, s.tasks, s.milestones);
       }),
     })),
+    setBoardColumns: (projectId, boardId, columns, moves) => update(s => {
+      const project = s.projects.find(p => p.id === projectId);
+      if (!project) return s;
+      const columnBoards = boardsSharingColumns(boardId, projectBoards(project)).map(b => b.id);
+      return relayoutProject(
+        s,
+        projectId,
+        p => boardId === MAIN_BOARD_ID
+          ? { ...p, boardColumns: columns }
+          : withExtraBoards(p, boards => boards.map(b => (b.id === boardId ? { ...b, columns } : b))),
+        { columnMoves: moves, columnBoards }
+      );
+    }),
+    addBoard: (projectId, name) => update(s => ({
+      ...s,
+      projects: s.projects.map(p =>
+        p.id === projectId
+          ? { ...withExtraBoards(p, boards => [...boards, { id: `board-${Date.now()}`, name }]), updatedAt: new Date().toISOString() }
+          : p
+      ),
+    })),
+    renameBoard: (projectId, boardId, name) => update(s => ({
+      ...s,
+      projects: s.projects.map(p => {
+        if (p.id !== projectId) return p;
+        const renamed = boardId === MAIN_BOARD_ID
+          ? { ...p, mainBoardName: name }
+          : withExtraBoards(p, boards => boards.map(b => (b.id === boardId ? { ...b, name } : b)));
+        return { ...renamed, updatedAt: new Date().toISOString() };
+      }),
+    })),
+    moveBoard: (projectId, boardId, delta) => update(s => ({
+      ...s,
+      projects: s.projects.map(p => {
+        if (p.id !== projectId) return p;
+        const boards = [...(p.extraBoards ?? [])];
+        const at = boards.findIndex(b => b.id === boardId);
+        const to = at + delta;
+        if (at === -1 || to < 0 || to >= boards.length) return p;
+        [boards[at], boards[to]] = [boards[to], boards[at]];
+        return { ...p, extraBoards: boards, updatedAt: new Date().toISOString() };
+      }),
+    })),
+    setBoardMirroring: (projectId, boardId, mirror) => update(s =>
+      // A copy keeps the column ids, so cards stay put; mirroring again re-places cards by stage
+      relayoutProject(s, projectId, p =>
+        withExtraBoards(p, boards => boards.map(b =>
+          b.id === boardId ? { ...b, columns: mirror ? undefined : boardColumnsFor(p).map(c => ({ ...c })) } : b
+        ))
+      )
+    ),
+    deleteBoard: (projectId, boardId, targetBoardId) => update(s =>
+      relayoutProject(s, projectId, p => withExtraBoards(p, boards => boards.filter(b => b.id !== boardId)), {
+        boardMoves: { [boardId]: targetBoardId },
+      })
+    ),
     deleteProject: (id) => update(s => ({
       ...s,
       projects: s.projects.filter(p => p.id !== id),
@@ -610,6 +757,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         description: t.description || '',
         type: t.type || (t.parentId ? 'subtask' : 'task'),
         status: t.status || 'todo',
+        boardId: t.boardId,
+        columnId: t.columnId,
         priority: t.priority || 'medium',
         projectId: t.projectId,
         sprintId: t.sprintId,
@@ -661,6 +810,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         description: t.description || '',
         type: t.type || (t.parentId ? 'subtask' : 'task'),
         status: t.status || 'todo',
+        boardId: t.boardId,
+        columnId: t.columnId,
         priority: t.priority || 'medium',
         projectId: t.projectId,
         sprintId: t.sprintId,
@@ -707,8 +858,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     updateTask: (id, updates) => update(s => {
       const now = new Date().toISOString();
       const before = s.tasks.find(t => t.id === id);
-      const timing = before && updates.status && updates.status !== before.status
-        ? trackStatusMove(s, { ...before, ...updates, status: before.status }, updates.status, now)
+      const fromBoardId = before?.boardId ?? MAIN_BOARD_ID;
+      const boardMove = updates.boardId && updates.boardId !== fromBoardId ? { from: fromBoardId, to: updates.boardId } : undefined;
+      const to = updates.status ?? before?.status;
+      const timing = before && to && (to !== before.status || boardMove)
+        ? trackStatusMove(s, { ...before, ...updates, status: before.status }, to, now, boardMove)
         : {};
       const nextTasks = s.tasks.map(t => t.id === id ? { ...t, ...updates, updatedAt: now } : t);
       const updatedTask = nextTasks.find(t => t.id === id);

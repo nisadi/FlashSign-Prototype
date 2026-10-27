@@ -9,6 +9,8 @@ import { Button, Card, EmptyState } from '@/components/shared/ui';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate } from '@/lib/utils';
+import { placeIn, placementOf, projectBoards } from '@/lib/board-columns';
+import { PlacementSelect } from '@/components/tasks/placement-select';
 import {
   Plus,
   Search,
@@ -79,6 +81,7 @@ export default function ProjectTasksListPage({
   const projectTasks = tasks.filter((t) => t.projectId === projectId || t.projectId === effectiveId);
   const projectMilestones = milestones.filter((m) => m.projectId === projectId || m.projectId === effectiveId);
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
+  const boards = projectBoards(project);
 
   // Separate Main Tasks (no parentId) from Subtasks
   const mainTasks = useMemo(() => {
