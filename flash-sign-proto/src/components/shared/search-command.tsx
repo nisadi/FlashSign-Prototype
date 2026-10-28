@@ -148,7 +148,7 @@ export function SearchCommand({ isOpen, onClose }: SearchCommandProps) {
                         key={m.id}
                         onClick={() => {
                           onClose();
-                          router.push(`/projects/${m.projectId}/milestones`);
+                          router.push(`/projects/${m.projectId}/plan`);
                         }}
                         className="flex items-center justify-between p-2 rounded-lg hover:bg-mist/50 cursor-pointer transition-colors"
                       >

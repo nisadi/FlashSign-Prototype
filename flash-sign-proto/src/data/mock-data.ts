@@ -1,5 +1,5 @@
 import type {
-  User, Organization, Project, Team, Task, Sprint, Milestone,
+  User, Organization, Project, Team, Task, Sprint, Milestone, Epic, Story,
   Document, ApprovalRequest, Notification, AuditLog, Integration,
   AgentRun, DemoRole, ProjectFile, SrsGeneratedTaskRecord,
 } from '@/types';
@@ -322,7 +322,43 @@ export const MOCK_MILESTONES: Milestone[] = [
 ];
 
 // ── Tasks ─────────────────────────────────────────────────────────────────────
-export const MOCK_TASKS: Task[] = [
+// Plan for Flash Sign v2.0: epics inside the phases (milestones), stories inside the epics
+export const MOCK_EPICS: Epic[] = [
+  { id: 'e1', projectId: 'p1', phaseId: 'm1', name: 'Signature canvas', description: 'Placing and filling fields on the PDF', color: '#42a5f5', createdAt: d(-60), updatedAt: d(-60) },
+  { id: 'e2', projectId: 'p1', phaseId: 'm1', name: 'AI assistance', description: 'Field suggestions and document understanding', color: '#7e57c2', createdAt: d(-60), updatedAt: d(-60) },
+  { id: 'e3', projectId: 'p1', phaseId: 'm1', name: 'Reliable delivery', description: 'Invitations and reminders arrive on time', color: '#26a69a', createdAt: d(-60), updatedAt: d(-60) },
+  { id: 'e4', projectId: 'p1', phaseId: 'm9', name: 'Audit & compliance', description: 'Evidence and legal validity of every signature', color: '#f59e0b', createdAt: d(-40), updatedAt: d(-40) },
+  { id: 'e5', projectId: 'p1', phaseId: 'm2', name: 'Bulk sending', description: 'One agreement to many recipients', color: '#ec407a', createdAt: d(-30), updatedAt: d(-30) },
+  { id: 'e6', projectId: 'p1', phaseId: 'm2', name: 'Polish & release', description: 'Performance and finishing touches for GA', color: '#78909c', createdAt: d(-30), updatedAt: d(-30) },
+];
+
+export const MOCK_STORIES: Story[] = [
+  { id: 'st1', projectId: 'p1', epicId: 'e1', title: 'As a sender, I can place signature fields by dragging them onto the PDF', acceptanceCriteria: 'Fields snap to a grid and work on touch screens.', priority: 'high', createdAt: d(-60), updatedAt: d(-60) },
+  { id: 'st7', projectId: 'p1', epicId: 'e1', title: 'As a signer, I am guided through every field I need to fill', priority: 'medium', createdAt: d(-30), updatedAt: d(-30) },
+  { id: 'st2', projectId: 'p1', epicId: 'e2', title: 'As a sender, signature and date fields are suggested automatically', acceptanceCriteria: 'At least 90% of fields on standard NDAs are found.', priority: 'critical', createdAt: d(-50), updatedAt: d(-50) },
+  { id: 'st3', projectId: 'p1', epicId: 'e3', title: 'As a signer, I receive the invitation within a minute', priority: 'critical', createdAt: d(-20), updatedAt: d(-20) },
+  { id: 'st4', projectId: 'p1', epicId: 'e4', title: 'As an auditor, I can see every signing event in order', priority: 'high', createdAt: d(-40), updatedAt: d(-40) },
+  { id: 'st5', projectId: 'p1', epicId: 'e4', title: 'As a legal team, our signatures are valid under eIDAS', priority: 'high', createdAt: d(-40), updatedAt: d(-40) },
+  { id: 'st6', projectId: 'p1', epicId: 'e5', title: 'As an admin, I can send one agreement to a list of recipients', acceptanceCriteria: 'CSV upload with up to 500 recipients.', priority: 'high', createdAt: d(-30), updatedAt: d(-30) },
+];
+
+/** Which epic and story each Flash Sign v2.0 task belongs to; the phase follows the epic */
+const TASK_PLAN_LINKS: Record<string, Pick<Task, 'epicId' | 'storyId' | 'milestoneId'>> = {
+  task1: { epicId: 'e1', storyId: 'st1', milestoneId: 'm1' },
+  task31: { epicId: 'e1', storyId: 'st7', milestoneId: 'm1' },
+  task2: { epicId: 'e2', storyId: 'st2', milestoneId: 'm1' },
+  task3: { epicId: 'e3', storyId: 'st3', milestoneId: 'm1' },
+  task4: { epicId: 'e4', storyId: 'st4', milestoneId: 'm9' },
+  task30: { epicId: 'e4', storyId: 'st5', milestoneId: 'm9' },
+  task5: { epicId: 'e5', storyId: 'st6', milestoneId: 'm2' },
+  // Directly under an epic (no story) and directly under a phase (no epic): both levels are optional
+  task6: { epicId: 'e6', milestoneId: 'm2' },
+  task7: { epicId: 'e6', milestoneId: 'm2' },
+  task8: { epicId: 'e6', milestoneId: 'm2' },
+  task35: { milestoneId: 'm1' },
+};
+
+const RAW_TASKS: Task[] = [
   // FSV2 (p1) - Sprint 12 & 13
   {
     id: 'task1', key: 'FSV2-101', title: 'Redesign signature placement canvas',
@@ -721,6 +757,8 @@ export const MOCK_TASKS: Task[] = [
     checklist: [], comments: [], attachments: [], createdAt: d(-3), updatedAt: d(-1),
   },
 ];
+
+export const MOCK_TASKS: Task[] = RAW_TASKS.map(t => ({ ...t, ...TASK_PLAN_LINKS[t.id] }));
 
 // ── Project Files ─────────────────────────────────────────────────────────────
 export const MOCK_PROJECT_FILES: ProjectFile[] = [

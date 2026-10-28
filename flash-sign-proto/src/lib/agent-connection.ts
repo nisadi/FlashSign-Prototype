@@ -293,6 +293,8 @@ export function agentsMd(projectKey: string): string {
 This repository belongs to PM project **${projectKey}**. Use it as the default project for the pm tools.
 
 - When I say I'm starting a task (for example "let's do ${projectKey}-42"), call \`start_task\` before writing code.
+- Tasks can have subtasks; \`list_my_tasks\` shows them under their task. If the task has subtasks, start the
+  subtask I'm working on, not the task: its task card moves to In Progress and my timer runs on the subtask.
 - If \`get_active_work\` shows a task already running, ask me whether to continue it or pause it first.
 - After each meaningful step, call \`add_progress_note\` with one or two lines: what's done and what's next.
   Another agent may continue this task later and will rely on these notes.

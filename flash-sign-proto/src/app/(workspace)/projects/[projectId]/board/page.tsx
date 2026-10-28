@@ -1,6 +1,6 @@
 'use client';
 
-import { use, useState, useCallback, useMemo } from 'react';
+import { use, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
@@ -9,6 +9,8 @@ import { placeIn, placementOf, projectBoards, stageLabel, type ResolvedBoard } f
 import { BoardColumnsModal } from '@/components/projects/board-columns-modal';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { PlacementSelect } from '@/components/tasks/placement-select';
+import { CardSubtasks } from '@/components/tasks/card-subtasks';
+import { useGuardedMove } from '@/components/tasks/use-guarded-move';
 import { PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { Button } from '@/components/shared/ui';
@@ -34,7 +36,7 @@ export default function KanbanBoardPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, tasks, users, updateTask, openTaskDrawer, addTask, demoRole } = useApp();
+  const { projects, tasks, users, epics, openTaskDrawer, addTask, demoRole } = useApp();
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
@@ -52,6 +54,9 @@ export default function KanbanBoardPage({
   // Folded boards: the main board starts open, the boards below it start folded
   const [openBoards, setOpenBoards] = useState<Record<string, boolean>>({});
 
+  // Moving a task to Done asks first when some of its subtasks are still open
+  const { move, dialog: openSubtasksDialog } = useGuardedMove();
+
   const project =
     projects.find((p) => p.id === projectId) ||
     (projectId === 'p-mvhmnblw' ? projects.find((p) => p.id === 'p1') : undefined);
@@ -62,6 +67,12 @@ export default function KanbanBoardPage({
       ? 'p1'
       : projectId;
   const projectTasks = tasks.filter((t) => t.projectId === projectId || t.projectId === effectiveId);
+  // Cards are tasks; subtasks show inside their task's card
+  const cardTasks = projectTasks.filter((t) => !t.parentId);
+  const subtasksByParent = new Map<string, typeof projectTasks>();
+  for (const t of projectTasks) {
+    if (t.parentId) subtasksByParent.set(t.parentId, [...(subtasksByParent.get(t.parentId) ?? []), t]);
+  }
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
   const boards = projectBoards(project);
   const multiBoard = boards.length > 1;
@@ -69,33 +80,32 @@ export default function KanbanBoardPage({
   const isOpen = (board: ResolvedBoard) => openBoards[board.id] ?? board.isMain;
   const setOpen = (boardId: string, open: boolean) => setOpenBoards((o) => ({ ...o, [boardId]: open }));
 
-  // Filter tasks
+  // Filter cards; a card also matches through its subtasks (their titles and assignees)
   const filteredTasks = useMemo(() => {
-    return projectTasks.filter((t) => {
-      const taskLabels = t.labels || t.tags || [];
-      const matchSearch =
-        t.title.toLowerCase().includes(search.toLowerCase()) ||
-        t.key.toLowerCase().includes(search.toLowerCase()) ||
-        taskLabels.some((l: string) => l.toLowerCase().includes(search.toLowerCase()));
-      const matchAssignee = assigneeFilter === 'all' || t.assigneeId === assigneeFilter;
+    const q = search.toLowerCase();
+    const matchesText = (t: (typeof projectTasks)[number]) =>
+      t.title.toLowerCase().includes(q) ||
+      t.key.toLowerCase().includes(q) ||
+      (t.labels || t.tags || []).some((l: string) => l.toLowerCase().includes(q));
+    return cardTasks.filter((t) => {
+      const subs = subtasksByParent.get(t.id) ?? [];
+      const matchSearch = matchesText(t) || subs.some(matchesText);
+      const matchAssignee =
+        assigneeFilter === 'all' || t.assigneeId === assigneeFilter || subs.some((s) => s.assigneeId === assigneeFilter);
       const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
       return matchSearch && matchAssignee && matchPriority;
     });
-  }, [projectTasks, search, assigneeFilter, priorityFilter]);
+  }, [cardTasks, subtasksByParent, search, assigneeFilter, priorityFilter]);
 
   const onDragStart = (id: string) => setDraggedId(id);
 
   // A card takes the column's stage as its status; moving to another board starts a fresh timer there
-  const onDrop = useCallback(
-    (board: ResolvedBoard, col: BoardColumn) => {
-      if (draggedId) {
-        updateTask(draggedId, placeIn(board, col));
-        setDraggedId(null);
-        setDragOverSlot(null);
-      }
-    },
-    [draggedId, updateTask]
-  );
+  const onDrop = (board: ResolvedBoard, col: BoardColumn) => {
+    const task = draggedId ? cardTasks.find((t) => t.id === draggedId) : undefined;
+    if (task) move(task, placeIn(board, col));
+    setDraggedId(null);
+    setDragOverSlot(null);
+  };
 
   const handleQuickAdd = (board: ResolvedBoard, col: BoardColumn) => {
     if (!quickTitle.trim()) return;
@@ -231,7 +241,7 @@ export default function KanbanBoardPage({
                             boardId={board.id}
                             columnId={col.id}
                             prefix="Move: "
-                            onChange={(b, c) => updateTask(task.id, placeIn(b, c))}
+                            onChange={(b, c) => move(task, placeIn(b, c))}
                             aria-label={`Move ${task.key}`}
                             className="text-[10px] max-w-[130px] bg-paper-elevated border border-line rounded px-1.5 py-0.5 text-muted hover:text-ink cursor-pointer outline-none focus:border-flash"
                           />
@@ -243,8 +253,32 @@ export default function KanbanBoardPage({
                         {task.title}
                       </p>
 
+                      {(subtasksByParent.get(task.id)?.length ?? 0) > 0 && (
+                        <CardSubtasks
+                          task={task}
+                          subtasks={subtasksByParent.get(task.id)!}
+                          onAllDone={() => {
+                            const review = board.columns.find((c) => c.status === 'review');
+                            if (review) move(task, placeIn(board, review));
+                          }}
+                        />
+                      )}
+
                       {/* Labels */}
                       <div className="flex flex-wrap gap-1 mb-2.5">
+                        {(() => {
+                          const epic = task.epicId ? epics.find((e) => e.id === task.epicId) : undefined;
+                          return epic ? (
+                            <span
+                              className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full border font-semibold"
+                              style={{ borderColor: `${epic.color}66`, color: epic.color }}
+                              title={`Epic: ${epic.name}`}
+                            >
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: epic.color }} />
+                              {epic.name}
+                            </span>
+                          ) : null;
+                        })()}
                         <TaskTimerBadge taskId={task.id} />
                         {task.isSrsGenerated && (
                           <span className="inline-flex items-center gap-1 text-[9px] px-1.5 py-0.5 rounded-full bg-emerald-500/15 text-emerald-700 dark:text-emerald-400 font-bold border border-emerald-500/30 uppercase tracking-wider">
@@ -357,7 +391,7 @@ export default function KanbanBoardPage({
 
           <div className="flex items-center gap-2">
             <span className="text-xs text-muted font-mono">
-              {filteredTasks.length} / {projectTasks.length} tasks
+              {filteredTasks.length} / {cardTasks.length} tasks
             </span>
             {canEditColumns && !multiBoard && (
               <Button variant="secondary" size="sm" icon={Columns3} onClick={() => setColumnsEditor({ boardId: boards[0].id, add: false })}>
@@ -447,6 +481,8 @@ export default function KanbanBoardPage({
           <div className="flex-1">{renderColumns(boards[0])}</div>
         )}
       </div>
+
+      {openSubtasksDialog}
 
       {columnsEditor && (
         <BoardColumnsModal

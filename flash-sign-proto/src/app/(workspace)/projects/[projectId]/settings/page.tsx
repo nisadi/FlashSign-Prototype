@@ -8,6 +8,8 @@ import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { ProjectBoardsSettings } from '@/components/projects/project-boards-settings';
 import { canCreateProject } from '@/lib/permissions';
+import { diffCalendarDays } from '@/lib/timeline-calculator';
+import { formatDate } from '@/lib/utils';
 import { Card, Button } from '@/components/shared/ui';
 import { Avatar } from '@/components/shared/avatar';
 import {
@@ -42,7 +44,11 @@ export default function ProjectSettingsPage({
 }) {
   const { projectId } = use(params);
   const router = useRouter();
-  const { projects, users, tasks, demoRole, updateProject, deleteProject, archiveProject } = useApp();
+  const { projects, users, tasks, demoRole, currentUserId, updateProject, deleteProject, archiveProject } = useApp();
+
+  // Why the baseline is being changed (asked only when the baseline dates change)
+  const [baselineReason, setBaselineReason] = useState('');
+  const [baselineError, setBaselineError] = useState(false);
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) return notFound();
@@ -51,10 +57,15 @@ export default function ProjectSettingsPage({
   const [description, setDescription] = useState(project.description);
   const [key, setKey] = useState(project.key);
   const [status, setStatus] = useState<ProjectStatus>(project.status);
-  const [health, setHealth] = useState<ProjectHealth>(project.health);
+  // 'auto' = health follows the timeline; otherwise it was set by hand
+  const [health, setHealth] = useState<ProjectHealth | 'auto'>(project.healthMode === 'manual' ? project.health : 'auto');
   const [ownerId, setOwnerId] = useState(project.ownerId);
-  const [startDate, setStartDate] = useState(project.startDate);
-  const [dueDate, setDueDate] = useState(project.dueDate);
+  // The original plan (baseline). The current dates are calculated from tasks and milestones.
+  const baselineStart = project.originalStartDate || project.startDate;
+  const baselineEnd = project.originalEndDate || project.dueDate || project.endDate;
+  const [startDate, setStartDate] = useState(baselineStart);
+  const [dueDate, setDueDate] = useState(baselineEnd);
+  const rebaselining = startDate !== baselineStart || dueDate !== baselineEnd;
   const [accentColor, setAccentColor] = useState(project.accentColor || '#00c2a8');
   const [group, setGroup] = useState(project.group || 'Core Platform');
   const [showSavedFeedback, setShowSavedFeedback] = useState(false);
@@ -65,18 +76,33 @@ export default function ProjectSettingsPage({
 
   const handleSaveGeneral = (e: React.FormEvent) => {
     e.preventDefault();
+    if (rebaselining && !baselineReason.trim()) {
+      setBaselineError(true);
+      return;
+    }
     updateProject(projectId, {
       name,
       description,
       key,
       status,
-      health,
+      health: health === 'auto' ? project.health : health,
+      healthMode: health === 'auto' ? 'auto' : 'manual',
       ownerId,
-      startDate,
-      dueDate,
       accentColor,
       group,
+      // Re-baselining keeps the old plan in history, with who changed it and why
+      ...(rebaselining && {
+        originalStartDate: startDate,
+        originalEndDate: dueDate,
+        originalDuration: Math.max(1, diffCalendarDays(startDate, dueDate)),
+        baselineHistory: [
+          ...(project.baselineHistory ?? []),
+          { at: new Date().toISOString(), byUserId: currentUserId, reason: baselineReason.trim(), startDate: baselineStart, endDate: baselineEnd },
+        ],
+      }),
     });
+    setBaselineReason('');
+    setBaselineError(false);
     setShowSavedFeedback(true);
     setTimeout(() => setShowSavedFeedback(false), 3000);
   };
@@ -178,9 +204,10 @@ export default function ProjectSettingsPage({
                 <label className="block text-xs font-semibold text-ink mb-1">Health State</label>
                 <select
                   value={health}
-                  onChange={(e) => setHealth(e.target.value as ProjectHealth)}
+                  onChange={(e) => setHealth(e.target.value as ProjectHealth | 'auto')}
                   className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
                 >
+                  <option value="auto">Automatic (from timeline)</option>
                   <option value="on_track">On Track</option>
                   <option value="at_risk">At Risk</option>
                   <option value="delayed">Delayed</option>
@@ -236,7 +263,7 @@ export default function ProjectSettingsPage({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1">Start Date</label>
+                <label className="block text-xs font-semibold text-ink mb-1">Baseline Start</label>
                 <input
                   type="date"
                   value={startDate}
@@ -246,7 +273,7 @@ export default function ProjectSettingsPage({
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-ink mb-1">Due Date</label>
+                <label className="block text-xs font-semibold text-ink mb-1">Baseline End</label>
                 <input
                   type="date"
                   value={dueDate}
@@ -254,6 +281,40 @@ export default function ProjectSettingsPage({
                   className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
                 />
               </div>
+            </div>
+
+            <div className="rounded-xl border border-line bg-paper px-3 py-2.5 text-[11px] text-ink-soft space-y-2">
+              <p>
+                The baseline is the original plan. The current planned end,{' '}
+                <span className="font-mono font-semibold text-ink">{formatDate(project.currentEndDate || project.endDate)}</span>, is
+                calculated from tasks and milestones.
+                {project.baselineHistory?.length
+                  ? ` Re-baselined ${project.baselineHistory.length} time${project.baselineHistory.length === 1 ? '' : 's'}, last by ${
+                      users.find((u) => u.id === project.baselineHistory!.at(-1)!.byUserId)?.name ?? 'someone'
+                    }: "${project.baselineHistory.at(-1)!.reason}".`
+                  : ''}
+              </p>
+              {rebaselining && (
+                <div>
+                  <label className="block text-[11px] font-semibold text-ink mb-1">
+                    Why are you changing the baseline? <span className="text-danger">*</span>
+                  </label>
+                  <input
+                    value={baselineReason}
+                    onChange={(e) => {
+                      setBaselineReason(e.target.value);
+                      setBaselineError(false);
+                    }}
+                    placeholder="e.g. Client added the reporting module, scope agreed on 28 Oct"
+                    className={`w-full px-3 py-2 text-xs bg-paper-elevated border rounded-xl outline-none focus:border-flash text-ink ${
+                      baselineError ? 'border-danger' : 'border-line'
+                    }`}
+                  />
+                  {baselineError && (
+                    <p className="mt-1 text-danger">Add a reason; the old baseline is kept in history with it.</p>
+                  )}
+                </div>
+              )}
             </div>
 
             <div className="flex justify-end pt-2">

@@ -9,7 +9,12 @@ import { placeIn, placementOf, projectBoards, type ResolvedBoard } from '@/lib/b
 import { boardNameAt, taskJourney } from '@/lib/task-journey';
 import { useNow } from '@/lib/use-now';
 import { PlacementSelect } from '@/components/tasks/placement-select';
+import { SubtaskStateSelect } from '@/components/tasks/subtask-state-select';
+import { PlanPicker } from '@/components/plan/plan-picker';
+import { planOf } from '@/lib/plan';
+import { useGuardedMove } from '@/components/tasks/use-guarded-move';
 import { TaskJourney } from '@/components/tasks/task-journey';
+import { TaskProgress } from '@/components/tasks/task-progress';
 import type { BoardColumn, TaskPriority } from '@/types';
 import {
   X, Trash2, CheckSquare, MessageSquare, Paperclip, Clock, Tag,
@@ -20,12 +25,15 @@ import { ClientPortal, Modal } from '@/components/shared/modal';
 export function TaskDetailDrawer() {
   const {
     activeTaskDrawerId, closeTaskDrawer, tasks, updateTask, deleteTask,
-    users, projects, sprints, milestones, addTask, openTaskDrawer, addActivity, taskStatusChanges, workSessions
+    users, projects, sprints, milestones, addTask, openTaskDrawer, addActivity, taskStatusChanges, workSessions,
+    epics, stories, setTaskPlan
   } = useApp();
   const now = useNow();
+  // Moving a task to Done asks first when some of its subtasks are still open
+  const { move, dialog: openSubtasksDialog } = useGuardedMove();
 
   const currentUser = useCurrentUser();
-  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'comments' | 'attachments' | 'journey'>('details');
+  const [activeTab, setActiveTab] = useState<'details' | 'checklist' | 'progress' | 'comments' | 'attachments' | 'journey'>('details');
   const [newChecklistText, setNewChecklistText] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
@@ -41,7 +49,6 @@ export function TaskDetailDrawer() {
   const assignee = users.find(u => u.id === task.assigneeId);
   const reporter = users.find(u => u.id === task.reporterId);
   const sprint = sprints.find(s => s.id === task.sprintId);
-  const projectMilestones = milestones.filter(m => m.projectId === task.projectId);
   const milestone = milestones.find(m => m.id === task.milestoneId);
   const parentTask = task.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
   const subtasks = tasks.filter(t => t.parentId === task.id);
@@ -51,7 +58,7 @@ export function TaskDetailDrawer() {
   const journey = boards.length > 1 ? taskJourney(task, boards, taskStatusChanges, workSessions, now ?? 0) : [];
 
   const handleStatusChange = (board: ResolvedBoard, col: BoardColumn) => {
-    updateTask(task.id, placeIn(board, col));
+    move(task, placeIn(board, col));
     addActivity({
       id: `act-${Date.now()}`,
       actorId: currentUser?.id || 'u2',
@@ -181,20 +188,32 @@ export function TaskDetailDrawer() {
         )}
 
         {/* Quick Attribute Bar */}
-        <div className="p-4 sm:px-6 border-b border-line grid grid-cols-2 sm:grid-cols-5 gap-3 bg-paper-elevated text-xs">
+        <div className="p-4 sm:px-6 border-b border-line grid grid-cols-2 sm:grid-cols-4 gap-3 bg-paper-elevated text-xs">
           {/* Status */}
           <div>
             <label className="block text-[10px] font-semibold text-muted uppercase mb-1">
-              {boards.length > 1 ? `Status · ${placement.board.name}` : 'Status'}
+              {boards.length > 1 && !parentTask ? `Status · ${placement.board.name}` : 'Status'}
             </label>
-            <PlacementSelect
-              boards={boards}
-              boardId={placement.board.id}
-              columnId={placement.column?.id}
-              onChange={handleStatusChange}
-              aria-label="Status"
-              className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
-            />
+            {parentTask ? (
+              <SubtaskStateSelect
+                status={task.status}
+                onChange={status => updateTask(task.id, { status })}
+                aria-label="Status"
+                className="w-full rounded px-2 py-1 text-xs"
+              />
+            ) : (
+              <PlacementSelect
+                boards={boards}
+                boardId={placement.board.id}
+                columnId={placement.column?.id}
+                onChange={handleStatusChange}
+                aria-label="Status"
+                className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
+              />
+            )}
+            {subtasks.length > 0 && (
+              <p className="mt-1 text-[10px] text-muted">Timer runs on its subtasks</p>
+            )}
           </div>
 
           {/* Priority */}
@@ -223,30 +242,15 @@ export function TaskDetailDrawer() {
                 type="number"
                 min="1"
                 max="365"
-                value={task.estimatedDuration || task.points || 3}
+                value={task.estimatedDuration || 3}
                 onChange={e => {
                   const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-                  updateTask(task.id, { estimatedDuration: val, points: val });
+                  updateTask(task.id, { estimatedDuration: val });
                 }}
                 className="w-full text-xs font-mono font-bold px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
               />
               <span className="text-[10px] text-muted">d</span>
             </div>
-          </div>
-
-          {/* Milestone Association */}
-          <div>
-            <label className="block text-[10px] font-semibold text-muted uppercase mb-1">Milestone</label>
-            <select
-              value={task.milestoneId || ''}
-              onChange={e => updateTask(task.id, { milestoneId: e.target.value || undefined })}
-              className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash truncate"
-            >
-              <option value="">No Milestone</option>
-              {projectMilestones.map(m => (
-                <option key={m.id} value={m.id}>{m.name}</option>
-              ))}
-            </select>
           </div>
 
           {/* Assignee */}
@@ -265,8 +269,31 @@ export function TaskDetailDrawer() {
           </div>
         </div>
 
+        {/* Where the task sits in the plan: Phase → Epic → Story (a subtask follows its task) */}
+        <div className="px-4 sm:px-6 py-3 border-b border-line bg-paper-elevated">
+          {parentTask ? (
+            (() => {
+              const plan = planOf(task, tasks, epics, stories, milestones);
+              const path = [plan.phase?.name, plan.epic?.name, plan.story?.title].filter(Boolean);
+              return (
+                <p className="text-[11px] text-muted">
+                  <span className="font-semibold uppercase text-[10px] mr-1.5">Plan</span>
+                  {path.length ? path.join(' › ') : 'Not planned'} <span className="italic">(from {parentTask.key})</span>
+                </p>
+              );
+            })()
+          ) : (
+            <PlanPicker
+              projectId={task.projectId}
+              value={{ milestoneId: task.milestoneId, epicId: task.epicId, storyId: task.storyId }}
+              onChange={links => setTaskPlan(task.id, links)}
+              selectClassName="py-1 rounded"
+            />
+          )}
+        </div>
+
         {/* Content Tabs */}
-        <div className="flex border-b border-line px-6 gap-6 text-xs font-semibold shrink-0">
+        <div className="flex border-b border-line px-6 gap-5 text-xs font-semibold shrink-0 overflow-x-auto whitespace-nowrap">
           <button
             onClick={() => setActiveTab('details')}
             className={`py-3 border-b-2 transition-colors ${
@@ -281,12 +308,20 @@ export function TaskDetailDrawer() {
               activeTab === 'checklist' ? 'border-flash-deep text-ink' : 'border-transparent text-muted hover:text-ink'
             }`}
           >
-            <span>Subtasks</span>
-            {task.checklist && task.checklist.length > 0 && (
+            <span>{parentTask ? 'Checklist' : 'Subtasks'}</span>
+            {!parentTask && subtasks.length > 0 && (
               <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-mist text-ink-soft">
-                {task.checklist.filter(c => c.completed).length}/{task.checklist.length}
+                {subtasks.filter(s => s.status === 'done').length}/{subtasks.length}
               </span>
             )}
+          </button>
+          <button
+            onClick={() => setActiveTab('progress')}
+            className={`py-3 border-b-2 transition-colors ${
+              activeTab === 'progress' ? 'border-flash-deep text-ink' : 'border-transparent text-muted hover:text-ink'
+            }`}
+          >
+            Progress
           </button>
           <button
             onClick={() => setActiveTab('comments')}
@@ -420,7 +455,8 @@ export function TaskDetailDrawer() {
 
           {activeTab === 'checklist' && (
             <div className="space-y-6">
-              {/* Hierarchical Subtasks Section */}
+              {/* Hierarchical Subtasks Section (one level: subtasks don't get their own) */}
+              {!parentTask && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1 border-b border-line">
                   <h4 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
@@ -454,7 +490,11 @@ export function TaskDetailDrawer() {
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-mist text-ink">
                             {sub.estimatedDuration || 1}d
                           </span>
-                          <TaskStatusBadge status={sub.status} />
+                          <SubtaskStateSelect
+                            status={sub.status}
+                            onChange={status => updateTask(sub.id, { status })}
+                            aria-label={`State of ${sub.key}`}
+                          />
                           <button
                             type="button"
                             onClick={() => deleteTask(sub.id)}
@@ -480,7 +520,6 @@ export function TaskDetailDrawer() {
                       parentId: task.id,
                       milestoneId: task.milestoneId,
                       estimatedDuration: Number(newSubtaskDuration),
-                      points: Number(newSubtaskDuration),
                       status: 'todo',
                       priority: 'medium',
                       type: 'subtask',
@@ -517,6 +556,7 @@ export function TaskDetailDrawer() {
                   </div>
                 </form>
               </div>
+              )}
 
               {/* Checklist Items */}
               <div className="space-y-3 pt-3 border-t border-line">
@@ -612,6 +652,9 @@ export function TaskDetailDrawer() {
             </div>
           )}
 
+          {/* Actual work against the plan, for the task and each subtask */}
+          {activeTab === 'progress' && now !== null && <TaskProgress task={task} subtasks={subtasks} now={now} />}
+
           {/* The boards a card has been on (only when the project has more than one board) */}
           {activeTab === 'journey' && journey.length > 0 && (
             <TaskJourney stages={journey} boards={boards} />
@@ -665,6 +708,7 @@ export function TaskDetailDrawer() {
           </div>
         </div>
       </Modal>
+      {openSubtasksDialog}
     </div>
   </ClientPortal>
   );

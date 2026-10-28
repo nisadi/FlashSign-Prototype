@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { ProjectTimelineSummary } from '@/components/projects/project-timeline-summary';
+import { progressOfTasks } from '@/lib/subtasks';
 import { Card, StatCard, Button, ProgressBar } from '@/components/shared/ui';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { AvatarGroup, Avatar } from '@/components/shared/avatar';
@@ -65,10 +66,14 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
   const members = users.filter((u) => project.memberIds.includes(u.id));
   const owner = users.find((u) => u.id === project.ownerId);
 
-  const doneTasks = projectTasks.filter((t) => t.status === 'done').length;
-  const inProgressTasks = projectTasks.filter((t) => t.status === 'in_progress').length;
-  const blockedTasks = projectTasks.filter((t) => t.status === 'blocked').length;
-  const overdueTasks = projectTasks.filter(
+  // Counts are tasks; subtasks are counted inside them. "Completed %" is the share of work done (by estimated days).
+  const mainTasks = projectTasks.filter((t) => !t.parentId);
+  const subtaskCount = projectTasks.length - mainTasks.length;
+  const workDone = progressOfTasks(projectTasks);
+  const doneTasks = mainTasks.filter((t) => t.status === 'done').length;
+  const inProgressTasks = mainTasks.filter((t) => t.status === 'in_progress').length;
+  const blockedTasks = mainTasks.filter((t) => t.status === 'blocked').length;
+  const overdueTasks = mainTasks.filter(
     (t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done'
   ).length;
 
@@ -117,7 +122,9 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <StatCard
             label="Total Tasks"
-            value={projectTasks.length}
+            value={mainTasks.length}
+            delta={subtaskCount > 0 ? `+ ${subtaskCount} subtasks` : undefined}
+            deltaPositive
             icon={CheckSquare}
             iconColor="var(--flash)"
           />
@@ -130,7 +137,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
           <StatCard
             label="Completed"
             value={doneTasks}
-            delta={`${Math.round((doneTasks / Math.max(projectTasks.length, 1)) * 100)}%`}
+            delta={`${workDone}% of work`}
             deltaPositive
             icon={CheckSquare}
             iconColor="#00c2a8"
@@ -160,7 +167,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
                 <div>
                   <h2 className="text-base font-semibold text-ink">Overall Progress</h2>
                   <p className="text-xs text-muted">
-                    {doneTasks} of {projectTasks.length} tasks completed
+                    {doneTasks} of {mainTasks.length} tasks completed
                   </p>
                 </div>
                 <div className="text-right">
@@ -268,7 +275,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
                   <h2 className="text-sm font-semibold text-ink">Project Milestones</h2>
                 </div>
                 <Link
-                  href={`/projects/${projectId}/milestones`}
+                  href={`/projects/${projectId}/plan`}
                   className="text-xs text-flash-deep hover:underline flex items-center gap-1"
                 >
                   Manage milestones <ArrowRight className="w-3 h-3" />

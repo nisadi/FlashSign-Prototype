@@ -42,10 +42,12 @@ export default function HowItWorksPage() {
   const user = useCurrentUser();
   const now = useNow();
 
-  // Tasks the demo can run on: the current person's open work
+  // Tasks the demo can run on: the current person's open work. A task with subtasks has no timer
+  // of its own, so the demo starts one of its subtasks instead.
   const myTasks = useMemo(
     () => tasks
       .filter(t => t.assigneeId === user?.id && (t.status === 'todo' || t.status === 'in_progress'))
+      .filter(t => !tasks.some(sub => sub.parentId === t.id))
       .sort((a, b) => Number(b.status === 'todo') - Number(a.status === 'todo')), // To Do first, so "start" visibly moves the card
     [tasks, user?.id]
   );
@@ -62,16 +64,21 @@ export default function HowItWorksPage() {
   if (!user) return null;
 
   const key = task?.key ?? '';
+  const parent = task?.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
   const steps: { label: string; run: () => Message[] }[] = task
     ? [
         {
           label: 'Ask Claude Code for your tasks',
           run: () => {
             agentListTasks('claude_code');
+            // Tasks with their subtasks underneath; a subtask of someone else's task still lists its task
+            const mine = tasks.filter(t => t.assigneeId === user.id && t.status !== 'done');
+            const parentIds = new Set(mine.map(t => t.parentId ?? t.id));
+            const line = (t: Task, indent = '') => `${indent}• ${t.key}  ${t.title} (${STATUS_LABEL[t.status]})`;
             const list = tasks
-              .filter(t => t.assigneeId === user.id && t.status !== 'done')
-              .slice(0, 5)
-              .map(t => `• ${t.key}  ${t.title} (${STATUS_LABEL[t.status]})`)
+              .filter(t => parentIds.has(t.id))
+              .slice(0, 4)
+              .map(t => [line(t), ...mine.filter(sub => sub.parentId === t.id).map(sub => line(sub, '    ↳ '))].join('\n'))
               .join('\n');
             return [
               { kind: 'user', agent: 'claude_code', text: 'What tasks do I have?' },
@@ -85,7 +92,12 @@ export default function HowItWorksPage() {
             agentStartTask(task.id, 'claude_code');
             return [
               { kind: 'user', agent: 'claude_code', text: `Let's start ${key}` },
-              { kind: 'agent', agent: 'claude_code', tool: 'start_task', text: `Started ${key}. The card is now In Progress and your timer is running. Any other running timer was paused first, since you can only have one.` },
+              {
+                kind: 'agent', agent: 'claude_code', tool: 'start_task',
+                text: parent
+                  ? `Started subtask ${key} of ${parent.key}. The ${parent.key} card is now In Progress and your timer is running on ${key}. Any other running timer was paused first, since you can only have one.`
+                  : `Started ${key}. The card is now In Progress and your timer is running. Any other running timer was paused first, since you can only have one.`,
+              },
             ];
           },
         },

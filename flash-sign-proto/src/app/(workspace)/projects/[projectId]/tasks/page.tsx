@@ -6,11 +6,16 @@ import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Button, Card, EmptyState } from '@/components/shared/ui';
-import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
+import { PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate } from '@/lib/utils';
 import { placeIn, placementOf, projectBoards } from '@/lib/board-columns';
 import { PlacementSelect } from '@/components/tasks/placement-select';
+import { SubtaskStateSelect } from '@/components/tasks/subtask-state-select';
+import { useGuardedMove } from '@/components/tasks/use-guarded-move';
+import { inProgressSince } from '@/lib/subtasks';
+import { formatMinutes, sessionMinutes } from '@/lib/agent-connection';
+import { useNow } from '@/lib/use-now';
 import {
   Plus,
   Search,
@@ -49,12 +54,23 @@ export default function ProjectTasksListPage({
     openTaskDrawer,
     updateTask,
     deleteTask,
+    epics,
+    stories,
+    workSessions,
+    taskStatusChanges,
   } = useApp();
+  const now = useNow();
+
+  // Moving a task to Done asks first when some of its subtasks are still open
+  const { move, dialog: openSubtasksDialog } = useGuardedMove();
 
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
   const [priorityFilter, setPriorityFilter] = useState<string>('all');
   const [milestoneFilter, setMilestoneFilter] = useState<string>('all');
+  const [epicFilter, setEpicFilter] = useState<string>('all');
+  // Tasks in progress for longer than their estimate
+  const [overrunOnly, setOverrunOnly] = useState(false);
   const [assigneeFilter, setAssigneeFilter] = useState<string>('all');
   const [expandedMainTaskIds, setExpandedMainTaskIds] = useState<Record<string, boolean>>({});
 
@@ -83,6 +99,24 @@ export default function ProjectTasksListPage({
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
   const boards = projectBoards(project);
 
+  const projectEpics = epics.filter((e) => e.projectId === project.id);
+
+  /** Whole days a task has been in progress (since its last move into In Progress) */
+  const daysInProgress = (task: Task): number | undefined => {
+    const since = inProgressSince(task, taskStatusChanges);
+    return since && now ? Math.max(0, Math.floor((now - new Date(since).getTime()) / 86_400_000)) : undefined;
+  };
+  /** Timer time on a task and its subtasks */
+  const workedMinutes = (ids: string[]) =>
+    now ? workSessions.filter((w) => ids.includes(w.taskId)).reduce((sum, w) => sum + sessionMinutes(w.startedAt, w.endedAt, now), 0) : 0;
+  const estimateOf = (task: Task, subtasks: Task[]) =>
+    subtasks.length > 0 ? subtasks.reduce((sum, s) => sum + (s.estimatedDuration || 1), 0) : task.estimatedDuration || 3;
+  /** In progress for longer than its estimate (in days) */
+  const overrun = (task: Task, subtasks: Task[]) => {
+    const days = daysInProgress(task);
+    return days !== undefined && days > estimateOf(task, subtasks);
+  };
+
   // Separate Main Tasks (no parentId) from Subtasks
   const mainTasks = useMemo(() => {
     return projectTasks.filter((t) => !t.parentId);
@@ -108,16 +142,18 @@ export default function ProjectTasksListPage({
       const matchStatus = statusFilter === 'all' || t.status === statusFilter;
       const matchPriority = priorityFilter === 'all' || t.priority === priorityFilter;
       const matchMilestone = milestoneFilter === 'all' || t.milestoneId === milestoneFilter;
+      const matchEpic = epicFilter === 'all' || t.epicId === epicFilter;
       const matchAssignee = assigneeFilter === 'all' || t.assigneeId === assigneeFilter;
+      const matchOverrun = !overrunOnly || overrun(t, subtasks);
 
-      return matchSearch && matchStatus && matchPriority && matchMilestone && matchAssignee;
+      return matchSearch && matchStatus && matchPriority && matchMilestone && matchEpic && matchAssignee && matchOverrun;
     });
-  }, [mainTasks, projectTasks, search, statusFilter, priorityFilter, milestoneFilter, assigneeFilter]);
+  }, [mainTasks, projectTasks, search, statusFilter, priorityFilter, milestoneFilter, epicFilter, assigneeFilter, overrunOnly, overrun]);
 
   const openDurationModal = (task: Task, e?: React.MouseEvent) => {
     if (e) e.stopPropagation();
     setEditingDurationTask(task);
-    setNewDurationVal(task.estimatedDuration || task.points || 3);
+    setNewDurationVal(task.estimatedDuration || 3);
   };
 
   const handleSaveDuration = (e: React.FormEvent) => {
@@ -125,7 +161,6 @@ export default function ProjectTasksListPage({
     if (editingDurationTask && newDurationVal > 0) {
       updateTask(editingDurationTask.id, {
         estimatedDuration: Number(newDurationVal),
-        points: Number(newDurationVal),
       });
       setEditingDurationTask(null);
     }
@@ -146,9 +181,13 @@ export default function ProjectTasksListPage({
             <div className="flex items-center gap-1.5 font-medium text-muted flex-wrap">
               <span className="px-2 py-0.5 rounded bg-mist/60 text-ink-soft">Project</span>
               <span>→</span>
-              <span className="px-2 py-0.5 rounded bg-mist/60 text-ink-soft flex items-center gap-1">
-                <Flag className="w-3 h-3 text-flash-deep" /> Milestones / Epics
-              </span>
+              <Link
+                href={`/projects/${projectId}/plan`}
+                className="px-2 py-0.5 rounded bg-mist/60 text-ink-soft flex items-center gap-1 hover:text-flash-deep"
+                title="Phases, epics and stories are set up on the Plan tab"
+              >
+                <Flag className="w-3 h-3 text-flash-deep" /> Phase → Epic → Story
+              </Link>
               <span>→</span>
               <span className="px-2 py-0.5 rounded bg-mist/60 text-ink-soft font-semibold text-ink">
                 Main Tasks
@@ -197,13 +236,35 @@ export default function ProjectTasksListPage({
               onChange={(e) => setMilestoneFilter(e.target.value)}
               className="px-2.5 py-1.5 bg-paper border border-line rounded-lg text-xs text-ink outline-none focus:border-flash"
             >
-              <option value="all">All Milestones / Epics</option>
+              <option value="all">All Phases</option>
               {projectMilestones.map((m) => (
                 <option key={m.id} value={m.id}>
                   {m.name}
                 </option>
               ))}
             </select>
+
+            {/* Epic filter */}
+            {projectEpics.length > 0 && (
+              <select
+                value={epicFilter}
+                onChange={(e) => setEpicFilter(e.target.value)}
+                className="px-2.5 py-1.5 bg-paper border border-line rounded-lg text-xs text-ink outline-none focus:border-flash"
+              >
+                <option value="all">All Epics</option>
+                {projectEpics.map((ep) => (
+                  <option key={ep.id} value={ep.id}>
+                    {ep.name}
+                  </option>
+                ))}
+              </select>
+            )}
+
+            {/* Overrunning: in progress longer than estimated */}
+            <label className="inline-flex items-center gap-1.5 px-2.5 py-1.5 bg-paper border border-line rounded-lg text-xs text-ink cursor-pointer">
+              <input type="checkbox" checked={overrunOnly} onChange={(e) => setOverrunOnly(e.target.checked)} className="accent-flash" />
+              Over estimate
+            </label>
 
             {/* Status filter */}
             <select
@@ -270,13 +331,15 @@ export default function ProjectTasksListPage({
             {filteredMainTasks.map((mainTask) => {
               const subtasks = projectTasks.filter((t) => t.parentId === mainTask.id);
               const milestone = projectMilestones.find((m) => m.id === mainTask.milestoneId);
+              const epic = projectEpics.find((e) => e.id === mainTask.epicId);
+              const story = mainTask.storyId ? stories.find((st) => st.id === mainTask.storyId) : undefined;
+              const days = daysInProgress(mainTask);
+              const worked = workedMinutes([mainTask.id, ...subtasks.map((s) => s.id)]);
               const assignee = users.find((u) => u.id === mainTask.assigneeId);
               const isExpanded = expandedMainTaskIds[mainTask.id] ?? true;
 
               // Calculate main task effective work days
-              const effectiveDuration = subtasks.length > 0
-                ? subtasks.reduce((sum, s) => sum + (s.estimatedDuration || s.points || 1), 0)
-                : mainTask.estimatedDuration || mainTask.points || 3;
+              const effectiveDuration = estimateOf(mainTask, subtasks);
 
               return (
                 <div
@@ -318,6 +381,17 @@ export default function ProjectTasksListPage({
                               {milestone.name}
                             </span>
                           )}
+                          {epic && (
+                            <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full border" style={{ borderColor: `${epic.color}66`, color: epic.color }}>
+                              <span className="w-1.5 h-1.5 rounded-full" style={{ background: epic.color }} />
+                              {epic.name}
+                            </span>
+                          )}
+                          {story && (
+                            <span className="text-[11px] text-muted truncate max-w-[260px]" title={story.title}>
+                              · {story.title}
+                            </span>
+                          )}
 
                           {subtasks.length > 0 && (
                             <span className="text-[10px] font-mono font-semibold px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-200">
@@ -348,6 +422,25 @@ export default function ProjectTasksListPage({
                         </div>
                       )}
 
+                      {/* How long it has been in progress, against its estimate */}
+                      {days !== undefined && (
+                        <span
+                          className={`text-[11px] font-semibold px-2 py-0.5 rounded-full border ${
+                            days > effectiveDuration
+                              ? 'border-danger/30 bg-danger/10 text-danger'
+                              : 'border-blue-200 bg-blue-50 text-blue-700'
+                          }`}
+                          title={days > effectiveDuration ? `In progress longer than its ${effectiveDuration}-day estimate` : 'Days since it moved to In Progress'}
+                        >
+                          In progress {days === 0 ? 'today' : `${days}d`}
+                        </span>
+                      )}
+                      {worked > 0 && (
+                        <span className="text-[11px] font-mono text-muted" title="Timer time on this task and its subtasks">
+                          Worked {formatMinutes(worked)}
+                        </span>
+                      )}
+
                       {/* Estimated Duration pill (clickable for quick edit!) */}
                       <button
                         type="button"
@@ -368,7 +461,22 @@ export default function ProjectTasksListPage({
                       </button>
 
                       <PriorityBadge priority={mainTask.priority} />
-                      <TaskStatusBadge status={mainTask.status} />
+                      {(() => {
+                        const at = placementOf(mainTask, boards);
+                        return (
+                          <div className="flex flex-col items-start" onClick={(e) => e.stopPropagation()}>
+                            <PlacementSelect
+                              boards={boards}
+                              boardId={at.board.id}
+                              columnId={at.column?.id}
+                              onChange={(b, c) => move(mainTask, placeIn(b, c))}
+                              aria-label={`Status of ${mainTask.key}`}
+                              className="bg-paper border border-line hover:border-flash/50 rounded-lg px-1.5 py-1 text-xs text-ink cursor-pointer focus:border-flash outline-none"
+                            />
+                            {boards.length > 1 && <span className="px-1.5 text-[10px] text-muted">{at.board.name}</span>}
+                          </div>
+                        );
+                      })()}
 
                       {assignee && <Avatar user={assignee} size="xs" />}
 
@@ -470,7 +578,11 @@ export default function ProjectTasksListPage({
                                 </button>
 
                                 <PriorityBadge priority={subtask.priority} />
-                                <TaskStatusBadge status={subtask.status} />
+                                <SubtaskStateSelect
+                                  status={subtask.status}
+                                  onChange={(status) => updateTask(subtask.id, { status })}
+                                  aria-label={`State of ${subtask.key}`}
+                                />
 
                                 {subAssignee && <Avatar user={subAssignee} size="xs" />}
 
@@ -569,6 +681,8 @@ export default function ProjectTasksListPage({
         </Modal>
 
         {/* Modal: Confirm Delete */}
+        {openSubtasksDialog}
+
         <ConfirmDeleteModal
           isOpen={Boolean(deletingTask)}
           onClose={() => setDeletingTask(null)}

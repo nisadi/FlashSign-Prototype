@@ -99,6 +99,19 @@ export interface Project {
   timelineDifference?: number; // calendar days diff (positive = extended, negative = shortened)
   timelineStatus?: TimelineStatus;
   totalWorkDays?: number; // sum of estimated work durations, distinguished from calendar span
+  /** 'auto' (default): health follows the timeline. 'manual': someone set it in Settings. */
+  healthMode?: 'auto' | 'manual';
+  /** Earlier baselines, kept when someone re-baselines the original plan */
+  baselineHistory?: BaselineChange[];
+}
+
+export interface BaselineChange {
+  at: string;
+  byUserId: string;
+  reason: string;
+  /** The baseline as it was before this change */
+  startDate: string;
+  endDate: string;
 }
 
 /**
@@ -177,7 +190,11 @@ export interface Task {
   assigneeId?: string;
   reporterId: string;
   parentId?: string;
+  /** The phase the task is in (phases are stored as milestones) */
   milestoneId?: string;
+  /** Optional plan links: Phase → Epic → Story → Task. A subtask follows its task. */
+  epicId?: string;
+  storyId?: string;
   estimatedDuration?: number; // Duration in calendar/work days
   storyPoints?: number;
   points?: number;
@@ -279,6 +296,34 @@ export interface Milestone {
   estimatedDuration?: number;
   createdAt?: string;
   updatedAt?: string;
+}
+
+// ─── Plan: Phase (milestone) → Epic → Story → Task ───────────────────────────
+// Every level above Task is optional; a task can sit under a story, an epic, a phase or the project.
+
+/** A large body of work, optionally inside a phase */
+export interface Epic {
+  id: string;
+  projectId: string;
+  phaseId?: string;
+  name: string;
+  description?: string;
+  color: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** A user need ("As a …, I can …"), optionally inside an epic */
+export interface Story {
+  id: string;
+  projectId: string;
+  epicId?: string;
+  title: string;
+  description?: string;
+  acceptanceCriteria?: string;
+  priority: TaskPriority;
+  createdAt: string;
+  updatedAt: string;
 }
 
 // ─── AI Agents ───────────────────────────────────────────────────────────────

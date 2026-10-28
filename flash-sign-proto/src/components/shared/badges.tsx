@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 
 // ── Status Badge ──────────────────────────────────────────────────────────────
-const TASK_STATUS_CONFIG: Record<TaskStatus, { label: string; className: string; icon: React.ElementType }> = {
+export const TASK_STATUS_CONFIG: Record<TaskStatus, { label: string; className: string; icon: React.ElementType }> = {
   todo:        { label: 'To Do',       className: 'bg-mist text-muted border-line',           icon: Circle },
   in_progress: { label: 'In Progress', className: 'bg-blue-50 text-blue-700 border-blue-200',  icon: Clock },
   review:      { label: 'In Review',   className: 'bg-amber-50 text-amber-700 border-amber-200', icon: Clock },

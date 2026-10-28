@@ -21,6 +21,8 @@ import {
   Filter,
 } from 'lucide-react';
 import type { Task } from '@/types';
+import { actualSpan } from '@/lib/task-progress';
+import { useNow } from '@/lib/use-now';
 
 export default function ProjectTimelinePage({
   params,
@@ -28,9 +30,11 @@ export default function ProjectTimelinePage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, tasks, milestones, users, openTaskDrawer, updateTask } = useApp();
+  const { projects, tasks, milestones, users, openTaskDrawer, updateTask, taskStatusChanges, workSessions } = useApp();
+  const now = useNow();
 
-  const [zoom, setZoom] = useState<'days' | 'weeks' | 'months'>('weeks');
+  // Months shows the whole project; weeks and days zoom in around today
+  const [zoom, setZoom] = useState<'days' | 'weeks' | 'months'>('months');
   const [statusFilter, setStatusFilter] = useState('all');
 
   const project = projects.find((p) => p.id === projectId);
@@ -61,22 +65,32 @@ export default function ProjectTimelinePage({
     return filteredTasks.filter((t) => !t.parentId);
   }, [filteredTasks]);
 
-  // Generate timeline date columns based on project dates window
+  // Generate timeline date columns. Months: from the project start to whichever is last of the
+  // baseline end, the current end and today. Weeks / days: a window around today.
   const timelineDates = useMemo(() => {
     const dates: Date[] = [];
-    const base = new Date(originalStart || Date.now() - 86400000 * 7);
-    base.setDate(base.getDate() - 3);
+    const DAY = 86400000;
+    const today = now ?? new Date(originalStart || currentStart).getTime();
+    let base: Date;
+    let daysCount: number;
+    if (zoom === 'months') {
+      base = new Date(originalStart || today);
+      base.setDate(base.getDate() - 3);
+      const last = Math.max(today, new Date(originalEnd || today).getTime(), new Date(currentEnd || today).getTime());
+      daysCount = Math.ceil((last - base.getTime()) / DAY) + 7;
+    } else {
+      daysCount = zoom === 'days' ? 24 : 60;
+      base = new Date(today - DAY * Math.round(daysCount * 0.35));
+    }
+    const step = Math.max(1, Math.ceil(daysCount / (zoom === 'days' ? 24 : 14)));
 
-    const daysCount = zoom === 'days' ? 24 : zoom === 'weeks' ? 60 : 120;
-    const step = zoom === 'days' ? 1 : zoom === 'weeks' ? 4 : 8;
-
-    for (let i = 0; i < daysCount; i += step) {
+    for (let i = 0; i <= daysCount; i += step) {
       const d = new Date(base);
       d.setDate(base.getDate() + i);
       dates.push(d);
     }
     return dates;
-  }, [zoom, originalStart]);
+  }, [zoom, originalStart, originalEnd, currentStart, currentEnd, now]);
 
   const minDate = timelineDates[0]?.getTime() || Date.now();
   const maxDate = timelineDates[timelineDates.length - 1]?.getTime() || Date.now() + 86400000 * 90;
@@ -103,6 +117,23 @@ export default function ProjectTimelinePage({
     );
 
     return { left: `${left}%`, width: `${width}%` };
+  };
+
+  /** Where actual work sits on the grid: from the first move to In Progress to In Review / Done (or today) */
+  const getActualPosition = (task: Task) => {
+    if (now === null) return undefined;
+    const actual = actualSpan(task, taskStatusChanges, workSessions, now);
+    if (!actual.start) return undefined;
+    const start = Math.max(new Date(actual.start).getTime(), minDate);
+    const end = Math.min(actual.end ? new Date(actual.end).getTime() : now, maxDate);
+    if (end < minDate || start > maxDate) return undefined;
+    const left = ((start - minDate) / totalDuration) * 100;
+    const width = Math.max(0.8, ((end - start) / totalDuration) * 100);
+    return {
+      left: `${left}%`,
+      width: `${Math.min(100 - left, width)}%`,
+      title: `Actual: ${formatDate(actual.start)} → ${actual.end ? formatDate(actual.end) : 'now'}${actual.days !== undefined ? ` (${actual.days}d)` : ''}`,
+    };
   };
 
   // Positions for Baseline & Revised markers on Gantt grid
@@ -213,7 +244,7 @@ export default function ProjectTimelinePage({
         {projectMilestones.length > 0 && (
           <div className="bg-paper-elevated border border-line p-3 rounded-2xl shadow-xs">
             <div className="flex items-center gap-2 mb-2 text-xs font-semibold text-ink">
-              <Flag className="w-3.5 h-3.5 text-flash-deep" /> Milestones & Epics:
+              <Flag className="w-3.5 h-3.5 text-flash-deep" /> Phases:
             </div>
             <div className="flex items-center gap-2 overflow-x-auto no-scrollbar">
               {projectMilestones.map((m) => (
@@ -236,6 +267,10 @@ export default function ProjectTimelinePage({
           <div className="grid grid-cols-12 border-b border-line bg-paper text-[11px] font-mono text-muted py-2.5 px-4 sticky top-0 z-10">
             <div className="col-span-4 sm:col-span-3 font-sans font-semibold text-ink text-xs uppercase tracking-wide">
               Hierarchy / Task
+              <span className="mt-1 flex flex-wrap items-center gap-2 font-normal normal-case tracking-normal text-[10px] text-muted">
+                <span className="flex items-center gap-1"><span className="w-3 h-2 rounded-sm bg-ink" /> Planned</span>
+                <span className="flex items-center gap-1"><span className="w-3 h-[3px] rounded-full bg-amber-500" /> Actual</span>
+              </span>
             </div>
             <div className="col-span-8 sm:col-span-9 relative flex justify-between pr-2">
               {timelineDates.map((d, i) => (
@@ -328,6 +363,13 @@ export default function ProjectTimelinePage({
                           </div>
                         )}
                       </div>
+                      {/* Actual work, under the planned bar */}
+                      {(() => {
+                        const actual = getActualPosition(task);
+                        return actual ? (
+                          <div className="absolute bottom-0 h-[3px] rounded-full bg-amber-500" style={{ left: actual.left, width: actual.width }} title={actual.title} />
+                        ) : null;
+                      })()}
                     </div>
                   </div>
 
@@ -378,6 +420,12 @@ export default function ProjectTimelinePage({
                               </div>
                             )}
                           </div>
+                          {(() => {
+                            const actual = getActualPosition(sub);
+                            return actual ? (
+                              <div className="absolute -bottom-0.5 h-[2px] rounded-full bg-amber-500" style={{ left: actual.left, width: actual.width }} title={actual.title} />
+                            ) : null;
+                          })()}
                         </div>
                       </div>
                     );

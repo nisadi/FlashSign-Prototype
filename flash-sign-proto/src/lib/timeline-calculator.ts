@@ -1,4 +1,4 @@
-import type { Project, Task, Milestone, TimelineStatus } from '@/types';
+import type { Project, ProjectHealth, Task, Milestone, TimelineStatus } from '@/types';
 
 /**
  * Standardize date to YYYY-MM-DD string
@@ -70,7 +70,7 @@ export function calculateTaskEffectiveSchedule(
     let totalSubtaskWorkDays = 0;
 
     for (const sub of subtasks) {
-      const subDuration = Math.max(1, Number(sub.estimatedDuration) || Number(sub.points) || 1);
+      const subDuration = Math.max(1, Number(sub.estimatedDuration) || 1);
       totalSubtaskWorkDays += subDuration;
 
       const subStart = sub.startDate || runningSubStart;
@@ -107,7 +107,7 @@ export function calculateTaskEffectiveSchedule(
     Number(mainTask.estimatedDuration) ||
       (mainTask.dueDate && mainTask.startDate
         ? diffCalendarDays(mainTask.startDate, mainTask.dueDate)
-        : Number(mainTask.points) || 3)
+        : 3)
   );
 
   const start = mainTask.startDate || baseStart;
@@ -122,6 +122,18 @@ export function calculateTaskEffectiveSchedule(
     isDerivedFromSubtasks: false,
     subtaskCount: 0,
   };
+}
+
+/**
+ * Health that follows the timeline: more than 10% later than the baseline is At Risk,
+ * more than 25% is Delayed.
+ */
+export function healthFromTimeline(status: TimelineStatus, difference: number, originalDuration: number): ProjectHealth {
+  if (status !== 'extended') return 'on_track';
+  const late = difference / Math.max(1, originalDuration);
+  if (late > 0.25) return 'delayed';
+  if (late > 0.1) return 'at_risk';
+  return 'on_track';
 }
 
 /**
@@ -211,6 +223,8 @@ export function calculateProjectTimeline(
 
   return {
     ...project,
+    // Health follows the timeline unless someone set it by hand in Settings
+    health: project.healthMode === 'manual' ? project.health : healthFromTimeline(timelineStatus, timelineDifference, originalDuration),
     startDate: currentStartDate,
     endDate: currentEndDate,
     dueDate: currentEndDate,

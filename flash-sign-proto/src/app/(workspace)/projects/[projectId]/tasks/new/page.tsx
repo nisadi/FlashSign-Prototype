@@ -54,7 +54,6 @@ export default function CreateTaskPage({
   const [estimatedDuration, setEstimatedDuration] = useState<number>(3);
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
-  const [points, setPoints] = useState<number>(3);
   const [labelInput, setLabelInput] = useState('');
   const [labels, setLabels] = useState<string[]>(['Frontend']);
   const [checklists, setChecklists] = useState<string[]>([]);
@@ -118,12 +117,12 @@ export default function CreateTaskPage({
       description: description.trim(),
       projectId,
       type: parentId ? 'subtask' : 'task',
-      ...(parentId
-        ? { status }
-        : (() => {
-            const board = boards.find((b) => b.id === placement.boardId) ?? boards[0];
-            return placeIn(board, board.columns.find((c) => c.id === placement.columnId) ?? board.columns[0]);
-          })()),
+      // A subtask lives inside its task's card, so it takes only the column's stage; a task is placed on a board
+      ...(() => {
+        const board = boards.find((b) => b.id === placement.boardId) ?? boards[0];
+        const column = board.columns.find((c) => c.id === placement.columnId) ?? board.columns[0];
+        return parentId ? { status: column.status } : placeIn(board, column);
+      })(),
       priority,
       assigneeId: assigneeId || undefined,
       sprintId: sprintId || undefined,
@@ -132,7 +131,6 @@ export default function CreateTaskPage({
       estimatedDuration: Number(estimatedDuration),
       startDate: startDate || undefined,
       dueDate: dueDate || undefined,
-      points: Number(estimatedDuration) || Number(points) || 1,
       labels,
       checklist: checklistItems,
     });

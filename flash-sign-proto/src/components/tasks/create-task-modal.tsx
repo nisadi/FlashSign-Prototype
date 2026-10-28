@@ -6,12 +6,17 @@ import { Modal } from '@/components/shared/modal';
 import { Button } from '@/components/shared/ui';
 import type { TaskPriority, TaskStatus, TaskType } from '@/types';
 import { Plus, AlertCircle, Calendar, Flag, User, Clock, CheckSquare } from 'lucide-react';
+import { PlanPicker } from '@/components/plan/plan-picker';
+import type { PlanLinks } from '@/lib/plan';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
   onClose: () => void;
   projectId: string;
   defaultMilestoneId?: string;
+  /** Start the task inside this epic or story (the Plan tab's "Add task") */
+  defaultEpicId?: string;
+  defaultStoryId?: string;
   defaultParentId?: string; // If creating a subtask
   parentTaskTitle?: string;
 }
@@ -21,19 +26,20 @@ export function CreateTaskModal({
   onClose,
   projectId,
   defaultMilestoneId,
+  defaultEpicId,
+  defaultStoryId,
   defaultParentId,
   parentTaskTitle,
 }: CreateTaskModalProps) {
-  const { milestones, users, addTask, tasks } = useApp();
+  const { users, addTask, tasks } = useApp();
 
   const isSubtask = Boolean(defaultParentId);
-  const projectMilestones = milestones.filter(m => m.projectId === projectId);
   const projectUsers = users;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [estimatedDuration, setEstimatedDuration] = useState<number>(3);
-  const [milestoneId, setMilestoneId] = useState(defaultMilestoneId || '');
+  const [planLinks, setPlanLinks] = useState<PlanLinks>({});
   const [startDate, setStartDate] = useState('');
   const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState<TaskPriority>('medium');
@@ -46,7 +52,7 @@ export function CreateTaskModal({
       setTitle('');
       setDescription('');
       setEstimatedDuration(isSubtask ? 2 : 5);
-      setMilestoneId(defaultMilestoneId || projectMilestones[0]?.id || '');
+      setPlanLinks({ milestoneId: defaultMilestoneId, epicId: defaultEpicId, storyId: defaultStoryId });
       setStartDate('');
       setDueDate('');
       setPriority('medium');
@@ -54,7 +60,7 @@ export function CreateTaskModal({
       setAssigneeId(projectUsers[0]?.id || '');
       setErrors({});
     }
-  }, [isOpen, defaultMilestoneId, defaultParentId, isSubtask]);
+  }, [isOpen, defaultMilestoneId, defaultEpicId, defaultStoryId, defaultParentId, isSubtask]);
 
   // If start date and duration are provided, sync due date
   const handleStartDateChange = (val: string) => {
@@ -96,12 +102,8 @@ export function CreateTaskModal({
       return;
     }
 
-    // Determine milestone: if subtask, inherit milestone from parent task if not provided
-    let effectiveMilestoneId = milestoneId;
-    if (isSubtask && !effectiveMilestoneId && defaultParentId) {
-      const parent = tasks.find(t => t.id === defaultParentId);
-      effectiveMilestoneId = parent?.milestoneId || '';
-    }
+    // A subtask is in its task's phase
+    const parentMilestoneId = isSubtask ? tasks.find(t => t.id === defaultParentId)?.milestoneId : undefined;
 
     addTask({
       title: title.trim(),
@@ -112,9 +114,9 @@ export function CreateTaskModal({
       priority,
       assigneeId: assigneeId || undefined,
       parentId: defaultParentId || undefined,
-      milestoneId: effectiveMilestoneId || undefined,
+      // A subtask follows its task; a task goes where the plan picker says
+      ...(isSubtask ? { milestoneId: parentMilestoneId } : planLinks),
       estimatedDuration: Number(estimatedDuration),
-      points: Number(estimatedDuration),
       startDate: startDate || undefined,
       dueDate: dueDate || undefined,
     });
@@ -186,24 +188,13 @@ export function CreateTaskModal({
             />
           </div>
 
-          {/* Parent Milestone (For Main Tasks) */}
-          {!isSubtask && projectMilestones.length > 0 && (
+          {/* Where the task sits in the plan (for main tasks; every level is optional) */}
+          {!isSubtask && (
             <div>
-              <label className="block text-xs font-semibold text-ink mb-1 flex items-center gap-1">
-                <Flag className="w-3 h-3 text-flash-deep" /> Milestone / Epic Association
-              </label>
-              <select
-                value={milestoneId}
-                onChange={e => setMilestoneId(e.target.value)}
-                className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-              >
-                <option value="">No Milestone / Backlog</option>
-                {projectMilestones.map(m => (
-                  <option key={m.id} value={m.id}>
-                    {m.name} ({m.status})
-                  </option>
-                ))}
-              </select>
+              <span className="block text-xs font-semibold text-ink mb-1 flex items-center gap-1">
+                <Flag className="w-3 h-3 text-flash-deep" /> Plan
+              </span>
+              <PlanPicker projectId={projectId} value={planLinks} onChange={setPlanLinks} />
             </div>
           )}
 

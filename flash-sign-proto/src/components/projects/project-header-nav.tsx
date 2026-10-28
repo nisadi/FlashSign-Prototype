@@ -30,7 +30,7 @@ interface ProjectHeaderNavProps {
     | 'board'
     | 'timeline'
     | 'sprints'
-    | 'milestones'
+    | 'plan'
     | 'team'
     | 'files'
     | 'activity'
@@ -51,12 +51,21 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
 
   const tabs = [
     { id: 'overview', label: 'Overview', href: `/projects/${projectId}`, icon: LayoutDashboard },
+    // Phases → Epics → Stories → Tasks (phases are stored as milestones)
+    {
+      id: 'plan',
+      label: 'Plan',
+      href: `/projects/${projectId}/plan`,
+      icon: Flag,
+      count: projectMilestones.length,
+    },
     {
       id: 'tasks',
       label: 'Tasks',
       href: `/projects/${projectId}/tasks`,
       icon: CheckSquare,
-      count: projectTasks.length,
+      // Tasks only; subtasks are counted inside them
+      count: projectTasks.filter((t) => !t.parentId).length,
     },
     { id: 'board', label: 'Board', href: `/projects/${projectId}/board`, icon: Kanban },
     { id: 'timeline', label: 'Timeline', href: `/projects/${projectId}/timeline`, icon: Calendar },
@@ -66,13 +75,6 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
       href: `/projects/${projectId}/sprints`,
       icon: Zap,
       count: projectSprints.length,
-    },
-    {
-      id: 'milestones',
-      label: 'Milestones',
-      href: `/projects/${projectId}/milestones`,
-      icon: Flag,
-      count: projectMilestones.length,
     },
     {
       id: 'team',

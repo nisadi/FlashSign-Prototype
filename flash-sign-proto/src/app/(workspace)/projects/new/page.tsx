@@ -5,7 +5,10 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import type { ProjectStatus, ProjectPriority, ProjectHealth } from '@/types';
-import { ArrowLeft, FolderKanban, Sparkles, Check, Users, Calendar, Flag, Shield } from 'lucide-react';
+import { ArrowLeft, ArrowRight, FolderKanban, Sparkles, Check, Users, Calendar, Flag, Shield, Layers, Rows3 } from 'lucide-react';
+import {
+  PhasesStep, EpicsStep, BoardsStep, type DraftPhase, type DraftEpic,
+} from '@/components/projects/new-project-plan-steps';
 
 const ACCENT_COLORS = [
   { label: 'Mint Flash', value: '#00c2a8' },
@@ -23,6 +26,9 @@ const TEMPLATES = [
   { id: 'agent', name: 'AI Coding Agent Sandbox', description: 'Claude & Gemini automated task execution with review gates.' },
 ];
 
+/** The New Project form is a step-by-step form; phases, epics and boards are optional steps */
+const STEPS = ['Basics', 'Team & timeline', 'Phases', 'Epics', 'Boards', 'Goals & review'] as const;
+
 const SPACES = [
   'Core Platform',
   'Client Engagements',
@@ -34,7 +40,7 @@ const SPACES = [
 
 export default function CreateProjectPage() {
   const router = useRouter();
-  const { users, addProject, addActivity } = useApp();
+  const { users, addProject, addActivity, addMilestone, addEpic } = useApp();
   const currentUser = useCurrentUser();
 
   // Form State
@@ -66,6 +72,13 @@ export default function CreateProjectPage() {
     'Achieve zero high-priority blocker defects',
   ]);
   const [errors, setErrors] = useState<Record<string, string>>({});
+
+  // Step-by-step form and the optional plan set up with the project
+  const [step, setStep] = useState(0);
+  const [phases, setPhases] = useState<DraftPhase[]>([]);
+  const [epics, setEpics] = useState<DraftEpic[]>([]);
+  const [mainBoardName, setMainBoardName] = useState('Main board');
+  const [extraBoards, setExtraBoards] = useState<string[]>([]);
 
   // Synchronize Start Date change -> update End Date
   const handleStartDateChange = (newStart: string) => {
@@ -120,26 +133,50 @@ export default function CreateProjectPage() {
     setGoals(goals.filter((_, i) => i !== index));
   };
 
+  /** What's wrong on a step, if anything */
+  const errorsFor = (n: number): Record<string, string> => {
+    const newErrors: Record<string, string> = {};
+    if (n === 0) {
+      if (!name.trim() || name.trim().length < 3) newErrors.name = 'Project name must be at least 3 characters.';
+      if (!key.trim() || key.trim().length < 2) newErrors.key = 'Project key must be 2–6 characters.';
+    }
+    if (n === 1) {
+      if (duration <= 0) newErrors.duration = 'Project duration must be at least 1 calendar day.';
+      if (new Date(endDate) < new Date(startDate)) newErrors.endDate = 'Target end date cannot be earlier than start date.';
+    }
+    if (n === 2 && phases.some(p => !p.name.trim() || p.endDate < p.startDate)) {
+      newErrors.phases = 'Every phase needs a name, and its end date can\'t be before its start date.';
+    }
+    return newErrors;
+  };
+
+  const goTo = (target: number) => {
+    // Moving forward checks each step on the way
+    for (let n = step; n < target; n++) {
+      const stepErrors = errorsFor(n);
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors);
+        setStep(n);
+        return;
+      }
+    }
+    setErrors({});
+    setStep(target);
+  };
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: Record<string, string> = {};
-
-    if (!name.trim() || name.trim().length < 3) {
-      newErrors.name = 'Project name must be at least 3 characters.';
-    }
-    if (!key.trim() || key.trim().length < 2) {
-      newErrors.key = 'Project key must be 2–6 characters.';
-    }
-    if (duration <= 0) {
-      newErrors.duration = 'Project duration must be at least 1 calendar day.';
-    }
-    if (new Date(endDate) < new Date(startDate)) {
-      newErrors.endDate = 'Target end date cannot be earlier than start date.';
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors);
+    if (step < STEPS.length - 1) {
+      goTo(step + 1);
       return;
+    }
+    for (let n = 0; n < STEPS.length; n++) {
+      const stepErrors = errorsFor(n);
+      if (Object.keys(stepErrors).length > 0) {
+        setErrors(stepErrors);
+        setStep(n);
+        return;
+      }
     }
 
     const newProjectId = `p-${Date.now().toString(36)}`;
@@ -174,11 +211,35 @@ export default function CreateProjectPage() {
       timelineDifference: 0,
       timelineStatus: 'on_schedule' as const,
       totalWorkDays: 0,
+      mainBoardName: mainBoardName.trim() || undefined,
+      extraBoards: extraBoards.map((boardName, i) => ({ id: `board-${newProjectId}-${i}`, name: boardName })),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
     addProject(newProject);
+    // The plan set up in the form: phases (saved as milestones), then epics inside them
+    const phaseIds = new Map(phases.map((p, i) => [p.key, `ms-${newProjectId}-${i}`]));
+    phases.forEach(p =>
+      addMilestone({
+        id: phaseIds.get(p.key),
+        projectId: newProjectId,
+        name: p.name.trim(),
+        startDate: p.startDate,
+        endDate: p.endDate,
+        dueDate: p.endDate,
+        status: 'upcoming',
+      })
+    );
+    epics.forEach((ep, i) =>
+      addEpic({
+        id: `epic-${newProjectId}-${i}`,
+        projectId: newProjectId,
+        name: ep.name,
+        phaseId: phaseIds.get(ep.phaseKey),
+        color: ep.color,
+      })
+    );
     addActivity({
       id: `act-${Date.now()}`,
       actorId: currentUser?.id || 'u2',
@@ -186,7 +247,7 @@ export default function CreateProjectPage() {
       action: 'project.created',
       resource: 'Project',
       resourceId: newProjectId,
-      detail: `Created project ${newProject.name} (${newProject.key})`,
+      detail: `Created project ${newProject.name} (${newProject.key})${phases.length ? ` with ${phases.length} phases` : ''}${epics.length ? ` and ${epics.length} epics` : ''}`,
       timestamp: new Date().toISOString(),
     });
 
@@ -218,12 +279,38 @@ export default function CreateProjectPage() {
         </p>
       </div>
 
+      {/* Steps */}
+      <ol className="flex flex-wrap items-center gap-1.5">
+        {STEPS.map((label, i) => (
+          <li key={label} className="flex items-center gap-1.5">
+            {i > 0 && <span className="w-4 h-px bg-line" />}
+            <button
+              type="button"
+              onClick={() => (i < step ? setStep(i) : goTo(i))}
+              className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-semibold border transition-colors ${
+                i === step
+                  ? 'bg-flash-deep text-white border-flash-deep'
+                  : i < step
+                    ? 'bg-emerald-50 text-flash-deep border-emerald-200'
+                    : 'bg-paper text-muted border-line hover:text-ink'
+              }`}
+              aria-current={i === step ? 'step' : undefined}
+            >
+              {i < step ? <Check className="w-3 h-3" /> : <span className="font-mono">{i + 1}</span>}
+              {label}
+              {(i === 2 || i === 3 || i === 4) && <span className="font-normal opacity-70">(optional)</span>}
+            </button>
+          </li>
+        ))}
+      </ol>
+
       {/* Form Container */}
       <form onSubmit={handleSubmit} className="bg-paper-elevated border border-line rounded-2xl shadow-xl p-6 sm:p-8 space-y-6">
+        {step === 0 && (<>
         {/* Basic Info */}
         <div className="space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
-            1. General Information
+            General Information
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
@@ -321,7 +408,7 @@ export default function CreateProjectPage() {
         {/* Templates */}
         <div className="space-y-3 pt-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
-            2. Delivery Framework Template
+            Delivery Framework Template
           </h3>
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {TEMPLATES.map(tpl => (
@@ -347,11 +434,13 @@ export default function CreateProjectPage() {
             ))}
           </div>
         </div>
+        </>)}
 
-        {/* Ownership, Members & Schedule */}
+        {step === 1 && (
+        /* Ownership, Members & Schedule */
         <div className="space-y-4 pt-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
-            3. Team & Timeline
+            Team & Timeline
           </h3>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -488,11 +577,46 @@ export default function CreateProjectPage() {
             </div>
           </div>
         </div>
+        )}
 
+        {step === 2 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
+              <Flag className="w-3.5 h-3.5 text-flash-deep" /> Phases
+            </h3>
+            <PhasesStep phases={phases} onChange={setPhases} startDate={startDate} endDate={endDate} />
+            {errors.phases && <p className="text-xs text-danger">{errors.phases}</p>}
+          </div>
+        )}
+
+        {step === 3 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
+              <Layers className="w-3.5 h-3.5 text-flash-deep" /> Epics
+            </h3>
+            <EpicsStep epics={epics} onChange={setEpics} phases={phases} />
+          </div>
+        )}
+
+        {step === 4 && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
+              <Rows3 className="w-3.5 h-3.5 text-flash-deep" /> Boards
+            </h3>
+            <BoardsStep
+              mainBoardName={mainBoardName}
+              onMainBoardName={setMainBoardName}
+              extraBoards={extraBoards}
+              onExtraBoards={setExtraBoards}
+            />
+          </div>
+        )}
+
+        {step === 5 && (<>
         {/* Goals Checklist */}
         <div className="space-y-3 pt-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
-            4. Project Goals & Deliverables
+            Project Goals & Deliverables
           </h3>
 
           <div className="space-y-2">
@@ -528,21 +652,63 @@ export default function CreateProjectPage() {
           </div>
         </div>
 
-        {/* Submit Actions */}
+        {/* Review */}
+        <div className="space-y-2 pt-2">
+          <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">Review</h3>
+          <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
+            <div><dt className="text-muted">Project</dt><dd className="font-semibold text-ink">{name || '—'} <span className="font-mono text-muted">({key || '—'})</span></dd></div>
+            <div><dt className="text-muted">Timeline</dt><dd className="font-mono text-ink">{startDate} → {endDate} ({duration} days)</dd></div>
+            <div>
+              <dt className="text-muted">Phases</dt>
+              <dd className="text-ink">{phases.length ? phases.map(p => p.name).join(' → ') : 'None (can be added on the Plan tab)'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Epics</dt>
+              <dd className="text-ink">{epics.length ? epics.map(e => e.name).join(', ') : 'None (can be added on the Plan tab)'}</dd>
+            </div>
+            <div>
+              <dt className="text-muted">Boards</dt>
+              <dd className="text-ink">{[mainBoardName || 'Main board', ...extraBoards].join(', ')}</dd>
+            </div>
+            <div><dt className="text-muted">Team</dt><dd className="text-ink">{selectedMemberIds.length} member{selectedMemberIds.length === 1 ? '' : 's'}</dd></div>
+          </dl>
+        </div>
+        </>)}
+
+        {/* Step Actions */}
         <div className="pt-4 border-t border-line flex items-center justify-between">
-          <Link
-            href="/projects"
-            className="px-4 py-2 text-xs font-medium text-muted hover:text-ink rounded"
-          >
-            Cancel
-          </Link>
+          {step === 0 ? (
+            <Link
+              href="/projects"
+              className="px-4 py-2 text-xs font-medium text-muted hover:text-ink rounded"
+            >
+              Cancel
+            </Link>
+          ) : (
+            <button
+              type="button"
+              onClick={() => setStep(step - 1)}
+              className="px-4 py-2 text-xs font-medium text-muted hover:text-ink rounded inline-flex items-center gap-1.5"
+            >
+              <ArrowLeft className="w-3.5 h-3.5" /> Back
+            </button>
+          )}
 
           <button
             type="submit"
             className="px-6 py-2.5 text-xs font-semibold rounded-lg bg-flash-deep hover:bg-flash text-white hover:text-ink transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
           >
-            <span>Create Project</span>
-            <Check className="w-4 h-4" />
+            {step < STEPS.length - 1 ? (
+              <>
+                <span>{(step === 2 && phases.length === 0) || (step === 3 && epics.length === 0) ? 'Skip' : 'Next'}: {STEPS[step + 1]}</span>
+                <ArrowRight className="w-4 h-4" />
+              </>
+            ) : (
+              <>
+                <span>Create Project</span>
+                <Check className="w-4 h-4" />
+              </>
+            )}
           </button>
         </div>
       </form>

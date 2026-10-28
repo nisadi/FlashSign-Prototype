@@ -6,12 +6,12 @@ import type {
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
-  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn,
+  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn, Epic, Story,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
   MOCK_APPROVALS, MOCK_NOTIFICATIONS, MOCK_AUDIT_LOGS, MOCK_AGENT_RUNS,
-  MOCK_MILESTONES, MOCK_TEAMS, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG,
+  MOCK_MILESTONES, MOCK_TEAMS, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG, MOCK_EPICS, MOCK_STORIES,
   INITIAL_SRS_TASK_HISTORY,
 } from '@/data/mock-data';
 import {
@@ -39,12 +39,16 @@ import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
 import type { Organization } from '@/types';
 import { useDemoAuth } from '@/context/demo-auth-context';
 import { calculateProjectTimeline, diffCalendarDays } from '@/lib/timeline-calculator';
+import { hasSubtasks, progressOf, progressOfTasks } from '@/lib/subtasks';
+import { resolvePlan, type PlanLinks } from '@/lib/plan';
 
 // ── State Shape ────────────────────────────────────────────────────────────────
 export type CreateProjectInput = Partial<Project> & { name: string };
 export type CreateTaskInput = Partial<Task> & { title: string; projectId: string };
 export type CreateSprintInput = Partial<Sprint> & { name: string; projectId: string };
 export type CreateMilestoneInput = Partial<Milestone> & { name: string; projectId: string };
+export type CreateEpicInput = Partial<Epic> & { name: string; projectId: string };
+export type CreateStoryInput = Partial<Story> & { title: string; projectId: string };
 export type CreateFileInput = Partial<ProjectFile> & { name: string; projectId: string };
 export type CreateTeamInput = Partial<Team> & { name: string };
 export type CreateMemberInput = Partial<User> & { name: string; email: string };
@@ -62,6 +66,9 @@ export interface AppState {
   tasks: Task[];
   sprints: Sprint[];
   milestones: Milestone[];
+  /** Plan levels between phases (milestones) and tasks */
+  epics: Epic[];
+  stories: Story[];
   teams: Team[];
   files: ProjectFile[];
   documents: Document[];
@@ -142,7 +149,9 @@ function trackStatusMove(
       w.taskId === task.id && !w.endedAt ? { ...w, endedAt: now, lastActivityAt: now, endReason } : w
     );
   }
-  if (to === 'in_progress' && !workSessions.some(w => w.userId === workerId && w.taskId === task.id && !w.endedAt)) {
+  // A task with subtasks is a container: moving it only marks it started; people time its subtasks
+  const container = hasSubtasks(task.id, s.tasks);
+  if (to === 'in_progress' && !container && !workSessions.some(w => w.userId === workerId && w.taskId === task.id && !w.endedAt)) {
     workSessions = [
       ...workSessions.map(w =>
         w.userId === workerId && !w.endedAt ? { ...w, endedAt: now, lastActivityAt: now, endReason: 'switched_task' as const } : w
@@ -154,12 +163,6 @@ function trackStatusMove(
     workSessions,
     taskStatusChanges: [...s.taskStatusChanges, statusChange(task.id, from, to, s.currentUserId, 'web', now, boardMove)],
   };
-}
-
-function progressOf(tasks: Task[], projectId: string): number {
-  const projectTasks = tasks.filter(t => t.projectId === projectId);
-  const doneCount = projectTasks.filter(t => t.status === 'done').length;
-  return projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
 }
 
 /**
@@ -212,6 +215,29 @@ function relayoutProject(
   };
 }
 
+/**
+ * A subtask moved into In Progress: if its task is still in To Do, the task card moves to the
+ * first In Progress column of its board. The task gets no timer; the subtask's timer runs.
+ */
+function startParentOf(
+  s: AppState, subtaskId: string, now: string, via: TaskStatusChange['via']
+): Pick<AppState, 'tasks' | 'taskStatusChanges'> {
+  const sub = s.tasks.find(t => t.id === subtaskId);
+  const parent = sub?.parentId ? s.tasks.find(t => t.id === sub.parentId) : undefined;
+  if (!parent || parent.status !== 'todo') return { tasks: s.tasks, taskStatusChanges: s.taskStatusChanges };
+  const board = boardOfTask(parent, projectBoards(s.projects.find(p => p.id === parent.projectId)));
+  const column = board.columns.find(c => c.status === 'in_progress');
+  return {
+    tasks: s.tasks.map(t => (t.id === parent.id ? { ...t, status: 'in_progress' as const, columnId: column?.id, updatedAt: now } : t)),
+    taskStatusChanges: [...s.taskStatusChanges, statusChange(parent.id, 'todo', 'in_progress', s.currentUserId, via, now)],
+  };
+}
+
+/** Re-derive the plan links of the tasks that match, after an epic or story changed */
+function relinkTasks(tasks: Task[], affected: (t: Task) => boolean, epics: Epic[], stories: Story[]): Task[] {
+  return tasks.map(t => (affected(t) ? { ...t, ...resolvePlan(t, epics, stories) } : t));
+}
+
 const withExtraBoards = (p: Project, map: (boards: NonNullable<Project['extraBoards']>) => Project['extraBoards']): Project => ({
   ...p,
   extraBoards: map(p.extraBoards ?? []),
@@ -257,6 +283,19 @@ interface AppActions {
   addMilestone: (milestone: CreateMilestoneInput) => void;
   updateMilestone: (id: string, updates: Partial<Milestone>) => void;
   deleteMilestone: (id: string) => void;
+  // Plan: epics and stories (both optional levels)
+  addEpic: (epic: CreateEpicInput) => void;
+  /** Changing an epic's phase moves its tasks to that phase */
+  updateEpic: (id: string, updates: Partial<Epic>) => void;
+  /** Its stories and tasks stay, without the epic */
+  deleteEpic: (id: string) => void;
+  addStory: (story: CreateStoryInput) => void;
+  /** Changing a story's epic moves its tasks along */
+  updateStory: (id: string, updates: Partial<Story>) => void;
+  /** Its tasks stay in the epic, without the story */
+  deleteStory: (id: string) => void;
+  /** Put a task in a phase, epic or story; the links are made to agree (a story decides the epic, an epic the phase) */
+  setTaskPlan: (taskId: string, links: PlanLinks) => void;
   // Teams
   addTeam: (team: CreateTeamInput) => void;
   updateTeam: (id: string, updates: Partial<Team>) => void;
@@ -375,7 +414,7 @@ export type AppContextValue = AppState & AppActions;
 const AppContext = createContext<AppContextValue | null>(null);
 
 // Bump the version when the demo data changes, so browsers drop older saved demo data
-const STORAGE_KEY = 'flashsign-proto-state-v2';
+const STORAGE_KEY = 'flashsign-proto-state-v3';
 
 function getInitialState(): AppState {
   return {
@@ -388,6 +427,8 @@ function getInitialState(): AppState {
     tasks: MOCK_TASKS,
     sprints: MOCK_SPRINTS,
     milestones: MOCK_MILESTONES,
+    epics: MOCK_EPICS,
+    stories: MOCK_STORIES,
     teams: MOCK_TEAMS,
     files: MOCK_PROJECT_FILES,
     documents: MOCK_DOCUMENTS,
@@ -460,6 +501,8 @@ function saveState(state: AppState): void {
       tasks: state.tasks,
       sprints: state.sprints,
       milestones: state.milestones,
+      epics: state.epics,
+      stories: state.stories,
       files: state.files,
       documents: state.documents,
       approvals: state.approvals,
@@ -639,6 +682,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         isArchived: p.isArchived,
         accentColor: p.accentColor,
         goals: p.goals,
+        boardColumns: p.boardColumns,
+        mainBoardName: p.mainBoardName,
+        extraBoards: p.extraBoards,
         originalStartDate: p.originalStartDate || startDate,
         originalEndDate: p.originalEndDate || endDate,
         originalDuration: duration,
@@ -765,8 +811,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         assigneeId: t.assigneeId,
         reporterId: t.reporterId || s.currentUserId,
         parentId: t.parentId,
-        milestoneId: t.milestoneId,
-        estimatedDuration: Math.max(1, Number(t.estimatedDuration) || Number(t.points) || 3),
+        ...resolvePlan(t, s.epics, s.stories),
+        estimatedDuration: Math.max(1, Number(t.estimatedDuration) || (t.parentId ? 1 : 3)),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
         startDate: t.startDate,
@@ -787,8 +833,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const nextTasks = [newTask, ...s.tasks];
       // Recalculate project progress & dynamic timeline
       const projectTasks = nextTasks.filter(item => item.projectId === newTask.projectId);
-      const doneCount = projectTasks.filter(item => item.status === 'done').length;
-      const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+      const progress = progressOfTasks(projectTasks);
       
       const nextProjects = s.projects.map(p => {
         if (p.id !== newTask.projectId) return p;
@@ -818,8 +863,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         assigneeId: t.assigneeId,
         reporterId: t.reporterId || s.currentUserId,
         parentId: t.parentId,
-        milestoneId: t.milestoneId,
-        estimatedDuration: Math.max(1, Number(t.estimatedDuration) || Number(t.points) || 3),
+        ...resolvePlan(t, s.epics, s.stories),
+        estimatedDuration: Math.max(1, Number(t.estimatedDuration) || (t.parentId ? 1 : 3)),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
         startDate: t.startDate,
@@ -843,8 +888,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const nextProjects = s.projects.map(p => {
         if (!affectedProjectIds.includes(p.id)) return p;
         const projectTasks = nextTasks.filter(item => item.projectId === p.id);
-        const doneCount = projectTasks.filter(item => item.status === 'done').length;
-        const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+        const progress = progressOfTasks(projectTasks);
         const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
         return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
       });
@@ -864,14 +908,16 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const timing = before && to && (to !== before.status || boardMove)
         ? trackStatusMove(s, { ...before, ...updates, status: before.status }, to, now, boardMove)
         : {};
-      const nextTasks = s.tasks.map(t => t.id === id ? { ...t, ...updates, updatedAt: now } : t);
+      const parentStart = before?.parentId && to === 'in_progress' && before.status !== 'in_progress'
+        ? startParentOf({ ...s, ...timing }, id, now, 'web')
+        : undefined;
+      const nextTasks = (parentStart?.tasks ?? s.tasks).map(t => t.id === id ? { ...t, ...updates, updatedAt: now } : t);
       const updatedTask = nextTasks.find(t => t.id === id);
       const projectId = updatedTask?.projectId;
       let nextProjects = s.projects;
       if (projectId) {
         const projectTasks = nextTasks.filter(t => t.projectId === projectId);
-        const doneCount = projectTasks.filter(t => t.status === 'done').length;
-        const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+        const progress = progressOfTasks(projectTasks);
         nextProjects = s.projects.map(p => {
           if (p.id !== projectId) return p;
           const updatedP = { ...p, progress, updatedAt: now };
@@ -881,6 +927,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return {
         ...s,
         ...timing,
+        ...(parentStart && { taskStatusChanges: parentStart.taskStatusChanges }),
         tasks: nextTasks,
         projects: nextProjects,
       };
@@ -893,8 +940,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let nextProjects = s.projects;
       if (projectId) {
         const projectTasks = nextTasks.filter(t => t.projectId === projectId);
-        const doneCount = projectTasks.filter(t => t.status === 'done').length;
-        const progress = projectTasks.length > 0 ? Math.round((doneCount / projectTasks.length) * 100) : 0;
+        const progress = progressOfTasks(projectTasks);
         nextProjects = s.projects.map(p => {
           if (p.id !== projectId) return p;
           const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
@@ -972,11 +1018,71 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const target = s.milestones.find(m => m.id === id);
       const nextMilestones = s.milestones.filter(m => m.id !== id);
       const nextTasks = s.tasks.map(t => t.milestoneId === id ? { ...t, milestoneId: undefined } : t);
+      // Epics in the phase stay, without a phase
+      const epics = s.epics.map(e => (e.phaseId === id ? { ...e, phaseId: undefined } : e));
       const nextProjects = s.projects.map(p => {
         if (p.id !== target?.projectId) return p;
         return calculateProjectTimeline(p, nextTasks, nextMilestones);
       });
-      return { ...s, milestones: nextMilestones, tasks: nextTasks, projects: nextProjects };
+      return { ...s, milestones: nextMilestones, epics, tasks: nextTasks, projects: nextProjects };
+    }),
+
+    // Plan
+    addEpic: (e) => update(s => {
+      const now = new Date().toISOString();
+      const epic: Epic = {
+        id: e.id || `epic-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        projectId: e.projectId,
+        phaseId: e.phaseId,
+        name: e.name,
+        description: e.description,
+        color: e.color || '#42a5f5',
+        createdAt: now,
+        updatedAt: now,
+      };
+      return { ...s, epics: [...s.epics, epic] };
+    }),
+    updateEpic: (id, updates) => update(s => {
+      const epics = s.epics.map(e => (e.id === id ? { ...e, ...updates, updatedAt: new Date().toISOString() } : e));
+      return { ...s, epics, tasks: relinkTasks(s.tasks, t => t.epicId === id, epics, s.stories) };
+    }),
+    deleteEpic: (id) => update(s => {
+      const epics = s.epics.filter(e => e.id !== id);
+      const stories = s.stories.map(st => (st.epicId === id ? { ...st, epicId: undefined } : st));
+      const tasks = s.tasks.map(t => (t.epicId === id ? { ...t, epicId: undefined } : t));
+      return { ...s, epics, stories, tasks: relinkTasks(tasks, t => Boolean(t.storyId), epics, stories) };
+    }),
+    addStory: (st) => update(s => {
+      const now = new Date().toISOString();
+      const story: Story = {
+        id: st.id || `story-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
+        projectId: st.projectId,
+        epicId: st.epicId,
+        title: st.title,
+        description: st.description,
+        acceptanceCriteria: st.acceptanceCriteria,
+        priority: st.priority || 'medium',
+        createdAt: now,
+        updatedAt: now,
+      };
+      return { ...s, stories: [...s.stories, story] };
+    }),
+    updateStory: (id, updates) => update(s => {
+      const stories = s.stories.map(st => (st.id === id ? { ...st, ...updates, updatedAt: new Date().toISOString() } : st));
+      return { ...s, stories, tasks: relinkTasks(s.tasks, t => t.storyId === id, s.epics, stories) };
+    }),
+    deleteStory: (id) => update(s => ({
+      ...s,
+      stories: s.stories.filter(st => st.id !== id),
+      tasks: s.tasks.map(t => (t.storyId === id ? { ...t, storyId: undefined } : t)),
+    })),
+    setTaskPlan: (taskId, links) => update(s => {
+      const resolved = resolvePlan(links, s.epics, s.stories);
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        tasks: s.tasks.map(t => (t.id === taskId ? { ...t, ...resolved, updatedAt: now } : t)),
+      };
     }),
 
     // Files
@@ -1604,6 +1710,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const now = new Date().toISOString();
       const open = s.workSessions.find(w => w.userId === s.currentUserId && !w.endedAt);
       if (open?.taskId === taskId) return s;
+      // The MCP server answers start_task on a task with subtasks with its subtasks, so the agent picks one
+      if (hasSubtasks(taskId, s.tasks)) return s;
+      const parentStart = startParentOf(s, taskId, now, agent);
       const events: AgentEvent[] = [];
       if (open) events.push(agentEvent(s.currentUserId, agent, 'paused', open.taskId, 'Paused automatically to start another task'));
       events.push(agentEvent(s.currentUserId, agent, 'started', taskId));
@@ -1614,10 +1723,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ...s.workSessions.map(w => (w === open ? { ...w, endedAt: now, lastActivityAt: now, endReason: 'switched_task' as const } : w)),
           { id: `ws-${Date.now()}`, userId: s.currentUserId, taskId, startedAt: now, lastActivityAt: now, source: agent },
         ],
-        tasks: s.tasks.map(t => (t.id === taskId && t.status === 'todo' ? { ...t, status: 'in_progress' as const, updatedAt: now } : t)),
+        tasks: parentStart.tasks.map(t => (t.id === taskId && t.status === 'todo' ? { ...t, status: 'in_progress' as const, updatedAt: now } : t)),
         taskStatusChanges: moves
-          ? [...s.taskStatusChanges, statusChange(taskId, 'todo', 'in_progress', s.currentUserId, agent, now)]
-          : s.taskStatusChanges,
+          ? [...parentStart.taskStatusChanges, statusChange(taskId, 'todo', 'in_progress', s.currentUserId, agent, now)]
+          : parentStart.taskStatusChanges,
         agentEvents: [...s.agentEvents, ...events],
       };
     }),
