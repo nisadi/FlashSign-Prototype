@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { ArrowLeft, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 
 const TEAM_COLORS = [
   '#00c2a8', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#06b6d4',
@@ -92,6 +93,7 @@ export default function EditTeamPage() {
       status,
     });
 
+    notify(`Changes to team "${trimmedName}" saved`);
     setSuccess(true);
     setTimeout(() => {
       router.push(`/teams/${team.id}`);

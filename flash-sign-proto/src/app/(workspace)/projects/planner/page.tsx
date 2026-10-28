@@ -6,6 +6,7 @@ import { useApp } from '@/context/app-context';
 import { Card, Button } from '@/components/shared/ui';
 import { formatDate } from '@/lib/utils';
 import { Modal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 import {
   Calendar as CalendarIcon,
   ChevronLeft,
@@ -167,7 +168,14 @@ export default function PlannerCalendarPage() {
 
   const handleCreateEvent = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!quickTitle.trim() || !quickProjectId) return;
+    if (!quickTitle.trim()) {
+      notify('Add a title for the calendar item first.', 'error');
+      return;
+    }
+    if (!quickProjectId) {
+      notify('Choose a project for the calendar item first.', 'error');
+      return;
+    }
 
     if (quickType === 'task') {
       addTask({
@@ -189,6 +197,7 @@ export default function PlannerCalendarPage() {
       });
     }
 
+    notify(`${quickType === 'task' ? 'Task' : 'Milestone'} "${quickTitle.trim()}" added to the calendar`);
     setQuickTitle('');
     setShowQuickCreate(false);
   };

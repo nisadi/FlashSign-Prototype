@@ -5,6 +5,7 @@ import { X, Users, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { Team } from '@/types';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateTeamDialogProps {
   open: boolean;
@@ -114,6 +115,7 @@ export function CreateTeamDialog({
         status,
       });
       setSuccessMsg('Team updated successfully!');
+      notify(`Changes to team "${trimmedName}" saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...teamToEdit, name: trimmedName });
@@ -132,6 +134,7 @@ export function CreateTeamDialog({
         status,
       });
       setSuccessMsg('Team created successfully!');
+      notify(`Team "${trimmedName}" created`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

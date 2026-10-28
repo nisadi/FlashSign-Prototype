@@ -4,6 +4,8 @@ import { useState } from 'react';
 import { Plus, Trash2, Flag, Layers, Rows3, Check } from 'lucide-react';
 import { EPIC_COLORS } from '@/lib/plan';
 import { addDays, diffCalendarDays } from '@/lib/timeline-calculator';
+import { naturalUnit, type DurationUnit } from '@/lib/durations';
+import { DateRangeField } from '@/components/shared/duration-fields';
 import { cn } from '@/lib/utils';
 
 /** A phase being planned in the New Project form (saved as a milestone on create) */
@@ -12,6 +14,7 @@ export interface DraftPhase {
   name: string;
   startDate: string;
   endDate: string;
+  unit: DurationUnit;
 }
 
 export interface DraftEpic {
@@ -34,12 +37,11 @@ const input = 'w-full px-2.5 py-1.5 text-xs rounded-lg border border-line bg-pap
 export function spreadPhases(names: string[], startDate: string, endDate: string): DraftPhase[] {
   const total = Math.max(names.length, diffCalendarDays(startDate, endDate));
   const step = total / Math.max(1, names.length);
-  return names.map((name, i) => ({
-    key: key(),
-    name,
-    startDate: addDays(startDate, Math.round(i * step)),
-    endDate: i === names.length - 1 ? endDate : addDays(startDate, Math.round((i + 1) * step)),
-  }));
+  return names.map((name, i) => {
+    const start = addDays(startDate, Math.round(i * step));
+    const end = i === names.length - 1 ? endDate : addDays(startDate, Math.round((i + 1) * step));
+    return { key: key(), name, startDate: start, endDate: end, unit: naturalUnit(start, end) };
+  });
 }
 
 export function PhasesStep({
@@ -47,23 +49,28 @@ export function PhasesStep({
   onChange,
   startDate,
   endDate,
+  unit,
 }: {
   phases: DraftPhase[];
   onChange: (phases: DraftPhase[]) => void;
   startDate: string;
   endDate: string;
+  /** The unit the project was planned in; new phases start in weeks unless the project uses days */
+  unit: DurationUnit;
 }) {
+  const projectWindow = { start: startDate, end: endDate, label: 'the project' };
   const [templateId, setTemplateId] = useState<string | null>(null);
   const patch = (k: string, changes: Partial<DraftPhase>) => onChange(phases.map(p => (p.key === k ? { ...p, ...changes } : p)));
   const add = () => {
     const from = phases.at(-1)?.endDate ?? startDate;
-    onChange([...phases, { key: key(), name: '', startDate: from, endDate: addDays(from, 14) > endDate ? endDate : addDays(from, 14) }]);
+    const end = addDays(from, 14) > endDate ? endDate : addDays(from, 14);
+    onChange([...phases, { key: key(), name: '', startDate: from, endDate: end, unit: unit === 'days' ? 'days' : 'weeks' }]);
   };
 
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted">
-        Phases are the big stages of the project, each ending in a checkpoint. They&apos;re optional: skip this step if the project only uses sprints.
+        Phases are the big stages of the project, each ending in a checkpoint. Each phase&apos;s time sits inside the project&apos;s time. They&apos;re optional: skip this step if the project only uses sprints.
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
         {PHASE_TEMPLATES.map(t => (
@@ -100,14 +107,13 @@ export function PhasesStep({
               placeholder="Phase name"
               className={cn(input, 'flex-1 min-w-[140px]', !p.name.trim() && 'border-danger/60')}
             />
-            <input type="date" value={p.startDate} onChange={e => patch(p.key, { startDate: e.target.value })} className={cn(input, 'w-auto font-mono')} aria-label="Phase start" />
-            <span className="text-muted text-xs">→</span>
-            <input
-              type="date"
-              value={p.endDate}
-              onChange={e => patch(p.key, { endDate: e.target.value })}
-              className={cn(input, 'w-auto font-mono', p.endDate < p.startDate && 'border-danger')}
-              aria-label="Phase end"
+            <DateRangeField
+              compact
+              value={{ start: p.startDate, end: p.endDate, unit: p.unit }}
+              onChange={r => patch(p.key, { startDate: r.start, endDate: r.end, unit: r.unit })}
+              window={projectWindow}
+              startLabel="Phase start"
+              endLabel="Phase end"
             />
             <button type="button" onClick={() => onChange(phases.filter(x => x.key !== p.key))} className="p-1.5 text-muted hover:text-danger rounded-md" aria-label="Remove phase">
               <Trash2 className="w-3.5 h-3.5" />

@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { TemplateCategory, DocumentType } from '@/types/documents';
+import { notify } from '@/components/shared/toaster';
 
 export default function NewTemplatePage() {
   const router = useRouter();
@@ -62,6 +63,7 @@ export default function NewTemplatePage() {
       placeholders,
     });
 
+    notify(`Template "${title.trim()}" created`);
     router.push('/documents/templates');
   };
 

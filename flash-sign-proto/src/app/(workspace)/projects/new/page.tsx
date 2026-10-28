@@ -4,11 +4,15 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import type { ProjectStatus, ProjectPriority, ProjectHealth } from '@/types';
 import { ArrowLeft, ArrowRight, FolderKanban, Sparkles, Check, Users, Calendar, Flag, Shield, Layers, Rows3 } from 'lucide-react';
 import {
   PhasesStep, EpicsStep, BoardsStep, type DraftPhase, type DraftEpic,
 } from '@/components/projects/new-project-plan-steps';
+import { DateRangeField, type DateRange } from '@/components/shared/duration-fields';
+import { addDuration, formatDuration } from '@/lib/durations';
+import { diffCalendarDays } from '@/lib/timeline-calculator';
 
 const ACCENT_COLORS = [
   { label: 'Mint Flash', value: '#00c2a8' },
@@ -53,17 +57,13 @@ export default function CreateProjectPage() {
   const [group, setGroup] = useState(SPACES[0]);
   const [priority, setPriority] = useState<ProjectPriority>('high');
   const [status, setStatus] = useState<ProjectStatus>('active');
-  const initialStart = new Date().toISOString().split('T')[0];
-  const initialDuration = 90;
-  const calcEnd = (start: string, days: number) => {
-    const d = new Date(start);
-    d.setDate(d.getDate() + days);
-    return d.toISOString().split('T')[0];
-  };
-
-  const [startDate, setStartDate] = useState(initialStart);
-  const [duration, setDuration] = useState(initialDuration);
-  const [endDate, setEndDate] = useState(calcEnd(initialStart, initialDuration));
+  // The project's planned time; teams mostly plan in months, so it starts at 3 months
+  const [timeline, setTimeline] = useState<DateRange>(() => {
+    const start = new Date().toISOString().split('T')[0];
+    return { start, end: addDuration(start, 3, 'months'), unit: 'months' };
+  });
+  const { start: startDate, end: endDate } = timeline;
+  const duration = startDate && endDate ? diffCalendarDays(startDate, endDate) : 0;
   const [template, setTemplate] = useState('scrum');
   const [visibility, setVisibility] = useState('workspace');
   const [goalText, setGoalText] = useState('');
@@ -79,38 +79,6 @@ export default function CreateProjectPage() {
   const [epics, setEpics] = useState<DraftEpic[]>([]);
   const [mainBoardName, setMainBoardName] = useState('Main board');
   const [extraBoards, setExtraBoards] = useState<string[]>([]);
-
-  // Synchronize Start Date change -> update End Date
-  const handleStartDateChange = (newStart: string) => {
-    setStartDate(newStart);
-    if (newStart && duration > 0) {
-      setEndDate(calcEnd(newStart, duration));
-    }
-  };
-
-  // Synchronize Duration change -> update End Date
-  const handleDurationChange = (newDurationStr: string) => {
-    const days = parseInt(newDurationStr, 10);
-    if (!isNaN(days) && days > 0) {
-      setDuration(days);
-      setEndDate(calcEnd(startDate, days));
-      if (errors.duration) setErrors(prev => ({ ...prev, duration: '' }));
-    } else {
-      setDuration(0);
-    }
-  };
-
-  // Synchronize End Date change -> update Duration
-  const handleEndDateChange = (newEnd: string) => {
-    setEndDate(newEnd);
-    if (newEnd && startDate) {
-      const diff = Math.round((new Date(newEnd).getTime() - new Date(startDate).getTime()) / (1000 * 60 * 60 * 24));
-      if (diff > 0) {
-        setDuration(diff);
-        if (errors.endDate) setErrors(prev => ({ ...prev, endDate: '' }));
-      }
-    }
-  };
 
   const handleToggleMember = (userId: string) => {
     if (selectedMemberIds.includes(userId)) {
@@ -146,6 +114,8 @@ export default function CreateProjectPage() {
     }
     if (n === 2 && phases.some(p => !p.name.trim() || p.endDate < p.startDate)) {
       newErrors.phases = 'Every phase needs a name, and its end date can\'t be before its start date.';
+    } else if (n === 2 && phases.some(p => p.startDate < startDate || p.endDate > endDate)) {
+      newErrors.phases = 'Every phase has to fit inside the project\'s time.';
     }
     return newErrors;
   };
@@ -211,6 +181,7 @@ export default function CreateProjectPage() {
       timelineDifference: 0,
       timelineStatus: 'on_schedule' as const,
       totalWorkDays: 0,
+      durationUnit: timeline.unit,
       mainBoardName: mainBoardName.trim() || undefined,
       extraBoards: extraBoards.map((boardName, i) => ({ id: `board-${newProjectId}-${i}`, name: boardName })),
       createdAt: new Date().toISOString(),
@@ -228,6 +199,7 @@ export default function CreateProjectPage() {
         startDate: p.startDate,
         endDate: p.endDate,
         dueDate: p.endDate,
+        durationUnit: p.unit,
         status: 'upcoming',
       })
     );
@@ -251,6 +223,7 @@ export default function CreateProjectPage() {
       timestamp: new Date().toISOString(),
     });
 
+    notify(`Project "${newProject.name}" created${phases.length ? ` with ${phases.length} phases` : ''}`);
     router.push(`/projects/${newProjectId}`);
   };
 
@@ -490,58 +463,23 @@ export default function CreateProjectPage() {
               </div>
               <div className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-paper-elevated border border-line text-[11px] font-mono text-ink">
                 <span className="w-2 h-2 rounded-full bg-flash-deep" />
-                <span>Baseline: {duration} days</span>
+                <span>Baseline: {formatDuration(startDate, endDate, timeline.unit)}</span>
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
-              <div>
-                <label className="block text-[11px] font-semibold text-ink mb-1">
-                  Start Date <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={e => handleStartDateChange(e.target.value)}
-                  className="w-full px-3 py-2 text-xs rounded-lg border border-line bg-paper text-ink font-mono focus:border-flash focus:ring-1 focus:ring-flash"
-                />
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-ink mb-1">
-                  Planned Duration (Days) <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="number"
-                  min="1"
-                  max="1825"
-                  value={duration || ''}
-                  onChange={e => handleDurationChange(e.target.value)}
-                  placeholder="e.g. 90"
-                  className={`w-full px-3 py-2 text-xs rounded-lg border bg-paper text-ink font-mono focus:border-flash focus:ring-1 focus:ring-flash ${
-                    errors.duration ? 'border-danger ring-1 ring-danger' : 'border-line'
-                  }`}
-                />
-                {errors.duration && <p className="text-[10px] text-danger mt-1">{errors.duration}</p>}
-              </div>
-
-              <div>
-                <label className="block text-[11px] font-semibold text-ink mb-1">
-                  Target End Date <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={endDate}
-                  onChange={e => handleEndDateChange(e.target.value)}
-                  className={`w-full px-3 py-2 text-xs rounded-lg border bg-paper text-ink font-mono focus:border-flash focus:ring-1 focus:ring-flash ${
-                    errors.endDate ? 'border-danger ring-1 ring-danger' : 'border-line'
-                  }`}
-                />
-                {errors.endDate && <p className="text-[10px] text-danger mt-1">{errors.endDate}</p>}
-              </div>
-            </div>
+            <DateRangeField
+              value={timeline}
+              onChange={(range) => {
+                setTimeline(range);
+                setErrors((prev) => ({ ...prev, duration: '', endDate: '' }));
+              }}
+              endLabel="Target end date"
+            />
+            {(errors.duration || errors.endDate) && (
+              <p className="text-[11px] text-danger">{errors.duration || errors.endDate}</p>
+            )}
             <p className="text-[11px] text-muted italic">
-              Tip: Modifying duration automatically adjusts the target end date, and vice versa.
+              Type the length as days, weeks or months; the end date follows. Changing the end date works out the length.
             </p>
           </div>
 
@@ -584,7 +522,7 @@ export default function CreateProjectPage() {
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
               <Flag className="w-3.5 h-3.5 text-flash-deep" /> Phases
             </h3>
-            <PhasesStep phases={phases} onChange={setPhases} startDate={startDate} endDate={endDate} />
+            <PhasesStep phases={phases} onChange={setPhases} startDate={startDate} endDate={endDate} unit={timeline.unit} />
             {errors.phases && <p className="text-xs text-danger">{errors.phases}</p>}
           </div>
         )}
@@ -657,7 +595,7 @@ export default function CreateProjectPage() {
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">Review</h3>
           <dl className="grid grid-cols-1 sm:grid-cols-2 gap-x-6 gap-y-2 text-xs">
             <div><dt className="text-muted">Project</dt><dd className="font-semibold text-ink">{name || '—'} <span className="font-mono text-muted">({key || '—'})</span></dd></div>
-            <div><dt className="text-muted">Timeline</dt><dd className="font-mono text-ink">{startDate} → {endDate} ({duration} days)</dd></div>
+            <div><dt className="text-muted">Timeline</dt><dd className="font-mono text-ink">{startDate} → {endDate} ({formatDuration(startDate, endDate, timeline.unit)})</dd></div>
             <div>
               <dt className="text-muted">Phases</dt>
               <dd className="text-ink">{phases.length ? phases.map(p => p.name).join(' → ') : 'None (can be added on the Plan tab)'}</dd>

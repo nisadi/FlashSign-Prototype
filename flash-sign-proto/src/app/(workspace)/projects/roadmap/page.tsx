@@ -8,6 +8,7 @@ import { ProjectStatusBadge, HealthBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
 import { formatDate } from '@/lib/utils';
 import { Modal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 import {
   Compass,
   Search,
@@ -74,7 +75,14 @@ export default function ProjectRoadmapPage() {
 
   const handleCreateMilestone = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newMilestoneName.trim() || !targetProjectId) return;
+    if (!newMilestoneName.trim()) {
+      notify('Add a title for the milestone first.', 'error');
+      return;
+    }
+    if (!targetProjectId) {
+      notify('Choose a project for the milestone first.', 'error');
+      return;
+    }
 
     addMilestone({
       name: newMilestoneName.trim(),
@@ -87,6 +95,7 @@ export default function ProjectRoadmapPage() {
       taskIds: [],
     });
 
+    notify(`Milestone "${newMilestoneName.trim()}" created`);
     setNewMilestoneName('');
     setNewMilestoneDesc('');
     setShowMilestoneModal(false);

@@ -23,6 +23,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { DocumentType } from '@/types/documents';
+import { notify } from '@/components/shared/toaster';
 
 export default function NewDocumentPage() {
   const router = useRouter();
@@ -74,6 +75,7 @@ export default function NewDocumentPage() {
       pages: Math.max(1, Math.ceil(content.length / 800)),
     });
 
+    notify(`Document "${title.trim()}" saved as a draft`);
     router.push(`/documents/${newId}`);
   };
 

@@ -23,6 +23,7 @@ import {
 import type { Task } from '@/types';
 import { actualSpan } from '@/lib/task-progress';
 import { useNow } from '@/lib/use-now';
+import { formatDays } from '@/lib/durations';
 
 export default function ProjectTimelinePage({
   params,
@@ -354,7 +355,7 @@ export default function ProjectTimelinePage({
                             : 'bg-ink'
                         }`}
                         style={{ left: pos.left, width: pos.width }}
-                        title={`${task.title} (${task.estimatedDuration || 3} days)`}
+                        title={`${task.title} (${formatDays(task.estimatedDuration || 3, task.durationUnit, task.startDate)})`}
                       >
                         <span className="truncate pr-1 font-semibold">{task.title}</span>
                         {assignee && (
@@ -411,9 +412,9 @@ export default function ProjectTimelinePage({
                                 : 'bg-ink-soft/80'
                             }`}
                             style={{ left: subPos.left, width: subPos.width }}
-                            title={`${sub.title} (${sub.estimatedDuration || 1}d)`}
+                            title={`${sub.title} (${formatDays(sub.estimatedDuration || 1, sub.durationUnit, sub.startDate)})`}
                           >
-                            <span className="truncate pr-1">{sub.title} ({sub.estimatedDuration || 1}d)</span>
+                            <span className="truncate pr-1">{sub.title} ({formatDays(sub.estimatedDuration || 1, sub.durationUnit, sub.startDate)})</span>
                             {subAssignee && (
                               <div className="shrink-0 scale-65 origin-right">
                                 <Avatar user={subAssignee} size="xs" />

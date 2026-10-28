@@ -6,6 +6,7 @@ import { useApp, useCurrentUser } from '@/context/app-context';
 import type { TaskPriority, TaskType, ProjectStatus, ProjectHealth } from '@/types';
 import { X, CheckSquare, FolderKanban, Flag, Zap, Check } from 'lucide-react';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface QuickCreateDialogProps {
   isOpen: boolean;
@@ -50,7 +51,10 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
 
   const handleCreateTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!taskTitle.trim()) return;
+    if (!taskTitle.trim()) {
+      notify('Add a title for the task first.', 'error');
+      return;
+    }
     const project = projects.find(p => p.id === taskProjectId);
     const count = Math.floor(Math.random() * 800) + 100;
     const newTask = {
@@ -73,12 +77,20 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
       updatedAt: new Date().toISOString(),
     };
     addTask(newTask);
+    notify(`Task "${newTask.title}" created`);
     onClose();
   };
 
   const handleCreateProject = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!projName.trim() || !projKey.trim()) return;
+    if (!projName.trim()) {
+      notify('Add a name for the project first.', 'error');
+      return;
+    }
+    if (!projKey.trim()) {
+      notify('Add a project key first, for example MOB.', 'error');
+      return;
+    }
     const newProj = {
       id: `p-${Date.now()}`,
       name: projName.trim(),
@@ -99,13 +111,17 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
       updatedAt: new Date().toISOString(),
     };
     addProject(newProj);
+    notify(`Project "${newProj.name}" created`);
     onClose();
     router.push(`/projects/${newProj.id}`);
   };
 
   const handleCreateMilestone = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!milestoneName.trim()) return;
+    if (!milestoneName.trim()) {
+      notify('Add a name for the milestone first.', 'error');
+      return;
+    }
     const newM = {
       id: `m-${Date.now()}`,
       projectId: taskProjectId,
@@ -116,12 +132,16 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
       progress: 0,
     };
     addMilestone(newM);
+    notify(`Milestone "${newM.name}" created`);
     onClose();
   };
 
   const handleCreateSprint = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sprintName.trim()) return;
+    if (!sprintName.trim()) {
+      notify('Add a name for the sprint first.', 'error');
+      return;
+    }
     const newS = {
       id: `s-${Date.now()}`,
       name: sprintName.trim(),
@@ -134,6 +154,7 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
       createdAt: new Date().toISOString(),
     };
     addSprint(newS);
+    notify(`Sprint "${newS.name}" created`);
     onClose();
   };
 

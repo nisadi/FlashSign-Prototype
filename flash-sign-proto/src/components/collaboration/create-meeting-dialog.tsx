@@ -6,6 +6,7 @@ import { useApp } from '@/context/app-context';
 import type { Meeting } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateMeetingDialogProps {
   open: boolean;
@@ -151,6 +152,7 @@ export function CreateMeetingDialog({
         agenda: agendaItems,
       });
       setSuccessMsg('Meeting updated successfully!');
+      notify(`Changes to meeting "${trimmedTitle}" saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...meetingToEdit, title: trimmedTitle });
@@ -172,6 +174,7 @@ export function CreateMeetingDialog({
         agenda: agendaItems,
       });
       setSuccessMsg('Meeting scheduled and added to calendar!');
+      notify(`Meeting "${trimmedTitle}" scheduled`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

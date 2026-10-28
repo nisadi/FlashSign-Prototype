@@ -5,6 +5,7 @@ import { X, Flag, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { Milestone } from '@/types';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateMilestoneDialogProps {
   open: boolean;
@@ -72,6 +73,7 @@ export function CreateMilestoneDialog({
         taskIds: selectedTaskIds,
       });
       setSuccessMsg('Milestone updated!');
+      notify(`Changes to milestone "${trimmedName}" saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...milestoneToEdit, name: trimmedName, progress });
@@ -87,6 +89,7 @@ export function CreateMilestoneDialog({
         taskIds: selectedTaskIds,
       });
       setSuccessMsg('Milestone created!');
+      notify(`Milestone "${trimmedName}" created`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

@@ -5,6 +5,7 @@ import { useApp } from '@/context/app-context';
 import { formatMinutes } from '@/lib/agent-connection';
 import { actualSpan, type ActualSpan } from '@/lib/task-progress';
 import { stageLabel } from '@/lib/board-columns';
+import { formatDays } from '@/lib/durations';
 import { formatDate, cn } from '@/lib/utils';
 import type { Task, TaskStatus } from '@/types';
 
@@ -44,7 +45,7 @@ export function TaskProgress({ task, subtasks, now }: { task: Task; subtasks: Ta
     const length = `${a.days === 0 ? 'under a day' : `${a.days}d`}`;
     const workers = a.workers.map(w => `${nameOf(w.userId)} ${formatMinutes(w.minutes)}`).join(', ');
     const state = a.end ? `Done in ${length}` : `${stageLabel(t.status)} ${length}`;
-    return [state, t.estimatedDuration ? `planned ${t.estimatedDuration}d` : '', workers].filter(Boolean).join(' · ');
+    return [state, t.estimatedDuration ? `planned ${formatDays(t.estimatedDuration, t.durationUnit, t.startDate)}` : '', workers].filter(Boolean).join(' · ');
   };
 
   return (

@@ -14,6 +14,7 @@ import {
 import { useApp } from '@/context/app-context';
 import { DocumentType } from '@/types/documents';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface UploadDemoDialogProps {
   open: boolean;
@@ -100,6 +101,7 @@ export function UploadDemoDialog({
       content: `# ${title.trim()}\n\nUploaded demo file representation (${selectedFileName || title + '.pdf'}).\n\n### Document Scope\nThis document record was imported into the Flash Sign demo library. Fields and signature workflows can be configured directly from the document details workspace.`,
     });
 
+    notify(`Document "${title.trim()}" added to the library`);
     onOpenChange(false);
     if (onSuccess) onSuccess(newId);
   };

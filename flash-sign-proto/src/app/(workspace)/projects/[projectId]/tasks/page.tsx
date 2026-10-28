@@ -16,6 +16,9 @@ import { useGuardedMove } from '@/components/tasks/use-guarded-move';
 import { inProgressSince } from '@/lib/subtasks';
 import { formatMinutes, sessionMinutes } from '@/lib/agent-connection';
 import { useNow } from '@/lib/use-now';
+import { formatDays, type DurationUnit } from '@/lib/durations';
+import { EstimateField } from '@/components/shared/duration-fields';
+import { notify } from '@/components/shared/toaster';
 import {
   Plus,
   Search,
@@ -84,6 +87,7 @@ export default function ProjectTasksListPage({
   // Quick edit duration modal
   const [editingDurationTask, setEditingDurationTask] = useState<Task | null>(null);
   const [newDurationVal, setNewDurationVal] = useState<number>(1);
+  const [newDurationUnit, setNewDurationUnit] = useState<DurationUnit>('days');
 
   const project =
     projects.find((p) => p.id === projectId) ||
@@ -154,6 +158,7 @@ export default function ProjectTasksListPage({
     if (e) e.stopPropagation();
     setEditingDurationTask(task);
     setNewDurationVal(task.estimatedDuration || 3);
+    setNewDurationUnit(task.durationUnit ?? 'days');
   };
 
   const handleSaveDuration = (e: React.FormEvent) => {
@@ -161,7 +166,9 @@ export default function ProjectTasksListPage({
     if (editingDurationTask && newDurationVal > 0) {
       updateTask(editingDurationTask.id, {
         estimatedDuration: Number(newDurationVal),
+        durationUnit: newDurationUnit,
       });
+      notify(`Estimate for ${editingDurationTask.key} saved: ${formatDays(newDurationVal, newDurationUnit, editingDurationTask.startDate)}`);
       setEditingDurationTask(null);
     }
   };
@@ -448,12 +455,12 @@ export default function ProjectTasksListPage({
                         className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-mist/40 hover:bg-mist text-ink text-xs font-mono font-semibold border border-line transition-all group"
                         title={
                           subtasks.length > 0
-                            ? `Derived from ${subtasks.length} subtasks (${effectiveDuration} days). Click to view/edit.`
+                            ? `Derived from ${subtasks.length} subtasks (${formatDays(effectiveDuration, mainTask.durationUnit, mainTask.startDate)}). Click to view/edit.`
                             : 'Click to update estimated duration'
                         }
                       >
                         <Clock className="w-3 h-3 text-flash-deep" />
-                        <span>{effectiveDuration} days</span>
+                        <span>{formatDays(effectiveDuration, mainTask.durationUnit, mainTask.startDate)}</span>
                         {subtasks.length > 0 && (
                           <span className="text-[9px] text-muted italic">(derived)</span>
                         )}
@@ -573,7 +580,7 @@ export default function ProjectTasksListPage({
                                   title="Click to update subtask duration"
                                 >
                                   <Clock className="w-2.5 h-2.5 text-flash-deep" />
-                                  <span>{subtask.estimatedDuration || 1}d</span>
+                                  <span>{formatDays(subtask.estimatedDuration || 1, subtask.durationUnit, subtask.startDate)}</span>
                                   <Edit2 className="w-2 h-2 text-muted" />
                                 </button>
 
@@ -648,19 +655,17 @@ export default function ProjectTasksListPage({
             <form onSubmit={handleSaveDuration} className="space-y-4">
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1">
-                  Estimated Duration (Calendar / Work Days) <span className="text-danger">*</span>
+                  Estimate <span className="text-danger">*</span>
                 </label>
-                <div className="flex items-center gap-2">
-                  <input
-                    type="number"
-                    min="1"
-                    max="365"
-                    value={newDurationVal}
-                    onChange={(e) => setNewDurationVal(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                    className="flex-1 px-3 py-2 text-sm font-mono font-bold bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
-                  />
-                  <span className="text-xs text-muted font-medium">days</span>
-                </div>
+                <EstimateField
+                  days={newDurationVal}
+                  unit={newDurationUnit}
+                  start={editingDurationTask?.startDate?.slice(0, 10)}
+                  onChange={(days, unit) => {
+                    setNewDurationVal(days);
+                    setNewDurationUnit(unit);
+                  }}
+                />
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">

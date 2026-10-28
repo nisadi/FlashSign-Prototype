@@ -414,7 +414,7 @@ export type AppContextValue = AppState & AppActions;
 const AppContext = createContext<AppContextValue | null>(null);
 
 // Bump the version when the demo data changes, so browsers drop older saved demo data
-const STORAGE_KEY = 'flashsign-proto-state-v3';
+const STORAGE_KEY = 'flashsign-proto-state-v4';
 
 function getInitialState(): AppState {
   return {
@@ -472,7 +472,7 @@ function loadState(): AppState {
     const tasks = saved.tasks && saved.tasks.length > 0 ? saved.tasks : initial.tasks;
     const milestones = saved.milestones && saved.milestones.length > 0 ? saved.milestones : initial.milestones;
     const rawProjects = saved.projects && saved.projects.length > 0 ? saved.projects : initial.projects;
-    const hydratedProjects = rawProjects.map(p => calculateProjectTimeline(p, tasks, milestones));
+    const hydratedProjects = rawProjects.map(p => calculateProjectTimeline(p, tasks, milestones, saved.taskStatusChanges ?? initial.taskStatusChanges));
 
     return {
       ...initial,
@@ -698,7 +698,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         updatedAt: new Date().toISOString(),
       };
 
-      const calculatedProject = calculateProjectTimeline(baseProject, s.tasks, s.milestones);
+      const calculatedProject = calculateProjectTimeline(baseProject, s.tasks, s.milestones, s.taskStatusChanges);
 
       return {
         ...s,
@@ -711,7 +711,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       projects: s.projects.map(p => {
         if (p.id !== id) return p;
         const merged = { ...p, ...updates, updatedAt: new Date().toISOString() };
-        return calculateProjectTimeline(merged, s.tasks, s.milestones);
+        return calculateProjectTimeline(merged, s.tasks, s.milestones, s.taskStatusChanges);
       }),
     })),
     setBoardColumns: (projectId, boardId, columns, moves) => update(s => {
@@ -812,6 +812,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         reporterId: t.reporterId || s.currentUserId,
         parentId: t.parentId,
         ...resolvePlan(t, s.epics, s.stories),
+        durationUnit: t.durationUnit,
         estimatedDuration: Math.max(1, Number(t.estimatedDuration) || (t.parentId ? 1 : 3)),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
@@ -838,7 +839,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const nextProjects = s.projects.map(p => {
         if (p.id !== newTask.projectId) return p;
         const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
-        return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+        return calculateProjectTimeline(updatedP, nextTasks, s.milestones, s.taskStatusChanges);
       });
 
       return {
@@ -864,6 +865,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         reporterId: t.reporterId || s.currentUserId,
         parentId: t.parentId,
         ...resolvePlan(t, s.epics, s.stories),
+        durationUnit: t.durationUnit,
         estimatedDuration: Math.max(1, Number(t.estimatedDuration) || (t.parentId ? 1 : 3)),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
@@ -890,7 +892,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const projectTasks = nextTasks.filter(item => item.projectId === p.id);
         const progress = progressOfTasks(projectTasks);
         const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
-        return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+        return calculateProjectTimeline(updatedP, nextTasks, s.milestones, s.taskStatusChanges);
       });
 
       return {
@@ -905,7 +907,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const fromBoardId = before?.boardId ?? MAIN_BOARD_ID;
       const boardMove = updates.boardId && updates.boardId !== fromBoardId ? { from: fromBoardId, to: updates.boardId } : undefined;
       const to = updates.status ?? before?.status;
-      const timing = before && to && (to !== before.status || boardMove)
+      const timing: Partial<Pick<AppState, 'workSessions' | 'taskStatusChanges'>> = before && to && (to !== before.status || boardMove)
         ? trackStatusMove(s, { ...before, ...updates, status: before.status }, to, now, boardMove)
         : {};
       const parentStart = before?.parentId && to === 'in_progress' && before.status !== 'in_progress'
@@ -921,7 +923,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         nextProjects = s.projects.map(p => {
           if (p.id !== projectId) return p;
           const updatedP = { ...p, progress, updatedAt: now };
-          return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+          // Include the move just made, so a late start moves the forecast straight away
+          const changes = parentStart?.taskStatusChanges ?? timing.taskStatusChanges ?? s.taskStatusChanges;
+          return calculateProjectTimeline(updatedP, nextTasks, s.milestones, changes);
         });
       }
       return {
@@ -944,7 +948,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         nextProjects = s.projects.map(p => {
           if (p.id !== projectId) return p;
           const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
-          return calculateProjectTimeline(updatedP, nextTasks, s.milestones);
+          return calculateProjectTimeline(updatedP, nextTasks, s.milestones, s.taskStatusChanges);
         });
       }
       return {
@@ -1000,7 +1004,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const nextMilestones = [...s.milestones, newMilestone];
       const nextProjects = s.projects.map(p => {
         if (p.id !== m.projectId) return p;
-        return calculateProjectTimeline(p, s.tasks, nextMilestones);
+        return calculateProjectTimeline(p, s.tasks, nextMilestones, s.taskStatusChanges);
       });
       return { ...s, milestones: nextMilestones, projects: nextProjects };
     }),
@@ -1010,7 +1014,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const projectId = updated?.projectId;
       const nextProjects = s.projects.map(p => {
         if (p.id !== projectId) return p;
-        return calculateProjectTimeline(p, s.tasks, nextMilestones);
+        return calculateProjectTimeline(p, s.tasks, nextMilestones, s.taskStatusChanges);
       });
       return { ...s, milestones: nextMilestones, projects: nextProjects };
     }),
@@ -1022,7 +1026,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const epics = s.epics.map(e => (e.phaseId === id ? { ...e, phaseId: undefined } : e));
       const nextProjects = s.projects.map(p => {
         if (p.id !== target?.projectId) return p;
-        return calculateProjectTimeline(p, nextTasks, nextMilestones);
+        return calculateProjectTimeline(p, nextTasks, nextMilestones, s.taskStatusChanges);
       });
       return { ...s, milestones: nextMilestones, epics, tasks: nextTasks, projects: nextProjects };
     }),

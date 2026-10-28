@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Button, Card } from '@/components/shared/ui';
 import {
@@ -23,6 +24,10 @@ import {
 import type { TaskPriority } from '@/types';
 import { placeIn, projectBoards } from '@/lib/board-columns';
 import { PlacementSelect } from '@/components/tasks/placement-select';
+import { PlanPicker } from '@/components/plan/plan-picker';
+import { TaskTimeFields, rangeError, type TaskTime } from '@/components/shared/duration-fields';
+import { subtaskWindow, taskWindow } from '@/lib/schedule';
+import type { PlanLinks } from '@/lib/plan';
 
 export default function CreateTaskPage({
   params,
@@ -31,7 +36,7 @@ export default function CreateTaskPage({
 }) {
   const { projectId } = use(params);
   const router = useRouter();
-  const { projects, users, sprints, milestones, tasks, addTask } = useApp();
+  const { projects, users, sprints, milestones, tasks, epics, stories, addTask } = useApp();
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) return notFound();
@@ -49,11 +54,9 @@ export default function CreateTaskPage({
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [assigneeId, setAssigneeId] = useState(projectMembers[0]?.id || users[0]?.id || '');
   const [sprintId, setSprintId] = useState('');
-  const [milestoneId, setMilestoneId] = useState(projectMilestones[0]?.id || '');
+  const [planLinks, setPlanLinks] = useState<PlanLinks>({ milestoneId: projectMilestones[0]?.id });
   const [parentId, setParentId] = useState('');
-  const [estimatedDuration, setEstimatedDuration] = useState<number>(3);
-  const [startDate, setStartDate] = useState('');
-  const [dueDate, setDueDate] = useState('');
+  const [time, setTime] = useState<TaskTime>({ days: 3, unit: 'days', start: '', due: '' });
   const [labelInput, setLabelInput] = useState('');
   const [labels, setLabels] = useState<string[]>(['Frontend']);
   const [checklists, setChecklists] = useState<string[]>([]);
@@ -83,6 +86,11 @@ export default function CreateTaskPage({
     setChecklists(checklists.filter((_, i) => i !== idx));
   };
 
+  // The time the task may use: its parent task's (for a subtask), else its story, epic, phase or project
+  const parentTask = parentId ? tasks.find((t) => t.id === parentId) : undefined;
+  const planData = { project, milestones, epics, stories, tasks };
+  const timeWindow = parentTask ? subtaskWindow(parentTask, planData) : taskWindow(planLinks, planData);
+
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const newErrors: { title?: string; duration?: string; dates?: string } = {};
@@ -91,13 +99,12 @@ export default function CreateTaskPage({
       newErrors.title = 'Task title is required.';
     }
 
-    if (!estimatedDuration || estimatedDuration <= 0) {
+    if (!time.days || time.days <= 0) {
       newErrors.duration = 'Estimated duration must be a positive number of days.';
     }
 
-    if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
-      newErrors.dates = 'Due date cannot be earlier than start date.';
-    }
+    const dateProblem = rangeError({ start: time.start, end: time.due }, timeWindow);
+    if (dateProblem) newErrors.dates = `${dateProblem}.`;
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -126,15 +133,18 @@ export default function CreateTaskPage({
       priority,
       assigneeId: assigneeId || undefined,
       sprintId: sprintId || undefined,
-      milestoneId: milestoneId || undefined,
+      // A subtask is in its task's phase; a task goes where the plan picker says
+      ...(parentTask ? { milestoneId: parentTask.milestoneId } : planLinks),
       parentId: parentId || undefined,
-      estimatedDuration: Number(estimatedDuration),
-      startDate: startDate || undefined,
-      dueDate: dueDate || undefined,
+      estimatedDuration: time.days,
+      durationUnit: time.unit,
+      startDate: time.start || undefined,
+      dueDate: time.due || undefined,
       labels,
       checklist: checklistItems,
     });
 
+    notify(`${parentTask ? 'Subtask' : 'Task'} "${title.trim()}" created`);
     router.push(`/projects/${projectId}/tasks`);
   };
 
@@ -238,26 +248,8 @@ export default function CreateTaskPage({
               </div>
             </div>
 
-            {/* Hierarchy: Milestone & Parent Task */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5 flex items-center gap-1">
-                  <Flag className="w-3.5 h-3.5 text-flash-deep" /> Milestone / Epic
-                </label>
-                <select
-                  value={milestoneId}
-                  onChange={(e) => setMilestoneId(e.target.value)}
-                  className="w-full px-3 py-2 bg-paper text-xs rounded-xl border border-line outline-none focus:border-flash text-ink"
-                >
-                  <option value="">No Milestone / Backlog</option>
-                  {projectMilestones.map((m) => (
-                    <option key={m.id} value={m.id}>
-                      {m.name} ({m.status})
-                    </option>
-                  ))}
-                </select>
-              </div>
-
+            {/* Plan: Phase → Epic → Story (a subtask follows its task) */}
+            <div className="space-y-3">
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">
                   Parent Main Task (Optional — Makes this a Subtask)
@@ -275,28 +267,35 @@ export default function CreateTaskPage({
                   ))}
                 </select>
               </div>
+              {!parentTask && (
+                <div>
+                  <span className="block text-xs font-semibold text-ink mb-1.5 flex items-center gap-1">
+                    <Flag className="w-3.5 h-3.5 text-flash-deep" /> Plan
+                  </span>
+                  <PlanPicker projectId={projectId} value={planLinks} onChange={setPlanLinks} />
+                </div>
+              )}
             </div>
 
-            {/* Estimated Duration & Sprints */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 p-4 rounded-xl bg-mist/20 border border-line">
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5 flex items-center gap-1">
-                  <Clock className="w-3.5 h-3.5 text-flash-deep" /> Estimated Duration (Days) <span className="text-danger">*</span>
-                </label>
-                <input
-                  type="number"
-                  min={1}
-                  max={365}
-                  value={estimatedDuration || ''}
-                  onChange={(e) => setEstimatedDuration(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                  className={`w-full px-3 py-2 bg-paper text-xs rounded-xl border ${
-                    errors.duration ? 'border-danger ring-1 ring-danger' : 'border-line'
-                  } outline-none focus:border-flash text-ink font-mono`}
-                />
-                {errors.duration && <p className="text-danger text-[10px] mt-1">{errors.duration}</p>}
-              </div>
-
-              <div>
+            {/* Estimate & dates, inside the parent's time */}
+            <div className="p-4 rounded-xl bg-mist/20 border border-line space-y-3">
+              <span className="flex items-center gap-1 text-xs font-semibold text-ink">
+                <Clock className="w-3.5 h-3.5 text-flash-deep" /> Time
+              </span>
+              <TaskTimeFields
+                value={time}
+                onChange={(t) => {
+                  setTime(t);
+                  setErrors((prev) => ({ ...prev, duration: undefined, dates: undefined }));
+                }}
+                window={timeWindow}
+              />
+              {errors.dates && (
+                <p className="text-danger text-[11px] flex items-center gap-1">
+                  <AlertCircle className="w-3.5 h-3.5" /> {errors.dates}
+                </p>
+              )}
+              <div className="sm:w-1/2">
                 <label className="block text-xs font-semibold text-ink mb-1.5">Sprint (Optional)</label>
                 <select
                   value={sprintId}
@@ -312,34 +311,6 @@ export default function CreateTaskPage({
                 </select>
               </div>
             </div>
-
-            {/* Dates */}
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5">Start Date</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-paper text-xs rounded-xl border border-line outline-none focus:border-flash text-ink font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1.5">Due Date</label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-3 py-2 bg-paper text-xs rounded-xl border border-line outline-none focus:border-flash text-ink font-mono"
-                />
-              </div>
-            </div>
-            {errors.dates && (
-              <p className="text-danger text-[11px] flex items-center gap-1">
-                <AlertCircle className="w-3.5 h-3.5" /> {errors.dates}
-              </p>
-            )}
 
             {/* Labels */}
             <div>

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { DocumentStatusBadge, DocumentTypeBadge } from '@/components/documents/document-badges';
+import { notify } from '@/components/shared/toaster';
 
 export default function FoldersManagementPage() {
   const {
@@ -54,8 +55,12 @@ export default function FoldersManagementPage() {
 
   const handleCreateFolder = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newFolderName.trim()) return;
+    if (!newFolderName.trim()) {
+      notify('Enter a name for the folder first.', 'error');
+      return;
+    }
     addFolder({ name: newFolderName.trim() });
+    notify(`Folder "${newFolderName.trim()}" created`);
     setNewFolderName('');
     setIsCreating(false);
   };
@@ -68,6 +73,9 @@ export default function FoldersManagementPage() {
   const handleSaveEdit = (id: string) => {
     if (editName.trim()) {
       updateFolder(id, editName.trim());
+      notify(`Folder renamed to "${editName.trim()}"`);
+    } else {
+      notify('Enter a folder name to rename it. The old name was kept.', 'error');
     }
     setEditingFolderId(null);
   };

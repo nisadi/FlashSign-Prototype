@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { AppSidebar } from '@/components/layout/app-sidebar';
 import { AppHeader } from '@/components/layout/app-header';
 import { TaskDetailDrawer } from '@/components/tasks/task-detail-drawer';
+import { Toaster } from '@/components/shared/toaster';
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
 import { cn } from '@/lib/utils';
@@ -58,6 +59,7 @@ export default function WorkspaceLayout({ children }: { children: React.ReactNod
         </main>
       </div>
       <TaskDetailDrawer />
+      <Toaster />
     </div>
   );
 }

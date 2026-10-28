@@ -15,6 +15,7 @@ import { CreateMemberDialog } from '@/components/collaboration/create-member-dia
 import type { AvailabilityStatus, Task } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { Modal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 export default function MemberProfilePage() {
   const params = useParams();
@@ -79,7 +80,10 @@ export default function MemberProfilePage() {
 
   const handleAssignTask = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!newTaskTitle.trim()) return;
+    if (!newTaskTitle.trim()) {
+      notify('Add a title for the task first.', 'error');
+      return;
+    }
 
     addTask({
       title: newTaskTitle.trim(),
@@ -92,6 +96,7 @@ export default function MemberProfilePage() {
       description: `Task assigned directly to ${member.name}`,
     });
 
+    notify(`Task "${newTaskTitle.trim()}" assigned to ${member.name}`);
     setNewTaskTitle('');
     setAssignTaskOpen(false);
   };

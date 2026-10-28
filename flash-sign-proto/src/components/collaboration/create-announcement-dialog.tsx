@@ -5,6 +5,7 @@ import { X, Megaphone, Pin, AlertCircle, Check } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { Announcement, AnnouncementPriority } from '@/types';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateAnnouncementDialogProps {
   open: boolean;
@@ -73,6 +74,7 @@ export function CreateAnnouncementDialog({
         publishedDate: `${publishedDate}T10:00:00Z`,
       });
       setSuccessMsg('Announcement updated!');
+      notify(`Changes to announcement "${trimmedTitle}" saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...announcementToEdit, title: trimmedTitle });
@@ -90,6 +92,7 @@ export function CreateAnnouncementDialog({
         readByUserIds: [currentUserId],
       });
       setSuccessMsg('Announcement published to organization feed!');
+      notify(`Announcement "${trimmedTitle}" published`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

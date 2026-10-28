@@ -4,6 +4,7 @@ import { use, useState, useMemo } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import { canCreateProject } from '@/lib/permissions';
 import { placeIn, placementOf, projectBoards, stageLabel, type ResolvedBoard } from '@/lib/board-columns';
 import { BoardColumnsModal } from '@/components/projects/board-columns-modal';
@@ -108,7 +109,10 @@ export default function KanbanBoardPage({
   };
 
   const handleQuickAdd = (board: ResolvedBoard, col: BoardColumn) => {
-    if (!quickTitle.trim()) return;
+    if (!quickTitle.trim()) {
+      notify('Type a title for the task first.', 'error');
+      return;
+    }
     addTask({
       title: quickTitle.trim(),
       projectId,

@@ -1,4 +1,5 @@
-import type { Project, ProjectHealth, Task, Milestone, TimelineStatus } from '@/types';
+import type { Project, ProjectHealth, Task, Milestone, TaskStatusChange, TimelineStatus } from '@/types';
+import { forecastEnd } from './schedule';
 
 /**
  * Standardize date to YYYY-MM-DD string
@@ -138,11 +139,15 @@ export function healthFromTimeline(status: TimelineStatus, difference: number, o
 
 /**
  * Calculate dynamic project timeline based on all milestones, main tasks, and subtasks.
+ * Late work moves the current end out: each task counts with its forecast end (see
+ * forecastEnd), so a task that started late or is still open past its due date extends it.
  */
 export function calculateProjectTimeline(
   project: Project,
   allTasks: Task[],
-  milestones: Milestone[]
+  milestones: Milestone[],
+  changes: TaskStatusChange[] = [],
+  now: number = Date.now()
 ): Project {
   // Determine baseline start & end
   const originalStartDate = toDateString(
@@ -180,6 +185,12 @@ export function calculateProjectTimeline(
     if (!maxTaskEndDate || new Date(resolved.dueDate) > new Date(maxTaskEndDate)) {
       maxTaskEndDate = resolved.dueDate;
     }
+  }
+
+  // Work running late pushes the end out
+  for (const task of projectTasks) {
+    const forecast = forecastEnd(task, changes, now);
+    if (forecast && (!maxTaskEndDate || forecast > maxTaskEndDate)) maxTaskEndDate = forecast;
   }
 
   // Also verify milestones with explicit end dates

@@ -19,6 +19,7 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { DocumentStatusBadge } from '@/components/documents/document-badges';
+import { notify } from '@/components/shared/toaster';
 
 export default function DocumentEditorPage({
   params,
@@ -44,7 +45,10 @@ export default function DocumentEditorPage({
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!title.trim()) return;
+    if (!title.trim()) {
+      notify('Add a title for the document first.', 'error');
+      return;
+    }
 
     updateDocumentItem(doc.id, {
       title: title.trim(),
@@ -53,6 +57,7 @@ export default function DocumentEditorPage({
       pages: Math.max(1, Math.ceil(content.length / 800)),
     });
 
+    notify(`Changes to "${title.trim()}" saved`);
     setIsSaved(true);
     setTimeout(() => {
       router.push(`/documents/${doc.id}`);

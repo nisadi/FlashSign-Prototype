@@ -7,6 +7,7 @@ import { ArrowLeft, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { DemoRole, AvailabilityStatus } from '@/types';
 import { FEATURES } from '@/lib/features';
+import { notify } from '@/components/shared/toaster';
 
 const DEPARTMENTS = [
   'Engineering',
@@ -127,6 +128,7 @@ export default function AddMemberPage() {
       skills,
     });
 
+    notify(`${trimmedName} added to the team`);
     setSuccess(true);
     setTimeout(() => {
       router.push('/teams/members');

@@ -12,6 +12,9 @@ import { PlacementSelect } from '@/components/tasks/placement-select';
 import { SubtaskStateSelect } from '@/components/tasks/subtask-state-select';
 import { PlanPicker } from '@/components/plan/plan-picker';
 import { planOf } from '@/lib/plan';
+import { EstimateField } from '@/components/shared/duration-fields';
+import { formatDays, type DurationUnit } from '@/lib/durations';
+import { notify } from '@/components/shared/toaster';
 import { useGuardedMove } from '@/components/tasks/use-guarded-move';
 import { TaskJourney } from '@/components/tasks/task-journey';
 import { TaskProgress } from '@/components/tasks/task-progress';
@@ -38,6 +41,7 @@ export function TaskDetailDrawer() {
   const [newCommentText, setNewCommentText] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
   const [newSubtaskDuration, setNewSubtaskDuration] = useState(2);
+  const [newSubtaskUnit, setNewSubtaskUnit] = useState<DurationUnit>('days');
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!activeTaskDrawerId) return null;
@@ -235,22 +239,15 @@ export function TaskDetailDrawer() {
           <div>
             <label className="block text-[10px] font-semibold text-muted uppercase mb-1 flex items-center gap-1">
               <Clock className="w-2.5 h-2.5 text-flash-deep" />
-              Duration
+              Estimate
             </label>
-            <div className="flex items-center gap-1">
-              <input
-                type="number"
-                min="1"
-                max="365"
-                value={task.estimatedDuration || 3}
-                onChange={e => {
-                  const val = Math.max(1, parseInt(e.target.value, 10) || 1);
-                  updateTask(task.id, { estimatedDuration: val });
-                }}
-                className="w-full text-xs font-mono font-bold px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
-              />
-              <span className="text-[10px] text-muted">d</span>
-            </div>
+            <EstimateField
+              key={task.id}
+              days={task.estimatedDuration || 3}
+              unit={task.durationUnit ?? 'days'}
+              start={task.startDate?.slice(0, 10)}
+              onChange={(days, unit) => updateTask(task.id, { estimatedDuration: days, durationUnit: unit })}
+            />
           </div>
 
           {/* Assignee */}
@@ -488,7 +485,7 @@ export function TaskDetailDrawer() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-mist text-ink">
-                            {sub.estimatedDuration || 1}d
+                            {formatDays(sub.estimatedDuration || 1, sub.durationUnit, sub.startDate)}
                           </span>
                           <SubtaskStateSelect
                             status={sub.status}
@@ -513,19 +510,25 @@ export function TaskDetailDrawer() {
                 <form
                   onSubmit={e => {
                     e.preventDefault();
-                    if (!newSubtaskTitle.trim() || newSubtaskDuration <= 0) return;
+                    if (!newSubtaskTitle.trim()) {
+                      notify('Type a name for the subtask first.', 'error');
+                      return;
+                    }
                     addTask({
                       title: newSubtaskTitle.trim(),
                       projectId: task.projectId,
                       parentId: task.id,
                       milestoneId: task.milestoneId,
-                      estimatedDuration: Number(newSubtaskDuration),
+                      estimatedDuration: newSubtaskDuration,
+                      durationUnit: newSubtaskUnit,
                       status: 'todo',
                       priority: 'medium',
                       type: 'subtask',
                     });
+                    notify(`Subtask "${newSubtaskTitle.trim()}" added to ${task.key}`);
                     setNewSubtaskTitle('');
                     setNewSubtaskDuration(2);
+                    setNewSubtaskUnit('days');
                   }}
                   className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2"
                 >
@@ -537,16 +540,14 @@ export function TaskDetailDrawer() {
                     className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-flash"
                   />
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <input
-                      type="number"
-                      min="1"
-                      max="100"
-                      value={newSubtaskDuration}
-                      onChange={e => setNewSubtaskDuration(Math.max(1, parseInt(e.target.value, 10) || 1))}
-                      title="Estimated Duration in Days"
-                      className="w-16 px-2 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink font-mono"
+                    <EstimateField
+                      days={newSubtaskDuration}
+                      unit={newSubtaskUnit}
+                      onChange={(days, unit) => {
+                        setNewSubtaskDuration(days);
+                        setNewSubtaskUnit(unit);
+                      }}
                     />
-                    <span className="text-xs text-muted">days</span>
                     <button
                       type="submit"
                       className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"

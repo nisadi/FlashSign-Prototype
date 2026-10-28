@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import type { Sprint } from '@/types';
 import { Modal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 export default function ProjectSprintsPage({
   params,
@@ -47,7 +48,10 @@ export default function ProjectSprintsPage({
 
   const handleCreateSprint = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!sprintName.trim()) return;
+    if (!sprintName.trim()) {
+      notify('Add a name for the sprint first.', 'error');
+      return;
+    }
 
     addSprint({
       name: sprintName.trim(),
@@ -60,6 +64,7 @@ export default function ProjectSprintsPage({
       status: 'planning',
     });
 
+    notify(`Sprint "${sprintName.trim()}" created`);
     setSprintName('');
     setSprintGoal('');
     setStartDate('');

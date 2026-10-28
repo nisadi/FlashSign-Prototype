@@ -5,6 +5,7 @@ import { X, Palmtree, Calendar, AlertTriangle, AlertCircle, Check } from 'lucide
 import { useApp } from '@/context/app-context';
 import type { TimeOffRequest, LeaveType } from '@/types';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateTimeOffDialogProps {
   open: boolean;
@@ -105,6 +106,8 @@ export function CreateTimeOffDialog({
       return;
     }
 
+    const memberName = users.find(u => u.id === memberId)?.name || 'member';
+
     if (requestToEdit) {
       updateTimeOffRequest(requestToEdit.id, {
         memberId,
@@ -117,6 +120,7 @@ export function CreateTimeOffDialog({
         notes: notes.trim(),
       });
       setSuccessMsg('Time-off request updated!');
+      notify(`Changes to time-off request for ${memberName} saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...requestToEdit, leaveType, startDate, endDate });
@@ -134,6 +138,7 @@ export function CreateTimeOffDialog({
         status: 'pending',
       });
       setSuccessMsg('Time-off request submitted successfully!');
+      notify(`Time-off request for ${memberName} submitted`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

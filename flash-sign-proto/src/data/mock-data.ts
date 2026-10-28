@@ -228,7 +228,7 @@ export const MOCK_PROJECTS: Project[] = [
     goals: ['Launch v2 public beta by end of month', 'Reach <1s document render latency', 'Complete eIDAS compliance checks'],
     originalStartDate: d(-60), originalEndDate: d(30), originalDuration: 90,
     currentStartDate: d(-60), currentEndDate: d(46), currentDuration: 106,
-    timelineDifference: 16, timelineStatus: 'extended', totalWorkDays: 98,
+    timelineDifference: 16, timelineStatus: 'extended', totalWorkDays: 98, durationUnit: 'months',
     createdAt: d(-60), updatedAt: d(-1),
   },
   {
@@ -311,7 +311,7 @@ export const MOCK_SPRINTS: Sprint[] = [
 // ── Milestones ────────────────────────────────────────────────────────────────
 export const MOCK_MILESTONES: Milestone[] = [
   { id: 'm1', projectId: 'p1', name: 'Beta Launch', description: 'Public beta for v2.0 signing platform with core canvas', startDate: d(-60), endDate: d(14), dueDate: d(14), status: 'upcoming', progress: 72, estimatedDuration: 45 },
-  { id: 'm2', projectId: 'p1', name: 'GA Release', description: 'General availability of Flash Sign v2.0 with bulk send & performance', startDate: d(15), endDate: d(46), dueDate: d(46), status: 'upcoming', progress: 45, estimatedDuration: 40 },
+  { id: 'm2', projectId: 'p1', name: 'GA Release', description: 'General availability of Flash Sign v2.0 with bulk send & performance', startDate: d(-12), endDate: d(30), dueDate: d(30), status: 'upcoming', progress: 45, estimatedDuration: 42, durationUnit: 'weeks' },
   { id: 'm9', projectId: 'p1', name: 'Audit Compliance Baseline', description: 'Cryptographic hash verification for agreement trails', startDate: d(-40), endDate: d(18), dueDate: d(18), status: 'upcoming', progress: 60, estimatedDuration: 30 },
   { id: 'm3', projectId: 'p2', name: 'ACME Go-Live', description: 'ACME Corp production deployment', startDate: d(-30), endDate: d(14), dueDate: d(14), status: 'at_risk', progress: 42, estimatedDuration: 44 },
   { id: 'm4', projectId: 'p3', name: 'Agent MVP', description: 'Multi-agent task execution for developers', startDate: d(-45), endDate: d(21), dueDate: d(21), status: 'upcoming', progress: 55, estimatedDuration: 66 },
@@ -498,8 +498,8 @@ const RAW_TASKS: Task[] = [
     id: 'task8', key: 'FSV2-108', title: 'Optimize PDF rendering performance',
     description: 'PDF pages take 4–8 seconds to render. Target <1 second for typical 20-page documents.',
     type: 'task', status: 'todo', priority: 'high', projectId: 'p1', assigneeId: 'u5', reporterId: 'u4',
-    milestoneId: 'm2', estimatedDuration: 27,
-    storyPoints: 5, startDate: d(19), dueDate: d(46), tags: ['performance', 'pdf'],
+    milestoneId: 'm2', estimatedDuration: 32,
+    storyPoints: 5, startDate: d(-2), dueDate: d(30), tags: ['performance', 'pdf'],
     checklist: [], comments: [], attachments: [], createdAt: d(-3), updatedAt: d(-3),
   },
 
@@ -712,7 +712,7 @@ const RAW_TASKS: Task[] = [
     id: 'task31', key: 'FSV2-110', title: 'Create interactive walkthrough guide for signers',
     description: 'Help first-time signers navigate multi-page contracts with clear highlighted steps.',
     type: 'story', status: 'todo', priority: 'medium', projectId: 'p1', assigneeId: 'u2', reporterId: 'u3',
-    storyPoints: 5, startDate: d(5), dueDate: d(15), tags: ['ux', 'guide'],
+    storyPoints: 5, startDate: d(5), dueDate: d(14), tags: ['ux', 'guide'],
     checklist: [], comments: [], attachments: [], createdAt: d(-1), updatedAt: d(-1),
   },
   {

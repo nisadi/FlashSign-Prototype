@@ -6,6 +6,7 @@ import {
   Flag, Layers, BookOpen, Plus, Pencil, Trash2, ChevronDown, CheckCircle2, RotateCcw, ArrowRight, CornerDownRight, Map,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Button, ProgressBar } from '@/components/shared/ui';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
@@ -16,6 +17,12 @@ import { PhaseModal, EpicModal, StoryModal } from '@/components/plan/plan-modals
 import { withSubtasks, type PlanLinks } from '@/lib/plan';
 import { progressOfTasks, subtasksOf } from '@/lib/subtasks';
 import { canCreateProject } from '@/lib/permissions';
+import {
+  epicSpan, epicWindow, forecastOf, outsideWindow, phaseSpan, projectWindow, storySpan, storyWindow, taskWindow,
+  type PlanData, type TimeWindow,
+} from '@/lib/schedule';
+import { formatDays, formatDuration, type DurationUnit } from '@/lib/durations';
+import { useNow } from '@/lib/use-now';
 import { cn, formatDate } from '@/lib/utils';
 import type { Epic, Milestone, Story, Task } from '@/types';
 
@@ -33,9 +40,10 @@ type Dialog =
 export default function ProjectPlanPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
   const {
-    projects, tasks, users, milestones, epics, stories, demoRole,
+    projects, tasks, users, milestones, epics, stories, demoRole, taskStatusChanges,
     updateMilestone, deleteMilestone, deleteEpic, deleteStory, setTaskPlan, openTaskDrawer,
   } = useApp();
+  const now = useNow();
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [collapsed, setCollapsed] = useState<Record<string, boolean>>({});
 
@@ -63,6 +71,32 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
   const looseStories = projectStories.filter(s => !s.epicId);
   const unplannedTasks = mainTasks.filter(t => !t.milestoneId && !t.epicId && !t.storyId);
 
+  // ── Time at each level ──────────────────────────────────────────────────────
+  const planData: PlanData = { project, milestones, epics, stories, tasks };
+
+  /**
+   * A level's time: its planned dates and length, then, if its work runs late, when it now ends;
+   * and a warning when it doesn't fit inside its parent.
+   */
+  const timeLine = (span: TimeWindow, unit: DurationUnit | undefined, scope: Task[], parent?: TimeWindow, inherited?: boolean) => {
+    const forecast = now !== null ? forecastOf(span.end, scope, projectTasks, taskStatusChanges, now) : undefined;
+    const outside = parent ? outsideWindow(span.start, span.end, parent) : undefined;
+    return (
+      <span className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-[11px] font-mono text-muted">
+        <span>
+          {formatDate(span.start)} → {formatDate(span.end)} · {formatDuration(span.start, span.end, unit)}
+          {inherited && <span className="font-sans italic"> (all of {parent?.label})</span>}
+        </span>
+        {forecast && forecast.lateBy > 0 && (
+          <span className="font-sans font-semibold text-waiting" title="Its work is running late, so it now ends later than planned">
+            Now ends {formatDate(forecast.end)} (+{forecast.lateBy} day{forecast.lateBy === 1 ? '' : 's'})
+          </span>
+        )}
+        {outside && <span className="font-sans font-semibold text-danger">{outside}</span>}
+      </span>
+    );
+  };
+
   const confirmDelete = (title: string, message: string, run: () => void) => setDialog({ kind: 'delete', title, message, run });
 
   // ── Rows ────────────────────────────────────────────────────────────────────
@@ -84,7 +118,11 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
             {subs.filter(s => s.status === 'done').length}/{subs.length} subtasks
           </span>
         )}
-        <span className="text-[10px] font-mono text-muted">{task.estimatedDuration || 3}d</span>
+        {(() => {
+          const outside = outsideWindow(task.startDate, task.dueDate, taskWindow(task, planData));
+          return outside ? <span className="text-[10px] font-semibold text-danger">{outside}</span> : null;
+        })()}
+        <span className="text-[10px] font-mono text-muted">{formatDays(task.estimatedDuration || 3, task.durationUnit, task.startDate)}</span>
         <TaskStatusBadge status={task.status} />
         {assignee && <Avatar user={assignee} size="xs" />}
       </li>
@@ -98,7 +136,12 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
     return (
       <select
         value=""
-        onChange={e => e.target.value && setTaskPlan(e.target.value, links)}
+        onChange={e => {
+          const task = mainTasks.find(t => t.id === e.target.value);
+          if (!task) return;
+          setTaskPlan(task.id, links);
+          notify(`${task.key} moved here`);
+        }}
         className="text-[11px] bg-paper border border-dashed border-line rounded-lg px-2 py-1 text-muted hover:text-ink cursor-pointer outline-none focus:border-flash max-w-[220px]"
         aria-label="Link an existing task"
       >
@@ -137,6 +180,7 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-ink">{story.title}</span>
               {story.acceptanceCriteria && <span className="block text-[11px] text-muted">✓ {story.acceptanceCriteria}</span>}
+              {timeLine(storySpan(story, planData), story.durationUnit, scope, storyWindow(story.epicId, planData), !(story.startDate && story.endDate))}
             </span>
           </button>
           <div className="flex items-center gap-2">
@@ -176,6 +220,7 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
             <span className="min-w-0">
               <span className="block text-sm font-bold text-ink">{epic.name}</span>
               {epic.description && <span className="block text-[11px] text-muted">{epic.description}</span>}
+              {timeLine(epicSpan(epic, planData), epic.durationUnit, scope, epicWindow(epic.phaseId, planData), !(epic.startDate && epic.endDate))}
             </span>
           </button>
           <div className="flex items-center gap-2">
@@ -229,9 +274,9 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
                   {achieved ? 'Achieved' : phase.status === 'at_risk' ? 'At risk' : 'Upcoming'}
                 </span>
               </span>
-              <span className="block text-[11px] text-muted font-mono mt-0.5">
-                {phase.startDate ? `${formatDate(phase.startDate)} → ` : 'Ends '}{formatDate(phase.endDate || phase.dueDate)}
-                {' · '}{phaseEpics.length} epic{phaseEpics.length === 1 ? '' : 's'} · {scope.length} task{scope.length === 1 ? '' : 's'}
+              <span className="block mt-0.5">{timeLine(phaseSpan(phase, project), phase.durationUnit, scope, projectWindow(project))}</span>
+              <span className="block text-[11px] text-muted">
+                {phaseEpics.length} epic{phaseEpics.length === 1 ? '' : 's'} · {scope.length} task{scope.length === 1 ? '' : 's'}
               </span>
             </span>
           </button>
@@ -244,7 +289,10 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
               {iconAction(
                 achieved ? RotateCcw : CheckCircle2,
                 achieved ? 'Reopen phase' : 'Mark achieved',
-                () => updateMilestone(phase.id, { status: achieved ? 'upcoming' : 'achieved', progress: achieved ? phase.progress : 100 })
+                () => {
+                  updateMilestone(phase.id, { status: achieved ? 'upcoming' : 'achieved', progress: achieved ? phase.progress : 100 });
+                  notify(achieved ? `Phase "${phase.name}" reopened` : `Phase "${phase.name}" marked as achieved`);
+                }
               )}
               {iconAction(Pencil, "Edit phase", () => setDialog({ kind: 'phase', phase }))}
               {iconAction(Trash2, "Delete phase", () => confirmDelete('Delete phase', `"${phase.name}" will be deleted. Its epics and tasks stay, without a phase.`, () => deleteMilestone(phase.id)), true)}
@@ -287,6 +335,19 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
               ))}
               <span className="ml-1">Every level above Task is optional.</span>
             </p>
+            {(() => {
+              const w = projectWindow(project);
+              const lateBy = project.timelineStatus === 'extended' ? project.timelineDifference ?? 0 : 0;
+              return (
+                <p className="mt-1.5 text-xs text-muted">
+                  Project time: <span className="font-mono text-ink">{formatDate(w.start)} → {formatDate(w.end)}</span>
+                  {' · '}{formatDuration(w.start, w.end, project.durationUnit)}. Each level&apos;s time sits inside its parent&apos;s.
+                  {lateBy > 0 && project.currentEndDate && (
+                    <span className="ml-1 font-semibold text-waiting">Work running late moves the end to {formatDate(project.currentEndDate)} (+{lateBy} days).</span>
+                  )}
+                </p>
+              );
+            })()}
           </div>
           {canEdit && (
             <div className="flex flex-wrap items-center gap-2">
@@ -337,7 +398,10 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
         isOpen={dialog?.kind === 'delete'}
         onClose={() => setDialog(null)}
         onConfirm={() => {
-          if (dialog?.kind === 'delete') dialog.run();
+          if (dialog?.kind === 'delete') {
+            dialog.run();
+            notify(`${dialog.title.replace('Delete ', '').replace(/^./, c => c.toUpperCase())} deleted`);
+          }
           setDialog(null);
         }}
         title={dialog?.kind === 'delete' ? dialog.title : ''}

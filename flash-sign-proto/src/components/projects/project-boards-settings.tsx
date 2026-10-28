@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Rows3, ChevronUp, ChevronDown, Trash2, Plus, Columns3, Copy, Link2, ArrowRight } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import { Card, Button } from '@/components/shared/ui';
 import { BoardColumnsModal } from '@/components/projects/board-columns-modal';
 import { boardOfTask, projectBoards, type ResolvedBoard } from '@/lib/board-columns';
@@ -34,6 +35,7 @@ export function ProjectBoardsSettings({ project, tasks, canEdit }: ProjectBoards
   const add = () => {
     if (!newName.trim()) return;
     addBoard(project.id, newName.trim());
+    notify(`Board "${newName.trim()}" added`);
     setNewName('');
   };
 
@@ -88,8 +90,10 @@ export function ProjectBoardsSettings({ project, tasks, canEdit }: ProjectBoards
                   maxLength={40}
                   onBlur={e => {
                     const name = e.target.value.trim();
-                    if (name && name !== board.name) renameBoard(project.id, board.id, name);
-                    else e.target.value = board.name;
+                    if (name && name !== board.name) {
+                      renameBoard(project.id, board.id, name);
+                      notify(`Board renamed to "${name}"`);
+                    } else e.target.value = board.name;
                   }}
                   onKeyDown={e => e.key === 'Enter' && e.currentTarget.blur()}
                   className="flex-1 min-w-[160px] px-2.5 py-1.5 text-xs font-semibold bg-paper-elevated border border-line rounded-lg outline-none focus:border-flash text-ink disabled:opacity-80"
@@ -112,7 +116,10 @@ export function ProjectBoardsSettings({ project, tasks, canEdit }: ProjectBoards
                         variant="ghost"
                         size="xs"
                         icon={Copy}
-                        onClick={() => setBoardMirroring(project.id, board.id, false)}
+                        onClick={() => {
+                          setBoardMirroring(project.id, board.id, false);
+                          notify(`${board.name} now has its own columns`);
+                        }}
                         title={`Copy ${mainBoard.name}'s columns so this board can have its own`}
                       >
                         Customise
@@ -132,7 +139,10 @@ export function ProjectBoardsSettings({ project, tasks, canEdit }: ProjectBoards
                       <button
                         type="button"
                         onClick={() => {
-                          if (count === 0) deleteBoard(project.id, board.id, mainBoard.id);
+                          if (count === 0) {
+                            deleteBoard(project.id, board.id, mainBoard.id);
+                            notify(`Board "${board.name}" removed`);
+                          }
                           else {
                             setDeleteTargetId(mainBoard.id);
                             setConfirmDeleteId(board.id);
@@ -164,6 +174,7 @@ export function ProjectBoardsSettings({ project, tasks, canEdit }: ProjectBoards
                       size="xs"
                       onClick={() => {
                         setBoardMirroring(project.id, board.id, true);
+                        notify(`${board.name} now mirrors ${mainBoard.name}`);
                         setConfirmMirrorId(null);
                       }}
                     >
@@ -201,6 +212,7 @@ export function ProjectBoardsSettings({ project, tasks, canEdit }: ProjectBoards
                       size="xs"
                       onClick={() => {
                         deleteBoard(project.id, board.id, deleteTargetId);
+                        notify(`Board "${board.name}" removed; its cards moved to ${boards.find(b => b.id === deleteTargetId)?.name}`);
                         setConfirmDeleteId(null);
                       }}
                     >

@@ -6,6 +6,7 @@ import { useApp } from '@/context/app-context';
 import type { CalendarEvent, EventCategory } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateCalendarEventDialogProps {
   open: boolean;
@@ -94,6 +95,7 @@ export function CreateCalendarEventDialog({
         meetingLink,
       });
       setSuccessMsg('Event updated successfully!');
+      notify(`Changes to event "${trimmedTitle}" saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...eventToEdit, title: trimmedTitle });
@@ -114,6 +116,7 @@ export function CreateCalendarEventDialog({
         meetingLink,
       });
       setSuccessMsg('Event added to calendar!');
+      notify(`Event "${trimmedTitle}" added to the calendar`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

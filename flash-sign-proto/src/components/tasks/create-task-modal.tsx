@@ -2,12 +2,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import { Modal } from '@/components/shared/modal';
 import { Button } from '@/components/shared/ui';
 import type { TaskPriority, TaskStatus, TaskType } from '@/types';
 import { Plus, AlertCircle, Calendar, Flag, User, Clock, CheckSquare } from 'lucide-react';
 import { PlanPicker } from '@/components/plan/plan-picker';
 import type { PlanLinks } from '@/lib/plan';
+import { TaskTimeFields, rangeError, type TaskTime } from '@/components/shared/duration-fields';
+import { subtaskWindow, taskWindow } from '@/lib/schedule';
 
 interface CreateTaskModalProps {
   isOpen: boolean;
@@ -31,17 +34,15 @@ export function CreateTaskModal({
   defaultParentId,
   parentTaskTitle,
 }: CreateTaskModalProps) {
-  const { users, addTask, tasks } = useApp();
+  const { users, addTask, tasks, projects, milestones, epics, stories } = useApp();
 
   const isSubtask = Boolean(defaultParentId);
   const projectUsers = users;
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
-  const [estimatedDuration, setEstimatedDuration] = useState<number>(3);
+  const [time, setTime] = useState<TaskTime>({ days: 5, unit: 'days', start: '', due: '' });
   const [planLinks, setPlanLinks] = useState<PlanLinks>({});
-  const [startDate, setStartDate] = useState('');
-  const [dueDate, setDueDate] = useState('');
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [status, setStatus] = useState<TaskStatus>('todo');
   const [assigneeId, setAssigneeId] = useState('');
@@ -51,10 +52,8 @@ export function CreateTaskModal({
     if (isOpen) {
       setTitle('');
       setDescription('');
-      setEstimatedDuration(isSubtask ? 2 : 5);
+      setTime({ days: isSubtask ? 2 : 5, unit: 'days', start: '', due: '' });
       setPlanLinks({ milestoneId: defaultMilestoneId, epicId: defaultEpicId, storyId: defaultStoryId });
-      setStartDate('');
-      setDueDate('');
       setPriority('medium');
       setStatus('todo');
       setAssigneeId(projectUsers[0]?.id || '');
@@ -62,24 +61,11 @@ export function CreateTaskModal({
     }
   }, [isOpen, defaultMilestoneId, defaultEpicId, defaultStoryId, defaultParentId, isSubtask]);
 
-  // If start date and duration are provided, sync due date
-  const handleStartDateChange = (val: string) => {
-    setStartDate(val);
-    if (val && estimatedDuration > 0 && !dueDate) {
-      const d = new Date(val);
-      d.setDate(d.getDate() + estimatedDuration);
-      setDueDate(d.toISOString().split('T')[0]);
-    }
-  };
-
-  const handleDurationChange = (val: number) => {
-    setEstimatedDuration(val);
-    if (startDate && val > 0) {
-      const d = new Date(startDate);
-      d.setDate(d.getDate() + val);
-      setDueDate(d.toISOString().split('T')[0]);
-    }
-  };
+  // The time the task may use: its parent task's (for a subtask), else its story, epic, phase or project
+  const project = projects.find(p => p.id === projectId);
+  const parentTask = defaultParentId ? tasks.find(t => t.id === defaultParentId) : undefined;
+  const planData = project ? { project, milestones, epics, stories, tasks } : undefined;
+  const timeWindow = planData ? (parentTask ? subtaskWindow(parentTask, planData) : taskWindow(planLinks, planData)) : undefined;
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,13 +75,12 @@ export function CreateTaskModal({
       newErrors.title = isSubtask ? 'Subtask title is required.' : 'Task title is required.';
     }
 
-    if (!estimatedDuration || estimatedDuration <= 0) {
+    if (!time.days || time.days <= 0) {
       newErrors.duration = 'Estimated duration must be at least 1 day.';
     }
 
-    if (startDate && dueDate && new Date(dueDate) < new Date(startDate)) {
-      newErrors.dates = 'Due date cannot precede start date.';
-    }
+    const dateProblem = rangeError({ start: time.start, end: time.due }, timeWindow);
+    if (dateProblem) newErrors.dates = `${dateProblem}.`;
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -116,11 +101,13 @@ export function CreateTaskModal({
       parentId: defaultParentId || undefined,
       // A subtask follows its task; a task goes where the plan picker says
       ...(isSubtask ? { milestoneId: parentMilestoneId } : planLinks),
-      estimatedDuration: Number(estimatedDuration),
-      startDate: startDate || undefined,
-      dueDate: dueDate || undefined,
+      estimatedDuration: time.days,
+      durationUnit: time.unit,
+      startDate: time.start || undefined,
+      dueDate: time.due || undefined,
     });
 
+    notify(`${isSubtask ? 'Subtask' : 'Task'} "${title.trim()}" created`);
     onClose();
   };
 
@@ -198,47 +185,14 @@ export function CreateTaskModal({
             </div>
           )}
 
-          {/* Duration & Dates */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 p-3 bg-mist/20 rounded-xl border border-line">
-            <div>
-              <label className="block text-[11px] font-semibold text-ink mb-1 flex items-center gap-1">
-                <Clock className="w-3 h-3 text-flash-deep" />
-                Duration (Days) <span className="text-danger">*</span>
-              </label>
-              <input
-                type="number"
-                min="1"
-                max="365"
-                value={estimatedDuration || ''}
-                onChange={e => handleDurationChange(parseInt(e.target.value, 10) || 1)}
-                className={`w-full px-2.5 py-1.5 text-xs bg-paper border font-mono ${
-                  errors.duration ? 'border-danger' : 'border-line'
-                } rounded-lg outline-none focus:border-flash text-ink`}
-              />
-              {errors.duration && <p className="text-danger text-[10px] mt-1">{errors.duration}</p>}
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-ink mb-1">Start Date</label>
-              <input
-                type="date"
-                value={startDate}
-                onChange={e => handleStartDateChange(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-paper border border-line rounded-lg outline-none focus:border-flash text-ink font-mono"
-              />
-            </div>
-
-            <div>
-              <label className="block text-[11px] font-semibold text-ink mb-1">Due Date</label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={e => setDueDate(e.target.value)}
-                className="w-full px-2.5 py-1.5 text-xs bg-paper border border-line rounded-lg outline-none focus:border-flash text-ink font-mono"
-              />
-            </div>
+          {/* Estimate & dates, inside the parent's time */}
+          <div className="p-3 bg-mist/20 rounded-xl border border-line space-y-1">
+            <span className="flex items-center gap-1 text-[11px] font-semibold text-ink">
+              <Clock className="w-3 h-3 text-flash-deep" /> Time
+            </span>
+            <TaskTimeFields value={time} onChange={t => { setTime(t); setErrors(prev => ({ ...prev, duration: undefined, dates: undefined })); }} window={timeWindow} />
             {errors.dates && (
-              <p className="col-span-3 text-danger text-[11px] flex items-center gap-1">
+              <p className="text-danger text-[11px] flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" /> {errors.dates}
               </p>
             )}

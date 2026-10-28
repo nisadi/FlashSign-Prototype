@@ -56,6 +56,8 @@ export interface Organization {
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled' | 'archived';
 export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track' | 'delayed';
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
+/** How lengths of time are entered and shown: "3 months", "2 weeks", "10 days" */
+export type DurationUnit = 'days' | 'weeks' | 'months';
 export type TimelineStatus = 'on_schedule' | 'extended' | 'shortened' | 'completed';
 
 export interface Project {
@@ -99,6 +101,8 @@ export interface Project {
   timelineDifference?: number; // calendar days diff (positive = extended, negative = shortened)
   timelineStatus?: TimelineStatus;
   totalWorkDays?: number; // sum of estimated work durations, distinguished from calendar span
+  /** The unit the project's length was planned in, used when showing it ("3 months") */
+  durationUnit?: DurationUnit;
   /** 'auto' (default): health follows the timeline. 'manual': someone set it in Settings. */
   healthMode?: 'auto' | 'manual';
   /** Earlier baselines, kept when someone re-baselines the original plan */
@@ -192,6 +196,8 @@ export interface Task {
   parentId?: string;
   /** The phase the task is in (phases are stored as milestones) */
   milestoneId?: string;
+  /** The unit the estimate was entered in ("2 weeks"); the estimate itself is stored in days */
+  durationUnit?: DurationUnit;
   /** Optional plan links: Phase → Epic → Story → Task. A subtask follows its task. */
   epicId?: string;
   storyId?: string;
@@ -294,6 +300,7 @@ export interface Milestone {
   progress?: number;
   taskIds?: string[];
   estimatedDuration?: number;
+  durationUnit?: DurationUnit;
   createdAt?: string;
   updatedAt?: string;
 }
@@ -309,6 +316,10 @@ export interface Epic {
   name: string;
   description?: string;
   color: string;
+  /** Its own time inside its phase; missing = the whole of its phase (or project) */
+  startDate?: string;
+  endDate?: string;
+  durationUnit?: DurationUnit;
   createdAt: string;
   updatedAt: string;
 }
@@ -322,6 +333,10 @@ export interface Story {
   description?: string;
   acceptanceCriteria?: string;
   priority: TaskPriority;
+  /** Its own time inside its epic; missing = the whole of its epic (or phase / project) */
+  startDate?: string;
+  endDate?: string;
+  durationUnit?: DurationUnit;
   createdAt: string;
   updatedAt: string;
 }

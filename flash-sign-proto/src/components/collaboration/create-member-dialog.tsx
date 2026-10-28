@@ -6,6 +6,7 @@ import { useApp } from '@/context/app-context';
 import type { User, DemoRole, AvailabilityStatus } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface CreateMemberDialogProps {
   open: boolean;
@@ -141,6 +142,7 @@ export function CreateMemberDialog({
         skills,
       });
       setSuccessMsg('Member profile updated!');
+      notify(`Changes to ${trimmedName} saved`);
       setTimeout(() => {
         onOpenChange(false);
         onSuccess?.({ ...memberToEdit, name: trimmedName, email: trimmedEmail });
@@ -163,6 +165,7 @@ export function CreateMemberDialog({
         skills,
       });
       setSuccessMsg('Team member added successfully!');
+      notify(`${trimmedName} added to the team`);
       setTimeout(() => {
         onOpenChange(false);
       }, 700);

@@ -4,6 +4,7 @@ import React from 'react';
 import type { Project, Milestone, Task } from '@/types';
 import { Card, ProgressBar } from '@/components/shared/ui';
 import { formatDate } from '@/lib/utils';
+import { formatDuration } from '@/lib/durations';
 import {
   Calendar,
   Clock,
@@ -250,10 +251,11 @@ export function ProjectTimelineSummary({
                 <Layers className="w-3.5 h-3.5 text-muted shrink-0" /> Calendar Duration
               </td>
               <td className="py-3 px-4 text-ink-soft">
-                {originalDays} calendar days
+                {/* In the unit the project was planned in, e.g. "3 months" */}
+                {formatDuration(originalStart, originalEnd, project.durationUnit)}
               </td>
               <td className="py-3 px-4 text-ink font-semibold">
-                {currentDays} calendar days
+                {formatDuration(currentStart, currentEnd, project.durationUnit)}
               </td>
               <td className="py-3 px-4">
                 {diffDays > 0 ? (

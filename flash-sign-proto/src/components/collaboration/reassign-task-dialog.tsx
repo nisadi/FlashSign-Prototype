@@ -5,6 +5,7 @@ import { X, ArrowRightLeft, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { Task } from '@/types';
 import { ClientPortal } from '@/components/shared/modal';
+import { notify } from '@/components/shared/toaster';
 
 interface ReassignTaskDialogProps {
   open: boolean;
@@ -30,9 +31,13 @@ export function ReassignTaskDialog({
 
   const handleReassign = (e: React.FormEvent) => {
     e.preventDefault();
-    if (!selectedUserId) return;
+    if (!selectedUserId) {
+      notify('Choose a new assignee for the task first.', 'error');
+      return;
+    }
 
     reassignTask(task.id, selectedUserId);
+    notify(`Task "${task.title}" reassigned to ${selectedUser?.name || 'the selected member'}`);
     setSuccess(true);
     setTimeout(() => {
       setSuccess(false);

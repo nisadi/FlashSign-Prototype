@@ -7,6 +7,7 @@ import {
   Building2, Users, ArrowLeft, Check, AlertCircle, Plus,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 
 const TEAM_COLORS = [
   '#00c2a8', '#3b82f6', '#8b5cf6', '#ec4899', '#f59e0b', '#10b981', '#6366f1', '#06b6d4',
@@ -91,6 +92,7 @@ export default function CreateTeamPage() {
       status,
     });
 
+    notify(`Team "${trimmedName}" created`);
     setSuccess(true);
     setTimeout(() => {
       router.push('/teams/directory');

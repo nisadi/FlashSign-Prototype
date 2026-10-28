@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { Columns3, ChevronUp, ChevronDown, Trash2, Plus, RotateCcw, AlertCircle, ArrowRight, Info } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { notify } from '@/components/shared/toaster';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/shared/modal';
 import { Button } from '@/components/shared/ui';
 import {
@@ -146,6 +147,7 @@ export function BoardColumnsModal({ project, boardId, tasks: projectTasks, onClo
   const save = () => {
     if (!canSave) return;
     setBoardColumns(project.id, board.id, draft.map(c => ({ ...c, name: c.name.trim() })), moves);
+    notify(`Columns saved for ${board.name}`);
     onClose();
   };
 

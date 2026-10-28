@@ -9,6 +9,8 @@ import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { ProjectBoardsSettings } from '@/components/projects/project-boards-settings';
 import { canCreateProject } from '@/lib/permissions';
 import { diffCalendarDays } from '@/lib/timeline-calculator';
+import { naturalUnit } from '@/lib/durations';
+import { DateRangeField, type DateRange } from '@/components/shared/duration-fields';
 import { formatDate } from '@/lib/utils';
 import { Card, Button } from '@/components/shared/ui';
 import { Avatar } from '@/components/shared/avatar';
@@ -61,10 +63,14 @@ export default function ProjectSettingsPage({
   const [health, setHealth] = useState<ProjectHealth | 'auto'>(project.healthMode === 'manual' ? project.health : 'auto');
   const [ownerId, setOwnerId] = useState(project.ownerId);
   // The original plan (baseline). The current dates are calculated from tasks and milestones.
-  const baselineStart = project.originalStartDate || project.startDate;
-  const baselineEnd = project.originalEndDate || project.dueDate || project.endDate;
-  const [startDate, setStartDate] = useState(baselineStart);
-  const [dueDate, setDueDate] = useState(baselineEnd);
+  const baselineStart = (project.originalStartDate || project.startDate).slice(0, 10);
+  const baselineEnd = (project.originalEndDate || project.dueDate || project.endDate).slice(0, 10);
+  const [baseline, setBaseline] = useState<DateRange>({
+    start: baselineStart,
+    end: baselineEnd,
+    unit: project.durationUnit ?? naturalUnit(baselineStart, baselineEnd),
+  });
+  const { start: startDate, end: dueDate } = baseline;
   const rebaselining = startDate !== baselineStart || dueDate !== baselineEnd;
   const [accentColor, setAccentColor] = useState(project.accentColor || '#00c2a8');
   const [group, setGroup] = useState(project.group || 'Core Platform');
@@ -95,6 +101,7 @@ export default function ProjectSettingsPage({
         originalStartDate: startDate,
         originalEndDate: dueDate,
         originalDuration: Math.max(1, diffCalendarDays(startDate, dueDate)),
+        durationUnit: baseline.unit,
         baselineHistory: [
           ...(project.baselineHistory ?? []),
           { at: new Date().toISOString(), byUserId: currentUserId, reason: baselineReason.trim(), startDate: baselineStart, endDate: baselineEnd },
@@ -262,26 +269,9 @@ export default function ProjectSettingsPage({
                 </select>
               </div>
 
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">Baseline Start</label>
-                <input
-                  type="date"
-                  value={startDate}
-                  onChange={(e) => setStartDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                />
-              </div>
-
-              <div>
-                <label className="block text-xs font-semibold text-ink mb-1">Baseline End</label>
-                <input
-                  type="date"
-                  value={dueDate}
-                  onChange={(e) => setDueDate(e.target.value)}
-                  className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink font-mono"
-                />
-              </div>
             </div>
+
+            <DateRangeField value={baseline} onChange={setBaseline} startLabel="Baseline start" endLabel="Baseline end" />
 
             <div className="rounded-xl border border-line bg-paper px-3 py-2.5 text-[11px] text-ink-soft space-y-2">
               <p>
