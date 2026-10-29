@@ -6,7 +6,7 @@ import type {
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
-  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn, Epic, Story,
+  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn, Epic, Story, ProjectStructure,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
@@ -41,6 +41,7 @@ import { useDemoAuth } from '@/context/demo-auth-context';
 import { calculateProjectTimeline, diffCalendarDays } from '@/lib/timeline-calculator';
 import { hasSubtasks, progressOf, progressOfTasks } from '@/lib/subtasks';
 import { resolvePlan, type PlanLinks } from '@/lib/plan';
+import { projectStructure } from '@/lib/structure';
 
 // ── State Shape ────────────────────────────────────────────────────────────────
 export type CreateProjectInput = Partial<Project> & { name: string };
@@ -296,6 +297,11 @@ interface AppActions {
   deleteStory: (id: string) => void;
   /** Put a task in a phase, epic or story; the links are made to agree (a story decides the epic, an epic the phase) */
   setTaskPlan: (taskId: string, links: PlanLinks) => void;
+  /**
+   * Change which levels a project uses and its rules. A level switched off is removed: its
+   * items' children move up to the level above (e.g. a removed epic's stories stay in its phase).
+   */
+  setProjectStructure: (projectId: string, structure: ProjectStructure) => void;
   // Teams
   addTeam: (team: CreateTeamInput) => void;
   updateTeam: (id: string, updates: Partial<Team>) => void;
@@ -414,7 +420,7 @@ export type AppContextValue = AppState & AppActions;
 const AppContext = createContext<AppContextValue | null>(null);
 
 // Bump the version when the demo data changes, so browsers drop older saved demo data
-const STORAGE_KEY = 'flashsign-proto-state-v4';
+const STORAGE_KEY = 'flashsign-proto-state-v5';
 
 function getInitialState(): AppState {
   return {
@@ -685,6 +691,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         boardColumns: p.boardColumns,
         mainBoardName: p.mainBoardName,
         extraBoards: p.extraBoards,
+        structure: p.structure,
+        durationUnit: p.durationUnit,
         originalStartDate: p.originalStartDate || startDate,
         originalEndDate: p.originalEndDate || endDate,
         originalDuration: duration,
@@ -1022,13 +1030,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const target = s.milestones.find(m => m.id === id);
       const nextMilestones = s.milestones.filter(m => m.id !== id);
       const nextTasks = s.tasks.map(t => t.milestoneId === id ? { ...t, milestoneId: undefined } : t);
-      // Epics in the phase stay, without a phase
+      // Epics and stories in the phase stay, without a phase
       const epics = s.epics.map(e => (e.phaseId === id ? { ...e, phaseId: undefined } : e));
+      const stories = s.stories.map(st => (st.phaseId === id ? { ...st, phaseId: undefined } : st));
       const nextProjects = s.projects.map(p => {
         if (p.id !== target?.projectId) return p;
         return calculateProjectTimeline(p, nextTasks, nextMilestones, s.taskStatusChanges);
       });
-      return { ...s, milestones: nextMilestones, epics, tasks: nextTasks, projects: nextProjects };
+      return { ...s, milestones: nextMilestones, epics, stories, tasks: nextTasks, projects: nextProjects };
     }),
 
     // Plan
@@ -1041,6 +1050,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         name: e.name,
         description: e.description,
         color: e.color || '#42a5f5',
+        startDate: e.startDate,
+        endDate: e.endDate,
+        durationUnit: e.durationUnit,
         createdAt: now,
         updatedAt: now,
       };
@@ -1062,10 +1074,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         id: st.id || `story-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
         projectId: st.projectId,
         epicId: st.epicId,
+        phaseId: st.epicId ? undefined : st.phaseId,
         title: st.title,
         description: st.description,
         acceptanceCriteria: st.acceptanceCriteria,
         priority: st.priority || 'medium',
+        startDate: st.startDate,
+        endDate: st.endDate,
+        durationUnit: st.durationUnit,
         createdAt: now,
         updatedAt: now,
       };
@@ -1080,6 +1096,44 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       stories: s.stories.filter(st => st.id !== id),
       tasks: s.tasks.map(t => (t.storyId === id ? { ...t, storyId: undefined } : t)),
     })),
+    setProjectStructure: (projectId, structure) => update(s => {
+      const project = s.projects.find(p => p.id === projectId);
+      if (!project) return s;
+      const before = projectStructure(project);
+      let { milestones, epics, stories, tasks } = s;
+      const inProject = <T extends { projectId: string }>(x: T) => x.projectId === projectId;
+
+      if (before.stories && !structure.stories) {
+        // Tasks keep their epic and phase
+        stories = stories.filter(st => !inProject(st));
+        tasks = tasks.map(t => (inProject(t) && t.storyId ? { ...t, storyId: undefined } : t));
+      }
+      if (before.epics && !structure.epics) {
+        // Stories and tasks stay in the epic's phase
+        const phaseOf = new Map(epics.filter(inProject).map(e => [e.id, e.phaseId]));
+        epics = epics.filter(e => !inProject(e));
+        stories = stories.map(st => (inProject(st) && st.epicId ? { ...st, epicId: undefined, phaseId: phaseOf.get(st.epicId) } : st));
+        tasks = tasks.map(t => (inProject(t) && t.epicId ? { ...t, epicId: undefined } : t));
+      }
+      if (before.phases && !structure.phases) {
+        milestones = milestones.filter(m => !inProject(m));
+        epics = epics.map(e => (inProject(e) && e.phaseId ? { ...e, phaseId: undefined } : e));
+        stories = stories.map(st => (inProject(st) && st.phaseId ? { ...st, phaseId: undefined } : st));
+        tasks = tasks.map(t => (inProject(t) && t.milestoneId ? { ...t, milestoneId: undefined } : t));
+      }
+      tasks = tasks.map(t => (inProject(t) && !t.parentId ? { ...t, ...resolvePlan(t, epics, stories) } : t));
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        milestones,
+        epics,
+        stories,
+        tasks,
+        projects: s.projects.map(p =>
+          p.id === projectId ? calculateProjectTimeline({ ...p, structure, updatedAt: now }, tasks, milestones, s.taskStatusChanges) : p
+        ),
+      };
+    }),
     setTaskPlan: (taskId, links) => update(s => {
       const resolved = resolvePlan(links, s.epics, s.stories);
       const now = new Date().toISOString();

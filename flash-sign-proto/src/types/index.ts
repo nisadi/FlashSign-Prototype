@@ -56,6 +56,22 @@ export interface Organization {
 export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled' | 'archived';
 export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track' | 'delayed';
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
+/**
+ * A project's plan structure. Levels always stack Phase → Epic → Story → Task → Subtask; each
+ * level is created inside the nearest level above it that the project uses, and tasks inside
+ * the lowest one. Everything can be changed later in Project Settings.
+ */
+export interface ProjectStructure {
+  phases: boolean;
+  epics: boolean;
+  stories: boolean;
+  subtasks: boolean;
+  /** Tasks may wait in a Backlog before they are put in a story (or epic / phase) */
+  backlog: boolean;
+  /** Epics, stories and tasks may be moved to another parent after they are created */
+  allowMove: boolean;
+}
+
 /** How lengths of time are entered and shown: "3 months", "2 weeks", "10 days" */
 export type DurationUnit = 'days' | 'weeks' | 'months';
 export type TimelineStatus = 'on_schedule' | 'extended' | 'shortened' | 'completed';
@@ -103,6 +119,8 @@ export interface Project {
   totalWorkDays?: number; // sum of estimated work durations, distinguished from calendar span
   /** The unit the project's length was planned in, used when showing it ("3 months") */
   durationUnit?: DurationUnit;
+  /** Which plan levels the project uses and how strict it is. Missing = worked out from its data. */
+  structure?: ProjectStructure;
   /** 'auto' (default): health follows the timeline. 'manual': someone set it in Settings. */
   healthMode?: 'auto' | 'manual';
   /** Earlier baselines, kept when someone re-baselines the original plan */
@@ -329,6 +347,8 @@ export interface Story {
   id: string;
   projectId: string;
   epicId?: string;
+  /** Its phase, when the project uses phases and stories but not epics */
+  phaseId?: string;
   title: string;
   description?: string;
   acceptanceCriteria?: string;

@@ -7,6 +7,7 @@ import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { ProjectBoardsSettings } from '@/components/projects/project-boards-settings';
+import { ProjectStructureSettings } from '@/components/projects/project-structure-settings';
 import { canCreateProject } from '@/lib/permissions';
 import { diffCalendarDays } from '@/lib/timeline-calculator';
 import { naturalUnit } from '@/lib/durations';
@@ -314,6 +315,8 @@ export default function ProjectSettingsPage({
             </div>
           </Card>
         </form>
+
+        <ProjectStructureSettings project={project} canEdit={canCreateProject(demoRole)} />
 
         <ProjectBoardsSettings
           project={project}

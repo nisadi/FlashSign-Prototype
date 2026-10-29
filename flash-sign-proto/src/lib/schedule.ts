@@ -55,14 +55,14 @@ export function epicSpan(epic: Epic, data: PlanData): TimeWindow {
   return epic.startDate && epic.endDate ? { start: day(epic.startDate)!, end: day(epic.endDate)!, label: epic.name } : { ...parent, label: epic.name };
 }
 
-/** Where a story may sit: its epic, or the project */
-export function storyWindow(epicId: string | undefined, data: PlanData): TimeWindow {
-  const epic = epicId ? data.epics.find(e => e.id === epicId) : undefined;
-  return epic ? epicSpan(epic, data) : projectWindow(data.project);
+/** Where a story may sit: its epic, else its phase (projects without epics), else the project */
+export function storyWindow(parent: Pick<Story, 'epicId' | 'phaseId'>, data: PlanData): TimeWindow {
+  const epic = parent.epicId ? data.epics.find(e => e.id === parent.epicId) : undefined;
+  return epic ? epicSpan(epic, data) : epicWindow(parent.phaseId, data);
 }
 
 export function storySpan(story: Story, data: PlanData): TimeWindow {
-  const parent = storyWindow(story.epicId, data);
+  const parent = storyWindow(story, data);
   const label = storyLabel(story);
   return story.startDate && story.endDate ? { start: day(story.startDate)!, end: day(story.endDate)!, label } : { ...parent, label };
 }

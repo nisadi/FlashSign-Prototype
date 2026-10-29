@@ -5,7 +5,8 @@ import { Plus, Trash2, Flag, Layers, Rows3, Check } from 'lucide-react';
 import { EPIC_COLORS } from '@/lib/plan';
 import { addDays, diffCalendarDays } from '@/lib/timeline-calculator';
 import { naturalUnit, type DurationUnit } from '@/lib/durations';
-import { DateRangeField } from '@/components/shared/duration-fields';
+import { DateRangeField, WindowHint, type DateRange } from '@/components/shared/duration-fields';
+import type { TimeWindow } from '@/lib/schedule';
 import { cn } from '@/lib/utils';
 
 /** A phase being planned in the New Project form (saved as a milestone on create) */
@@ -22,6 +23,41 @@ export interface DraftEpic {
   name: string;
   phaseKey: string;
   color: string;
+  /** Its own dates inside its phase; missing = all of its phase (or the project) */
+  own?: DateRange;
+}
+
+/** The time an epic may use: its phase, or the whole project */
+export function draftEpicWindow(ep: Pick<DraftEpic, 'phaseKey'>, phases: DraftPhase[], project: TimeWindow): TimeWindow {
+  const phase = phases.find(p => p.key === ep.phaseKey);
+  return phase ? { start: phase.startDate, end: phase.endDate, label: phase.name || 'its phase' } : project;
+}
+
+/** An epic's own time: its own dates, or all of its phase */
+export function draftEpicSpan(ep: DraftEpic, phases: DraftPhase[], project: TimeWindow): TimeWindow {
+  const w = draftEpicWindow(ep, phases, project);
+  return { ...(ep.own ? { start: ep.own.start, end: ep.own.end } : w), label: ep.name || 'its epic' };
+}
+
+/**
+ * "All of Development" or "Its own dates" for an epic or story being planned, with the dates
+ * limited to its parent's time.
+ */
+function TimeChoice({ own, onChange, window: w }: { own?: DateRange; onChange: (own?: DateRange) => void; window: TimeWindow }) {
+  return (
+    <div className="w-full flex flex-wrap items-center gap-2 pl-6">
+      <select
+        value={own ? 'own' : 'all'}
+        onChange={e => onChange(e.target.value === 'own' ? { start: w.start, end: w.end, unit: naturalUnit(w.start, w.end) } : undefined)}
+        className={cn(input, 'w-auto')}
+        aria-label="Time"
+      >
+        <option value="all">Time: all of {w.label}</option>
+        <option value="own">Time: its own dates inside {w.label}</option>
+      </select>
+      {own ? <DateRangeField compact value={own} onChange={onChange} window={w} /> : <WindowHint window={w} />}
+    </div>
+  );
 }
 
 export const PHASE_TEMPLATES: { id: string; name: string; description: string; phases: string[] }[] = [
@@ -128,7 +164,21 @@ export function PhasesStep({
   );
 }
 
-export function EpicsStep({ epics, onChange, phases }: { epics: DraftEpic[]; onChange: (epics: DraftEpic[]) => void; phases: DraftPhase[] }) {
+export function EpicsStep({
+  epics,
+  onChange,
+  phases,
+  requirePhase,
+  project,
+}: {
+  epics: DraftEpic[];
+  onChange: (epics: DraftEpic[]) => void;
+  phases: DraftPhase[];
+  /** The project uses phases, so every epic goes in one */
+  requirePhase: boolean;
+  /** The project's time, for epics without a phase */
+  project: TimeWindow;
+}) {
   const [name, setName] = useState('');
   const [phaseKey, setPhaseKey] = useState(phases[0]?.key ?? '');
   const add = () => {
@@ -140,8 +190,12 @@ export function EpicsStep({ epics, onChange, phases }: { epics: DraftEpic[]; onC
   return (
     <div className="space-y-4">
       <p className="text-xs text-muted">
-        Epics are large bodies of work, e.g. &quot;Signature canvas&quot; or &quot;Payments&quot;. Stories and tasks go inside them later, on the Plan tab. Optional.
+        Epics are large bodies of work, e.g. &quot;Signature canvas&quot; or &quot;Payments&quot;. Each epic&apos;s time sits inside
+        its phase. Stories and tasks go inside them later, on the Plan tab. Optional.
       </p>
+      {requirePhase && phases.length === 0 && (
+        <p className="text-xs text-waiting">Add a phase first (previous step), then epics can go in it.</p>
+      )}
       <ul className="space-y-2">
         {epics.map(ep => (
           <li key={ep.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-paper p-2" style={{ borderLeft: `4px solid ${ep.color}` }}>
@@ -159,16 +213,22 @@ export function EpicsStep({ epics, onChange, phases }: { epics: DraftEpic[]; onC
                 className={cn(input, 'w-auto')}
                 aria-label="Phase"
               >
-                <option value="">No phase</option>
+                {!requirePhase && <option value="">No phase</option>}
                 {phases.map(p => <option key={p.key} value={p.key}>{p.name || 'Untitled phase'}</option>)}
               </select>
             )}
             <button type="button" onClick={() => onChange(epics.filter(x => x.key !== ep.key))} className="p-1.5 text-muted hover:text-danger rounded-md" aria-label="Remove epic">
               <Trash2 className="w-3.5 h-3.5" />
             </button>
+            <TimeChoice
+              own={ep.own}
+              onChange={own => onChange(epics.map(x => (x.key === ep.key ? { ...x, own } : x)))}
+              window={draftEpicWindow(ep, phases, project)}
+            />
           </li>
         ))}
       </ul>
+      {(!requirePhase || phases.length > 0) && (
       <div className="flex flex-wrap items-center gap-2">
         <input
           value={name}
@@ -184,7 +244,7 @@ export function EpicsStep({ epics, onChange, phases }: { epics: DraftEpic[]; onC
         />
         {phases.length > 0 && (
           <select value={phaseKey} onChange={e => setPhaseKey(e.target.value)} className={cn(input, 'w-auto py-2')} aria-label="Phase for the new epic">
-            <option value="">No phase</option>
+            {!requirePhase && <option value="">No phase</option>}
             {phases.map(p => <option key={p.key} value={p.key}>{p.name || 'Untitled phase'}</option>)}
           </select>
         )}
@@ -192,6 +252,100 @@ export function EpicsStep({ epics, onChange, phases }: { epics: DraftEpic[]; onC
           Add epic
         </button>
       </div>
+      )}
+    </div>
+  );
+}
+
+export interface DraftStory {
+  key: string;
+  title: string;
+  /** Its epic (projects with epics) or its phase (projects with phases but no epics) */
+  parentKey: string;
+  /** Its own dates inside its parent; missing = all of its parent */
+  own?: DateRange;
+}
+
+/** Stories set up with the project, each inside an epic, or a phase when the project has no epics */
+export function StoriesStep({
+  stories,
+  onChange,
+  parents,
+  parentLabel,
+  windowOf,
+}: {
+  stories: DraftStory[];
+  onChange: (stories: DraftStory[]) => void;
+  /** The epics or phases a story can go in; empty when the project uses neither */
+  parents: { key: string; name: string }[];
+  parentLabel: 'epic' | 'phase' | null;
+  /** The time a story in this parent may use */
+  windowOf: (parentKey: string) => TimeWindow;
+}) {
+  const [title, setTitle] = useState('');
+  const [parentKey, setParentKey] = useState(parents[0]?.key ?? '');
+  const add = () => {
+    if (!title.trim()) return;
+    onChange([...stories, { key: key(), title: title.trim(), parentKey: parentLabel ? parentKey || parents[0]?.key || '' : '' }]);
+    setTitle('');
+  };
+  const parentSelect = (value: string, set: (v: string) => void, aria: string) =>
+    parentLabel && (
+      <select value={value} onChange={e => set(e.target.value)} className={cn(input, 'w-auto py-2')} aria-label={aria}>
+        {parents.map(p => <option key={p.key} value={p.key}>{p.name || `Untitled ${parentLabel}`}</option>)}
+      </select>
+    );
+
+  return (
+    <div className="space-y-4">
+      <p className="text-xs text-muted">
+        Stories describe what a user needs, e.g. &quot;As a signer, I can sign on my phone&quot;.
+        {parentLabel && ` Each story goes in ${parentLabel === 'epic' ? 'an epic' : 'a phase'}, and its time sits inside it.`} Tasks are added inside stories later, on the Plan tab. Optional.
+      </p>
+      {parentLabel && parents.length === 0 && (
+        <p className="text-xs text-waiting">Add {parentLabel === 'epic' ? 'an epic' : 'a phase'} first (previous step), then stories can go in it.</p>
+      )}
+      <ul className="space-y-2">
+        {stories.map(st => (
+          <li key={st.key} className="flex flex-wrap items-center gap-2 rounded-xl border border-line bg-paper p-2">
+            <input
+              value={st.title}
+              onChange={e => onChange(stories.map(x => (x.key === st.key ? { ...x, title: e.target.value } : x)))}
+              className={cn(input, 'flex-1 min-w-[200px]')}
+              aria-label="Story"
+            />
+            {parentSelect(st.parentKey, v => onChange(stories.map(x => (x.key === st.key ? { ...x, parentKey: v } : x))), `${parentLabel} for this story`)}
+            <button type="button" onClick={() => onChange(stories.filter(x => x.key !== st.key))} className="p-1.5 text-muted hover:text-danger rounded-md" aria-label="Remove story">
+              <Trash2 className="w-3.5 h-3.5" />
+            </button>
+            <TimeChoice
+              own={st.own}
+              onChange={own => onChange(stories.map(x => (x.key === st.key ? { ...x, own } : x)))}
+              window={windowOf(st.parentKey)}
+            />
+          </li>
+        ))}
+      </ul>
+      {(!parentLabel || parents.length > 0) && (
+        <div className="flex flex-wrap items-center gap-2">
+          <input
+            value={title}
+            onChange={e => setTitle(e.target.value)}
+            onKeyDown={e => {
+              if (e.key === 'Enter') {
+                e.preventDefault();
+                add();
+              }
+            }}
+            placeholder="As a …, I can … so that …"
+            className={cn(input, 'flex-1 min-w-[200px] py-2')}
+          />
+          {parentSelect(parentKey, setParentKey, `${parentLabel} for the new story`)}
+          <button type="button" onClick={add} disabled={!title.trim()} className="px-3 py-2 text-xs font-semibold rounded-lg bg-mist hover:bg-line text-ink disabled:opacity-50">
+            Add story
+          </button>
+        </div>
+      )}
     </div>
   );
 }

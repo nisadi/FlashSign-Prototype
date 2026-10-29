@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { notify } from '@/components/shared/toaster';
+import { LEVEL_LABEL, LINK_KEY, projectStructure, taskLevel } from '@/lib/structure';
+import { resolvePlan } from '@/lib/plan';
 import { canCreateProject } from '@/lib/permissions';
 import { placeIn, placementOf, projectBoards, stageLabel, type ResolvedBoard } from '@/lib/board-columns';
 import { BoardColumnsModal } from '@/components/projects/board-columns-modal';
@@ -37,7 +39,7 @@ export default function KanbanBoardPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, tasks, users, epics, openTaskDrawer, addTask, demoRole } = useApp();
+  const { projects, tasks, users, epics, stories, milestones, openTaskDrawer, addTask, demoRole } = useApp();
 
   const [draggedId, setDraggedId] = useState<string | null>(null);
   const [dragOverSlot, setDragOverSlot] = useState<string | null>(null);
@@ -48,6 +50,8 @@ export default function KanbanBoardPage({
   // Quick task modal state
   const [quickAddSlot, setQuickAddSlot] = useState<string | null>(null);
   const [quickTitle, setQuickTitle] = useState('');
+  // Where a quick-added task goes, when the project doesn't allow a Backlog
+  const [quickParentId, setQuickParentId] = useState('');
 
   // Column editor for one board, optionally opened with a new column added
   const [columnsEditor, setColumnsEditor] = useState<{ boardId: string; add: boolean } | null>(null);
@@ -108,15 +112,31 @@ export default function KanbanBoardPage({
     setDragOverSlot(null);
   };
 
+  // Quick-added tasks go to the Backlog, or, when the project doesn't allow one, into a chosen story (or epic / phase)
+  const structure = projectStructure(project);
+  const quickLevel = structure.backlog ? undefined : taskLevel(structure);
+  const quickParents = quickLevel === 'phase'
+    ? milestones.filter((m) => m.projectId === project.id).map((m) => ({ id: m.id, name: m.name }))
+    : quickLevel === 'epic'
+      ? epics.filter((e) => e.projectId === project.id).map((e) => ({ id: e.id, name: e.name }))
+      : quickLevel === 'story'
+        ? stories.filter((st) => st.projectId === project.id).map((st) => ({ id: st.id, name: st.title }))
+        : [];
+
   const handleQuickAdd = (board: ResolvedBoard, col: BoardColumn) => {
     if (!quickTitle.trim()) {
       notify('Type a title for the task first.', 'error');
+      return;
+    }
+    if (quickLevel && !quickParentId) {
+      notify(`Choose ${quickLevel === 'epic' ? 'an' : 'a'} ${LEVEL_LABEL[quickLevel].one} for the task first.`, 'error');
       return;
     }
     addTask({
       title: quickTitle.trim(),
       projectId,
       ...placeIn(board, col),
+      ...(quickLevel ? resolvePlan({ [LINK_KEY[quickLevel]]: quickParentId }, epics, stories) : {}),
       priority: 'medium',
       labels: ['Feature'],
       points: 2,
@@ -189,9 +209,22 @@ export default function KanbanBoardPage({
                       if (e.key === 'Enter') handleQuickAdd(board, col);
                       if (e.key === 'Escape') setQuickAddSlot(null);
                     }}
-                    placeholder="Task title…"
+                    placeholder={quickLevel ? 'Task title…' : 'Task title… (goes to the Backlog)'}
                     className="w-full px-2.5 py-1.5 text-xs bg-paper-elevated border border-line rounded-lg outline-none focus:border-flash text-ink"
                   />
+                  {quickLevel && (
+                    <select
+                      value={quickParentId}
+                      onChange={(e) => setQuickParentId(e.target.value)}
+                      className="w-full px-2.5 py-1.5 text-xs bg-paper-elevated border border-line rounded-lg outline-none focus:border-flash text-ink"
+                      aria-label={`${LEVEL_LABEL[quickLevel].one} for the new task`}
+                    >
+                      <option value="">Choose {quickLevel === 'epic' ? 'an' : 'a'} {LEVEL_LABEL[quickLevel].one}…</option>
+                      {quickParents.map((p) => (
+                        <option key={p.id} value={p.id}>{p.name}</option>
+                      ))}
+                    </select>
+                  )}
                   <div className="flex items-center justify-end gap-1.5">
                     <Button variant="ghost" size="xs" onClick={() => setQuickAddSlot(null)}>
                       Cancel

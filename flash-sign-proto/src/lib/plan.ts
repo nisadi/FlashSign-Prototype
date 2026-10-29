@@ -11,17 +11,18 @@ export const EPIC_COLORS = ['#42a5f5', '#7e57c2', '#26a69a', '#f59e0b', '#ec407a
 export type PlanLinks = Pick<Task, 'milestoneId' | 'epicId' | 'storyId'>;
 
 /**
- * Make a task's links agree with each other: a story decides the epic, an epic decides the
- * phase. Links left empty stay empty, so a task can sit directly under an epic or a phase.
+ * Make a task's links agree with each other: a story decides the epic (or, in a project without
+ * epics, the phase), an epic decides the phase. Links left empty stay empty.
  */
 export function resolvePlan(links: PlanLinks, epics: Epic[], stories: Story[]): PlanLinks {
   const story = links.storyId ? stories.find(s => s.id === links.storyId) : undefined;
   const epicId = story ? story.epicId : links.epicId;
   const epic = epicId ? epics.find(e => e.id === epicId) : undefined;
+  const phaseId = epic ? epic.phaseId : story?.phaseId;
   return {
     storyId: story?.id,
     epicId: epic?.id,
-    milestoneId: epic ? epic.phaseId ?? links.milestoneId : links.milestoneId,
+    milestoneId: phaseId ?? links.milestoneId,
   };
 }
 

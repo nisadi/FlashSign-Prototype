@@ -8,6 +8,7 @@ import { Button } from '@/components/shared/ui';
 import type { TaskPriority, TaskStatus, TaskType } from '@/types';
 import { Plus, AlertCircle, Calendar, Flag, User, Clock, CheckSquare } from 'lucide-react';
 import { PlanPicker } from '@/components/plan/plan-picker';
+import { projectStructure, taskLinksError } from '@/lib/structure';
 import type { PlanLinks } from '@/lib/plan';
 import { TaskTimeFields, rangeError, type TaskTime } from '@/components/shared/duration-fields';
 import { subtaskWindow, taskWindow } from '@/lib/schedule';
@@ -46,7 +47,7 @@ export function CreateTaskModal({
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [status, setStatus] = useState<TaskStatus>('todo');
   const [assigneeId, setAssigneeId] = useState('');
-  const [errors, setErrors] = useState<{ title?: string; duration?: string; dates?: string }>({});
+  const [errors, setErrors] = useState<{ title?: string; duration?: string; dates?: string; plan?: string }>({});
 
   useEffect(() => {
     if (isOpen) {
@@ -69,7 +70,7 @@ export function CreateTaskModal({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { title?: string; duration?: string; dates?: string } = {};
+    const newErrors: { title?: string; duration?: string; dates?: string; plan?: string } = {};
 
     if (!title.trim()) {
       newErrors.title = isSubtask ? 'Subtask title is required.' : 'Task title is required.';
@@ -81,6 +82,8 @@ export function CreateTaskModal({
 
     const dateProblem = rangeError({ start: time.start, end: time.due }, timeWindow);
     if (dateProblem) newErrors.dates = `${dateProblem}.`;
+    const planProblem = !isSubtask && project ? taskLinksError(planLinks, projectStructure(project)) : undefined;
+    if (planProblem) newErrors.plan = planProblem;
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -181,7 +184,12 @@ export function CreateTaskModal({
               <span className="block text-xs font-semibold text-ink mb-1 flex items-center gap-1">
                 <Flag className="w-3 h-3 text-flash-deep" /> Plan
               </span>
-              <PlanPicker projectId={projectId} value={planLinks} onChange={setPlanLinks} />
+              <PlanPicker projectId={projectId} value={planLinks} onChange={links => { setPlanLinks(links); setErrors(prev => ({ ...prev, plan: undefined })); }} />
+              {errors.plan && (
+                <p className="mt-1 text-danger text-[11px] flex items-center gap-1">
+                  <AlertCircle className="w-3 h-3" /> {errors.plan}
+                </p>
+              )}
             </div>
           )}
 

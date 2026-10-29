@@ -8,8 +8,13 @@ import { notify } from '@/components/shared/toaster';
 import type { ProjectStatus, ProjectPriority, ProjectHealth } from '@/types';
 import { ArrowLeft, ArrowRight, FolderKanban, Sparkles, Check, Users, Calendar, Flag, Shield, Layers, Rows3 } from 'lucide-react';
 import {
-  PhasesStep, EpicsStep, BoardsStep, type DraftPhase, type DraftEpic,
+  PhasesStep, EpicsStep, StoriesStep, BoardsStep, draftEpicSpan, draftEpicWindow,
+  type DraftPhase, type DraftEpic, type DraftStory,
 } from '@/components/projects/new-project-plan-steps';
+import { rangeError } from '@/components/shared/duration-fields';
+import { StructureEditor, StructureChain } from '@/components/projects/structure-editor';
+import { STRUCTURE_PRESETS } from '@/lib/structure';
+import type { ProjectStructure } from '@/types';
 import { DateRangeField, type DateRange } from '@/components/shared/duration-fields';
 import { addDuration, formatDuration } from '@/lib/durations';
 import { diffCalendarDays } from '@/lib/timeline-calculator';
@@ -30,8 +35,15 @@ const TEMPLATES = [
   { id: 'agent', name: 'AI Coding Agent Sandbox', description: 'Claude & Gemini automated task execution with review gates.' },
 ];
 
-/** The New Project form is a step-by-step form; phases, epics and boards are optional steps */
-const STEPS = ['Basics', 'Team & timeline', 'Phases', 'Epics', 'Boards', 'Goals & review'] as const;
+/**
+ * The New Project form is a step-by-step form. The Structure step decides which plan steps
+ * follow: Phases, Epics and Stories only appear when the project uses them.
+ */
+type StepName = 'Basics' | 'Structure' | 'Team & timeline' | 'Phases' | 'Epics' | 'Stories' | 'Boards' | 'Goals & review';
+const OPTIONAL_STEPS: StepName[] = ['Phases', 'Epics', 'Stories', 'Boards'];
+
+/** A time stamp for new ids; only called when the form is submitted */
+const stamp = () => Date.now();
 
 const SPACES = [
   'Core Platform',
@@ -44,7 +56,7 @@ const SPACES = [
 
 export default function CreateProjectPage() {
   const router = useRouter();
-  const { users, addProject, addActivity, addMilestone, addEpic } = useApp();
+  const { users, addProject, addActivity, addMilestone, addEpic, addStory } = useApp();
   const currentUser = useCurrentUser();
 
   // Form State
@@ -77,6 +89,31 @@ export default function CreateProjectPage() {
   const [step, setStep] = useState(0);
   const [phases, setPhases] = useState<DraftPhase[]>([]);
   const [epics, setEpics] = useState<DraftEpic[]>([]);
+  const [stories, setStories] = useState<DraftStory[]>([]);
+  const [structure, setStructure] = useState<ProjectStructure>(STRUCTURE_PRESETS[0].structure);
+  const STEPS: StepName[] = [
+    'Basics', 'Structure', 'Team & timeline',
+    ...(structure.phases ? ['Phases' as const] : []),
+    ...(structure.epics ? ['Epics' as const] : []),
+    ...(structure.stories ? ['Stories' as const] : []),
+    'Boards', 'Goals & review',
+  ];
+  const current = STEPS[Math.min(step, STEPS.length - 1)];
+  // Stories go in an epic, or in a phase when the project has phases but no epics
+  const storyParentLabel = structure.epics ? 'epic' : structure.phases ? 'phase' : null;
+  const storyParents = structure.epics
+    ? epics.map(e => ({ key: e.key, name: e.name }))
+    : structure.phases ? phases.map(p => ({ key: p.key, name: p.name })) : [];
+  // The time each epic and story may use: inside its parent, down from the project's time
+  const projectTime = { start: startDate, end: endDate, label: 'the project' };
+  const epicWindowOf = (ep: DraftEpic) => draftEpicWindow(ep, structure.phases ? phases : [], projectTime);
+  const storyWindowOf = (parentKey: string) => {
+    if (storyParentLabel === 'epic') {
+      const epic = epics.find(e => e.key === parentKey);
+      return epic ? draftEpicSpan(epic, structure.phases ? phases : [], projectTime) : projectTime;
+    }
+    return storyParentLabel === 'phase' ? draftEpicWindow({ phaseKey: parentKey }, phases, projectTime) : projectTime;
+  };
   const [mainBoardName, setMainBoardName] = useState('Main board');
   const [extraBoards, setExtraBoards] = useState<string[]>([]);
 
@@ -104,18 +141,31 @@ export default function CreateProjectPage() {
   /** What's wrong on a step, if anything */
   const errorsFor = (n: number): Record<string, string> => {
     const newErrors: Record<string, string> = {};
-    if (n === 0) {
+    const stepName = STEPS[n];
+    if (stepName === 'Basics') {
       if (!name.trim() || name.trim().length < 3) newErrors.name = 'Project name must be at least 3 characters.';
       if (!key.trim() || key.trim().length < 2) newErrors.key = 'Project key must be 2–6 characters.';
     }
-    if (n === 1) {
+    if (stepName === 'Team & timeline') {
       if (duration <= 0) newErrors.duration = 'Project duration must be at least 1 calendar day.';
       if (new Date(endDate) < new Date(startDate)) newErrors.endDate = 'Target end date cannot be earlier than start date.';
     }
-    if (n === 2 && phases.some(p => !p.name.trim() || p.endDate < p.startDate)) {
+    if (stepName === 'Phases' && phases.some(p => !p.name.trim() || p.endDate < p.startDate)) {
       newErrors.phases = 'Every phase needs a name, and its end date can\'t be before its start date.';
-    } else if (n === 2 && phases.some(p => p.startDate < startDate || p.endDate > endDate)) {
+    } else if (stepName === 'Phases' && phases.some(p => p.startDate < startDate || p.endDate > endDate)) {
       newErrors.phases = 'Every phase has to fit inside the project\'s time.';
+    }
+    if (stepName === 'Epics' && structure.phases && epics.some(e => !phases.some(p => p.key === e.phaseKey))) {
+      newErrors.epics = 'Every epic goes in a phase. Choose one for each epic, or add phases first.';
+    } else if (stepName === 'Epics') {
+      const late = epics.find(ep => ep.own && rangeError(ep.own, epicWindowOf(ep)));
+      if (late) newErrors.epics = `"${late.name}": ${rangeError(late.own!, epicWindowOf(late))}.`;
+    }
+    if (stepName === 'Stories' && storyParentLabel && stories.some(st => !storyParents.some(p => p.key === st.parentKey))) {
+      newErrors.stories = `Every story goes in ${storyParentLabel === 'epic' ? 'an epic' : 'a phase'}. Choose one for each story.`;
+    } else if (stepName === 'Stories') {
+      const late = stories.find(st => st.own && rangeError(st.own, storyWindowOf(st.parentKey)));
+      if (late) newErrors.stories = `"${late.title}": ${rangeError(late.own!, storyWindowOf(late.parentKey))}.`;
     }
     return newErrors;
   };
@@ -149,7 +199,7 @@ export default function CreateProjectPage() {
       }
     }
 
-    const newProjectId = `p-${Date.now().toString(36)}`;
+    const newProjectId = `p-${stamp().toString(36)}`;
     const newProject = {
       id: newProjectId,
       name: name.trim(),
@@ -182,6 +232,7 @@ export default function CreateProjectPage() {
       timelineStatus: 'on_schedule' as const,
       totalWorkDays: 0,
       durationUnit: timeline.unit,
+      structure,
       mainBoardName: mainBoardName.trim() || undefined,
       extraBoards: extraBoards.map((boardName, i) => ({ id: `board-${newProjectId}-${i}`, name: boardName })),
       createdAt: new Date().toISOString(),
@@ -190,8 +241,12 @@ export default function CreateProjectPage() {
 
     addProject(newProject);
     // The plan set up in the form: phases (saved as milestones), then epics inside them
-    const phaseIds = new Map(phases.map((p, i) => [p.key, `ms-${newProjectId}-${i}`]));
-    phases.forEach(p =>
+    const usedPhases = structure.phases ? phases : [];
+    const usedEpics = structure.epics ? epics : [];
+    const usedStories = structure.stories ? stories : [];
+    const phaseIds = new Map(usedPhases.map((p, i) => [p.key, `ms-${newProjectId}-${i}`]));
+    const epicIds = new Map(usedEpics.map((ep, i) => [ep.key, `epic-${newProjectId}-${i}`]));
+    usedPhases.forEach(p =>
       addMilestone({
         id: phaseIds.get(p.key),
         projectId: newProjectId,
@@ -203,23 +258,38 @@ export default function CreateProjectPage() {
         status: 'upcoming',
       })
     );
-    epics.forEach((ep, i) =>
+    usedEpics.forEach(ep =>
       addEpic({
-        id: `epic-${newProjectId}-${i}`,
+        id: epicIds.get(ep.key),
         projectId: newProjectId,
         name: ep.name,
         phaseId: phaseIds.get(ep.phaseKey),
         color: ep.color,
+        startDate: ep.own?.start,
+        endDate: ep.own?.end,
+        durationUnit: ep.own?.unit,
+      })
+    );
+    usedStories.forEach((st, i) =>
+      addStory({
+        id: `story-${newProjectId}-${i}`,
+        projectId: newProjectId,
+        title: st.title,
+        epicId: structure.epics ? epicIds.get(st.parentKey) : undefined,
+        phaseId: !structure.epics && structure.phases ? phaseIds.get(st.parentKey) : undefined,
+        startDate: st.own?.start,
+        endDate: st.own?.end,
+        durationUnit: st.own?.unit,
       })
     );
     addActivity({
-      id: `act-${Date.now()}`,
+      id: `act-${stamp()}`,
       actorId: currentUser?.id || 'u2',
       actorName: currentUser?.name || 'Marcus Webb',
       action: 'project.created',
       resource: 'Project',
       resourceId: newProjectId,
-      detail: `Created project ${newProject.name} (${newProject.key})${phases.length ? ` with ${phases.length} phases` : ''}${epics.length ? ` and ${epics.length} epics` : ''}`,
+      detail: `Created project ${newProject.name} (${newProject.key})${usedPhases.length ? ` with ${usedPhases.length} phases` : ''}${usedEpics.length ? ` and ${usedEpics.length} epics` : ''}`,
       timestamp: new Date().toISOString(),
     });
 
@@ -271,7 +341,7 @@ export default function CreateProjectPage() {
             >
               {i < step ? <Check className="w-3 h-3" /> : <span className="font-mono">{i + 1}</span>}
               {label}
-              {(i === 2 || i === 3 || i === 4) && <span className="font-normal opacity-70">(optional)</span>}
+              {OPTIONAL_STEPS.includes(label) && <span className="font-normal opacity-70">(optional)</span>}
             </button>
           </li>
         ))}
@@ -279,7 +349,7 @@ export default function CreateProjectPage() {
 
       {/* Form Container */}
       <form onSubmit={handleSubmit} className="bg-paper-elevated border border-line rounded-2xl shadow-xl p-6 sm:p-8 space-y-6">
-        {step === 0 && (<>
+        {current === 'Basics' && (<>
         {/* Basic Info */}
         <div className="space-y-4">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
@@ -409,7 +479,18 @@ export default function CreateProjectPage() {
         </div>
         </>)}
 
-        {step === 1 && (
+        {current === 'Structure' && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">Structure</h3>
+            <p className="text-xs text-muted">
+              How work is organised in this project. Each level is created inside the one above it, and tasks go in the lowest level.
+              Everything here can be changed later in Project Settings.
+            </p>
+            <StructureEditor value={structure} onChange={setStructure} />
+          </div>
+        )}
+
+        {current === 'Team & timeline' && (
         /* Ownership, Members & Schedule */
         <div className="space-y-4 pt-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
@@ -517,7 +598,7 @@ export default function CreateProjectPage() {
         </div>
         )}
 
-        {step === 2 && (
+        {current === 'Phases' && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
               <Flag className="w-3.5 h-3.5 text-flash-deep" /> Phases
@@ -527,16 +608,25 @@ export default function CreateProjectPage() {
           </div>
         )}
 
-        {step === 3 && (
+        {current === 'Epics' && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
               <Layers className="w-3.5 h-3.5 text-flash-deep" /> Epics
             </h3>
-            <EpicsStep epics={epics} onChange={setEpics} phases={phases} />
+            <EpicsStep epics={epics} onChange={setEpics} phases={structure.phases ? phases : []} requirePhase={structure.phases} project={projectTime} />
+            {errors.epics && <p className="text-xs text-danger">{errors.epics}</p>}
           </div>
         )}
 
-        {step === 4 && (
+        {current === 'Stories' && (
+          <div className="space-y-3">
+            <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">Stories</h3>
+            <StoriesStep stories={stories} onChange={setStories} parents={storyParents} parentLabel={storyParentLabel} windowOf={storyWindowOf} />
+            {errors.stories && <p className="text-xs text-danger">{errors.stories}</p>}
+          </div>
+        )}
+
+        {current === 'Boards' && (
           <div className="space-y-3">
             <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2 flex items-center gap-1.5">
               <Rows3 className="w-3.5 h-3.5 text-flash-deep" /> Boards
@@ -550,7 +640,7 @@ export default function CreateProjectPage() {
           </div>
         )}
 
-        {step === 5 && (<>
+        {current === 'Goals & review' && (<>
         {/* Goals Checklist */}
         <div className="space-y-3 pt-2">
           <h3 className="text-xs font-bold uppercase tracking-wider text-ink border-b border-line pb-2">
@@ -597,13 +687,27 @@ export default function CreateProjectPage() {
             <div><dt className="text-muted">Project</dt><dd className="font-semibold text-ink">{name || '—'} <span className="font-mono text-muted">({key || '—'})</span></dd></div>
             <div><dt className="text-muted">Timeline</dt><dd className="font-mono text-ink">{startDate} → {endDate} ({formatDuration(startDate, endDate, timeline.unit)})</dd></div>
             <div>
-              <dt className="text-muted">Phases</dt>
-              <dd className="text-ink">{phases.length ? phases.map(p => p.name).join(' → ') : 'None (can be added on the Plan tab)'}</dd>
+              <dt className="text-muted">Structure</dt>
+              <dd className="text-ink"><StructureChain structure={structure} /></dd>
             </div>
-            <div>
-              <dt className="text-muted">Epics</dt>
-              <dd className="text-ink">{epics.length ? epics.map(e => e.name).join(', ') : 'None (can be added on the Plan tab)'}</dd>
-            </div>
+            {structure.phases && (
+              <div>
+                <dt className="text-muted">Phases</dt>
+                <dd className="text-ink">{phases.length ? phases.map(p => p.name).join(' → ') : 'None yet (add them on the Plan tab)'}</dd>
+              </div>
+            )}
+            {structure.epics && (
+              <div>
+                <dt className="text-muted">Epics</dt>
+                <dd className="text-ink">{epics.length ? epics.map(e => e.name).join(', ') : 'None yet (add them on the Plan tab)'}</dd>
+              </div>
+            )}
+            {structure.stories && (
+              <div>
+                <dt className="text-muted">Stories</dt>
+                <dd className="text-ink">{stories.length ? `${stories.length} stor${stories.length === 1 ? 'y' : 'ies'}` : 'None yet (add them on the Plan tab)'}</dd>
+              </div>
+            )}
             <div>
               <dt className="text-muted">Boards</dt>
               <dd className="text-ink">{[mainBoardName || 'Main board', ...extraBoards].join(', ')}</dd>
@@ -638,7 +742,11 @@ export default function CreateProjectPage() {
           >
             {step < STEPS.length - 1 ? (
               <>
-                <span>{(step === 2 && phases.length === 0) || (step === 3 && epics.length === 0) ? 'Skip' : 'Next'}: {STEPS[step + 1]}</span>
+                <span>
+                  {(current === 'Phases' && phases.length === 0) || (current === 'Epics' && epics.length === 0) || (current === 'Stories' && stories.length === 0)
+                    ? 'Skip'
+                    : 'Next'}: {STEPS[step + 1]}
+                </span>
                 <ArrowRight className="w-4 h-4" />
               </>
             ) : (

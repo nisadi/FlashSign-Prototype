@@ -17,6 +17,7 @@ import { inProgressSince } from '@/lib/subtasks';
 import { formatMinutes, sessionMinutes } from '@/lib/agent-connection';
 import { useNow } from '@/lib/use-now';
 import { formatDays, type DurationUnit } from '@/lib/durations';
+import { projectStructure } from '@/lib/structure';
 import { EstimateField } from '@/components/shared/duration-fields';
 import { notify } from '@/components/shared/toaster';
 import {
@@ -104,6 +105,7 @@ export default function ProjectTasksListPage({
   const boards = projectBoards(project);
 
   const projectEpics = epics.filter((e) => e.projectId === project.id);
+  const structure = projectStructure(project);
 
   /** Whole days a task has been in progress (since its last move into In Progress) */
   const daysInProgress = (task: Task): number | undefined => {
@@ -487,16 +489,18 @@ export default function ProjectTasksListPage({
 
                       {assignee && <Avatar user={assignee} size="xs" />}
 
-                      {/* Add Subtask Button */}
-                      <Button
-                        variant="secondary"
-                        size="xs"
-                        icon={Plus}
-                        onClick={() => setSubtaskParentTask(mainTask)}
-                        title="Add nested subtask"
-                      >
-                        Add Subtask
-                      </Button>
+                      {/* Add Subtask Button (only in projects that use subtasks) */}
+                      {structure.subtasks && (
+                        <Button
+                          variant="secondary"
+                          size="xs"
+                          icon={Plus}
+                          onClick={() => setSubtaskParentTask(mainTask)}
+                          title="Add nested subtask"
+                        >
+                          Add Subtask
+                        </Button>
+                      )}
 
                       {/* Delete Main Task */}
                       <button

@@ -12,6 +12,7 @@ import { PlacementSelect } from '@/components/tasks/placement-select';
 import { SubtaskStateSelect } from '@/components/tasks/subtask-state-select';
 import { PlanPicker } from '@/components/plan/plan-picker';
 import { planOf } from '@/lib/plan';
+import { inBacklog, projectStructure } from '@/lib/structure';
 import { EstimateField } from '@/components/shared/duration-fields';
 import { formatDays, type DurationUnit } from '@/lib/durations';
 import { notify } from '@/components/shared/toaster';
@@ -56,6 +57,7 @@ export function TaskDetailDrawer() {
   const milestone = milestones.find(m => m.id === task.milestoneId);
   const parentTask = task.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
   const subtasks = tasks.filter(t => t.parentId === task.id);
+  const structure = projectStructure(project);
   const boards = projectBoards(project);
   const placement = placementOf(task, boards);
   // The Journey matters once a project has more than one board
@@ -280,12 +282,19 @@ export function TaskDetailDrawer() {
               );
             })()
           ) : (
-            <PlanPicker
-              projectId={task.projectId}
-              value={{ milestoneId: task.milestoneId, epicId: task.epicId, storyId: task.storyId }}
-              onChange={links => setTaskPlan(task.id, links)}
-              selectClassName="py-1 rounded"
-            />
+            <>
+              <PlanPicker
+                projectId={task.projectId}
+                value={{ milestoneId: task.milestoneId, epicId: task.epicId, storyId: task.storyId }}
+                onChange={links => setTaskPlan(task.id, links)}
+                // With moving turned off, a placed task stays where it is; a Backlog task can still be placed
+                disabled={!structure.allowMove && !inBacklog(task)}
+                selectClassName="py-1 rounded"
+              />
+              {!structure.allowMove && !inBacklog(task) && (
+                <p className="mt-1 text-[10px] text-muted">Moving tasks to another parent is turned off for this project.</p>
+              )}
+            </>
           )}
         </div>
 
@@ -453,7 +462,7 @@ export function TaskDetailDrawer() {
           {activeTab === 'checklist' && (
             <div className="space-y-6">
               {/* Hierarchical Subtasks Section (one level: subtasks don't get their own) */}
-              {!parentTask && (
+              {!parentTask && (structure.subtasks || subtasks.length > 0) && (
               <div className="space-y-3">
                 <div className="flex items-center justify-between pb-1 border-b border-line">
                   <h4 className="text-xs font-bold text-ink uppercase tracking-wider flex items-center gap-1.5">
@@ -506,7 +515,8 @@ export function TaskDetailDrawer() {
                   </div>
                 )}
 
-                {/* Quick Add Subtask Form */}
+                {/* Quick Add Subtask Form (only in projects that use subtasks) */}
+                {structure.subtasks && (
                 <form
                   onSubmit={e => {
                     e.preventDefault();
@@ -556,6 +566,7 @@ export function TaskDetailDrawer() {
                     </button>
                   </div>
                 </form>
+                )}
               </div>
               )}
 

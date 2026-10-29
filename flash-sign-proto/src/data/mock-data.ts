@@ -229,6 +229,7 @@ export const MOCK_PROJECTS: Project[] = [
     originalStartDate: d(-60), originalEndDate: d(30), originalDuration: 90,
     currentStartDate: d(-60), currentEndDate: d(46), currentDuration: 106,
     timelineDifference: 16, timelineStatus: 'extended', totalWorkDays: 98, durationUnit: 'months',
+    structure: { phases: true, epics: true, stories: true, subtasks: true, backlog: true, allowMove: true },
     createdAt: d(-60), updatedAt: d(-1),
   },
   {
@@ -340,6 +341,8 @@ export const MOCK_STORIES: Story[] = [
   { id: 'st4', projectId: 'p1', epicId: 'e4', title: 'As an auditor, I can see every signing event in order', priority: 'high', createdAt: d(-40), updatedAt: d(-40) },
   { id: 'st5', projectId: 'p1', epicId: 'e4', title: 'As a legal team, our signatures are valid under eIDAS', priority: 'high', createdAt: d(-40), updatedAt: d(-40) },
   { id: 'st6', projectId: 'p1', epicId: 'e5', title: 'As an admin, I can send one agreement to a list of recipients', acceptanceCriteria: 'CSV upload with up to 500 recipients.', priority: 'high', createdAt: d(-30), updatedAt: d(-30) },
+  { id: 'st8', projectId: 'p1', epicId: 'e6', title: 'As a user, the app feels fast and comfortable to use', acceptanceCriteria: 'Documents render in under a second; dark mode follows the system.', priority: 'high', createdAt: d(-30), updatedAt: d(-30) },
+  { id: 'st9', projectId: 'p1', epicId: 'e6', title: 'As a signer, I receive a certificate when signing is complete', priority: 'medium', createdAt: d(-30), updatedAt: d(-30) },
 ];
 
 /** Which epic and story each Flash Sign v2.0 task belongs to; the phase follows the epic */
@@ -351,11 +354,10 @@ const TASK_PLAN_LINKS: Record<string, Pick<Task, 'epicId' | 'storyId' | 'milesto
   task4: { epicId: 'e4', storyId: 'st4', milestoneId: 'm9' },
   task30: { epicId: 'e4', storyId: 'st5', milestoneId: 'm9' },
   task5: { epicId: 'e5', storyId: 'st6', milestoneId: 'm2' },
-  // Directly under an epic (no story) and directly under a phase (no epic): both levels are optional
-  task6: { epicId: 'e6', milestoneId: 'm2' },
-  task7: { epicId: 'e6', milestoneId: 'm2' },
-  task8: { epicId: 'e6', milestoneId: 'm2' },
-  task35: { milestoneId: 'm1' },
+  task6: { epicId: 'e6', storyId: 'st8', milestoneId: 'm2' },
+  task7: { epicId: 'e6', storyId: 'st9', milestoneId: 'm2' },
+  task8: { epicId: 'e6', storyId: 'st8', milestoneId: 'm2' },
+  // task35 (FSV2-111) is in the Backlog: not placed in a story yet
 };
 
 const RAW_TASKS: Task[] = [

@@ -25,6 +25,7 @@ import type { TaskPriority } from '@/types';
 import { placeIn, projectBoards } from '@/lib/board-columns';
 import { PlacementSelect } from '@/components/tasks/placement-select';
 import { PlanPicker } from '@/components/plan/plan-picker';
+import { projectStructure, taskLinksError } from '@/lib/structure';
 import { TaskTimeFields, rangeError, type TaskTime } from '@/components/shared/duration-fields';
 import { subtaskWindow, taskWindow } from '@/lib/schedule';
 import type { PlanLinks } from '@/lib/plan';
@@ -43,7 +44,6 @@ export default function CreateTaskPage({
 
   const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
   const projectSprints = sprints.filter((s) => s.projectId === projectId);
-  const projectMilestones = milestones.filter((m) => m.projectId === projectId);
   const existingMainTasks = tasks.filter((t) => t.projectId === projectId && !t.parentId);
   const boards = projectBoards(project);
 
@@ -54,14 +54,15 @@ export default function CreateTaskPage({
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [assigneeId, setAssigneeId] = useState(projectMembers[0]?.id || users[0]?.id || '');
   const [sprintId, setSprintId] = useState('');
-  const [planLinks, setPlanLinks] = useState<PlanLinks>({ milestoneId: projectMilestones[0]?.id });
+  const [planLinks, setPlanLinks] = useState<PlanLinks>({});
+  const structure = projectStructure(project);
   const [parentId, setParentId] = useState('');
   const [time, setTime] = useState<TaskTime>({ days: 3, unit: 'days', start: '', due: '' });
   const [labelInput, setLabelInput] = useState('');
   const [labels, setLabels] = useState<string[]>(['Frontend']);
   const [checklists, setChecklists] = useState<string[]>([]);
   const [newChecklistText, setNewChecklistText] = useState('');
-  const [errors, setErrors] = useState<{ title?: string; duration?: string; dates?: string }>({});
+  const [errors, setErrors] = useState<{ title?: string; duration?: string; dates?: string; plan?: string }>({});
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const handleAddLabel = () => {
@@ -93,7 +94,7 @@ export default function CreateTaskPage({
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const newErrors: { title?: string; duration?: string; dates?: string } = {};
+    const newErrors: { title?: string; duration?: string; dates?: string; plan?: string } = {};
 
     if (!title.trim()) {
       newErrors.title = 'Task title is required.';
@@ -105,6 +106,8 @@ export default function CreateTaskPage({
 
     const dateProblem = rangeError({ start: time.start, end: time.due }, timeWindow);
     if (dateProblem) newErrors.dates = `${dateProblem}.`;
+    const planProblem = parentTask ? undefined : taskLinksError(planLinks, structure);
+    if (planProblem) newErrors.plan = planProblem;
 
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors);
@@ -250,6 +253,7 @@ export default function CreateTaskPage({
 
             {/* Plan: Phase → Epic → Story (a subtask follows its task) */}
             <div className="space-y-3">
+              {structure.subtasks && (
               <div>
                 <label className="block text-xs font-semibold text-ink mb-1.5">
                   Parent Main Task (Optional — Makes this a Subtask)
@@ -267,12 +271,25 @@ export default function CreateTaskPage({
                   ))}
                 </select>
               </div>
+              )}
               {!parentTask && (
                 <div>
                   <span className="block text-xs font-semibold text-ink mb-1.5 flex items-center gap-1">
                     <Flag className="w-3.5 h-3.5 text-flash-deep" /> Plan
                   </span>
-                  <PlanPicker projectId={projectId} value={planLinks} onChange={setPlanLinks} />
+                  <PlanPicker
+                    projectId={projectId}
+                    value={planLinks}
+                    onChange={(links) => {
+                      setPlanLinks(links);
+                      setErrors((prev) => ({ ...prev, plan: undefined }));
+                    }}
+                  />
+                  {errors.plan && (
+                    <p className="mt-1 text-danger text-[11px] flex items-center gap-1">
+                      <AlertCircle className="w-3.5 h-3.5" /> {errors.plan}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -9,6 +9,7 @@ import { Button } from '@/components/shared/ui';
 import { EPIC_COLORS } from '@/lib/plan';
 import { epicWindow, projectWindow, storyWindow, type PlanData, type TimeWindow } from '@/lib/schedule';
 import { naturalUnit } from '@/lib/durations';
+import { projectStructure } from '@/lib/structure';
 import { DateRangeField, WindowHint, rangeError, type DateRange } from '@/components/shared/duration-fields';
 import { cn } from '@/lib/utils';
 import type { Epic, Milestone, Story, TaskPriority } from '@/types';
@@ -22,6 +23,16 @@ function usePlanData(projectId: string): PlanData | undefined {
   const project = projects.find(p => p.id === projectId);
   return project ? { project, milestones, epics, stories, tasks } : undefined;
 }
+
+/** The project's structure: which parent each level needs, and whether items may move */
+function useStructure(projectId: string) {
+  const { projects } = useApp();
+  const project = projects.find(p => p.id === projectId);
+  return projectStructure(project);
+}
+
+/** Shown under a parent picker that can't be changed because moving is turned off */
+const LockedNote = () => <p className="mt-1 text-[11px] text-muted">Moving to another parent is turned off for this project.</p>;
 
 /**
  * An epic's or story's time: either all of its parent's time, or its own dates inside it.
@@ -110,6 +121,8 @@ export function PhaseModal({ projectId, phase, onClose }: { projectId: string; p
 export function EpicModal({ projectId, epic, defaultPhaseId, onClose }: { projectId: string; epic?: Epic; defaultPhaseId?: string; onClose: () => void }) {
   const { milestones, epics, addEpic, updateEpic } = useApp();
   const data = usePlanData(projectId);
+  const structure = useStructure(projectId);
+  const locked = Boolean(epic) && !structure.allowMove;
   const phases = milestones.filter(m => m.projectId === projectId);
   const used = new Set(epics.filter(e => e.projectId === projectId).map(e => e.color));
   const [name, setName] = useState(epic?.name ?? '');
@@ -121,7 +134,8 @@ export function EpicModal({ projectId, epic, defaultPhaseId, onClose }: { projec
   );
   const parentWindow = data ? epicWindow(phaseId || undefined, data) : undefined;
   const error = own ? rangeError(own, parentWindow) : undefined;
-  const canSave = name.trim() && !error;
+  const needsPhase = structure.phases && !phaseId;
+  const canSave = name.trim() && !error && !needsPhase;
 
   const save = () => {
     if (!canSave) return;
@@ -145,12 +159,15 @@ export function EpicModal({ projectId, epic, defaultPhaseId, onClose }: { projec
         <Field label="Description">
           <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} className={input} />
         </Field>
-        <Field label="Phase">
-          <select value={phaseId} onChange={e => setPhaseId(e.target.value)} className={input}>
-            <option value="">No phase</option>
-            {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
-          </select>
-        </Field>
+        {structure.phases && (
+          <Field label="Phase" required>
+            <select value={phaseId} onChange={e => setPhaseId(e.target.value)} disabled={locked} className={cn(input, needsPhase && 'border-danger')}>
+              <option value="">Choose a phase…</option>
+              {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+            </select>
+            {locked && <LockedNote />}
+          </Field>
+        )}
         {epic && epic.phaseId !== (phaseId || undefined) && (
           <p className="text-[11px] text-waiting">Its tasks move to the new phase too.</p>
         )}
@@ -188,10 +205,17 @@ export function EpicModal({ projectId, epic, defaultPhaseId, onClose }: { projec
 }
 
 /** Create or edit a story: a user need, optionally inside an epic. */
-export function StoryModal({ projectId, story, defaultEpicId, onClose }: { projectId: string; story?: Story; defaultEpicId?: string; onClose: () => void }) {
-  const { epics, addStory, updateStory } = useApp();
+export function StoryModal({ projectId, story, defaultEpicId, defaultPhaseId, onClose }: {
+  projectId: string; story?: Story; defaultEpicId?: string; defaultPhaseId?: string; onClose: () => void;
+}) {
+  const { epics, milestones, addStory, updateStory } = useApp();
   const data = usePlanData(projectId);
+  const structure = useStructure(projectId);
+  const locked = Boolean(story) && !structure.allowMove;
   const projectEpics = epics.filter(e => e.projectId === projectId);
+  const phases = milestones.filter(m => m.projectId === projectId);
+  // Without epics, a story sits in a phase
+  const [phaseId, setPhaseId] = useState(story?.phaseId ?? defaultPhaseId ?? '');
   const [title, setTitle] = useState(story?.title ?? '');
   const [description, setDescription] = useState(story?.description ?? '');
   const [acceptanceCriteria, setAcceptanceCriteria] = useState(story?.acceptanceCriteria ?? '');
@@ -200,9 +224,11 @@ export function StoryModal({ projectId, story, defaultEpicId, onClose }: { proje
   const [own, setOwn] = useState<DateRange | undefined>(() =>
     story?.startDate && story.endDate ? { start: story.startDate, end: story.endDate, unit: story.durationUnit ?? naturalUnit(story.startDate, story.endDate) } : undefined
   );
-  const parentWindow = data ? storyWindow(epicId || undefined, data) : undefined;
+  const parentLink = structure.epics ? { epicId: epicId || undefined } : { phaseId: (structure.phases && phaseId) || undefined };
+  const parentWindow = data ? storyWindow(parentLink, data) : undefined;
   const error = own ? rangeError(own, parentWindow) : undefined;
-  const canSave = title.trim() && !error;
+  const needsParent = structure.epics ? !epicId : structure.phases && !phaseId;
+  const canSave = title.trim() && !error && !needsParent;
 
   const save = () => {
     if (!canSave) return;
@@ -210,7 +236,8 @@ export function StoryModal({ projectId, story, defaultEpicId, onClose }: { proje
       title: title.trim(),
       description: description.trim(),
       acceptanceCriteria: acceptanceCriteria.trim() || undefined,
-      epicId: epicId || undefined,
+      epicId: parentLink.epicId,
+      phaseId: parentLink.phaseId,
       priority,
       startDate: own?.start, endDate: own?.end, durationUnit: own?.unit,
     };
@@ -234,12 +261,23 @@ export function StoryModal({ projectId, story, defaultEpicId, onClose }: { proje
           <textarea rows={2} value={description} onChange={e => setDescription(e.target.value)} className={input} />
         </Field>
         <div className="grid grid-cols-2 gap-3">
-          <Field label="Epic">
-            <select value={epicId} onChange={e => setEpicId(e.target.value)} className={input}>
-              <option value="">No epic</option>
-              {projectEpics.map(ep => <option key={ep.id} value={ep.id}>{ep.name}</option>)}
-            </select>
-          </Field>
+          {structure.epics ? (
+            <Field label="Epic" required>
+              <select value={epicId} onChange={e => setEpicId(e.target.value)} disabled={locked} className={cn(input, needsParent && 'border-danger')}>
+                <option value="">Choose an epic…</option>
+                {projectEpics.map(ep => <option key={ep.id} value={ep.id}>{ep.name}</option>)}
+              </select>
+              {locked && <LockedNote />}
+            </Field>
+          ) : structure.phases ? (
+            <Field label="Phase" required>
+              <select value={phaseId} onChange={e => setPhaseId(e.target.value)} disabled={locked} className={cn(input, needsParent && 'border-danger')}>
+                <option value="">Choose a phase…</option>
+                {phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}
+              </select>
+              {locked && <LockedNote />}
+            </Field>
+          ) : <span />}
           <Field label="Priority">
             <select value={priority} onChange={e => setPriority(e.target.value as TaskPriority)} className={input}>
               <option value="low">Low</option>
@@ -249,8 +287,8 @@ export function StoryModal({ projectId, story, defaultEpicId, onClose }: { proje
             </select>
           </Field>
         </div>
-        {story && story.epicId !== (epicId || undefined) && (
-          <p className="text-[11px] text-waiting">Its tasks move to the new epic (and its phase) too.</p>
+        {story && (story.epicId !== parentLink.epicId || (!structure.epics && story.phaseId !== parentLink.phaseId)) && (
+          <p className="text-[11px] text-waiting">Its tasks move with it.</p>
         )}
         {parentWindow && (
           <div>

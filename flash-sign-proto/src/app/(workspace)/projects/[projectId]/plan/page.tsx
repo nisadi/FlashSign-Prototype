@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useState } from 'react';
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import {
   Flag, Layers, BookOpen, Plus, Pencil, Trash2, ChevronDown, CheckCircle2, RotateCcw, ArrowRight, CornerDownRight, Map,
@@ -18,6 +19,9 @@ import { withSubtasks, type PlanLinks } from '@/lib/plan';
 import { progressOfTasks, subtasksOf } from '@/lib/subtasks';
 import { canCreateProject } from '@/lib/permissions';
 import {
+  LEVEL_LABEL, LINK_KEY, inBacklog, levelsOf, projectStructure, taskLevel, taskPlacementIssue, type PlanLevel,
+} from '@/lib/structure';
+import {
   epicSpan, epicWindow, forecastOf, outsideWindow, phaseSpan, projectWindow, storySpan, storyWindow, taskWindow,
   type PlanData, type TimeWindow,
 } from '@/lib/schedule';
@@ -29,13 +33,13 @@ import type { Epic, Milestone, Story, Task } from '@/types';
 type Dialog =
   | { kind: 'phase'; phase?: Milestone }
   | { kind: 'epic'; epic?: Epic; phaseId?: string }
-  | { kind: 'story'; story?: Story; epicId?: string }
+  | { kind: 'story'; story?: Story; epicId?: string; phaseId?: string }
   | { kind: 'task'; links: PlanLinks }
   | { kind: 'delete'; title: string; message: string; run: () => void };
 
 /**
- * The project plan as a tree: Phase → Epic → Story → Task (subtasks show as a count).
- * Every level above Task is optional, so tasks can also sit directly in an epic or a phase.
+ * The project plan as a tree, following the project's structure (e.g. Phase → Epic → Story →
+ * Task). Each card only offers the level directly below it; tasks go in the lowest level.
  */
 export default function ProjectPlanPage({ params }: { params: Promise<{ projectId: string }> }) {
   const { projectId } = use(params);
@@ -63,13 +67,27 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
   const toggle = (id: string) => setCollapsed(c => ({ ...c, [id]: !c[id] }));
   const progressOf = (scope: Task[]) => progressOfTasks(withSubtasks(scope, projectTasks));
 
-  const tasksInPhase = (phaseId: string) => mainTasks.filter(t => t.milestoneId === phaseId);
-  const tasksInEpic = (epicId: string) => mainTasks.filter(t => t.epicId === epicId);
-  const tasksInStory = (storyId: string) => mainTasks.filter(t => t.storyId === storyId);
+  // ── Structure: which levels this project uses ────────────────────────────────
+  const structure = projectStructure(project);
+  const levels = levelsOf(structure);
+  const lowest = taskLevel(structure);
+  /** What gets created inside a level: the next level in use below it, or tasks */
+  const childOf = (level: PlanLevel): PlanLevel | 'task' => levels[levels.indexOf(level) + 1] ?? 'task';
 
-  const unphasedEpics = projectEpics.filter(e => !e.phaseId || !phases.some(p => p.id === e.phaseId));
-  const looseStories = projectStories.filter(s => !s.epicId);
-  const unplannedTasks = mainTasks.filter(t => !t.milestoneId && !t.epicId && !t.storyId);
+  const tasksIn = (level: PlanLevel, id: string) => mainTasks.filter(t => t[LINK_KEY[level]] === id);
+  /** Tasks in a level that should be one level further down, e.g. in a phase but not in a story */
+  const misplacedIn = (level: PlanLevel, id: string) => (level === lowest ? [] : tasksIn(level, id).filter(t => taskPlacementIssue(t, structure)));
+  const backlogTasks = mainTasks.filter(t => inBacklog(t));
+
+  const epicsInPhase = (phaseId: string) => projectEpics.filter(e => e.phaseId === phaseId);
+  const storiesIn = (parent: 'phase' | 'epic', id: string) =>
+    projectStories.filter(st => (parent === 'epic' ? st.epicId === id : !st.epicId && st.phaseId === id));
+
+  // Items whose parent level is in use but which have no parent: shown under "Needs a place"
+  const homelessEpics = structure.phases ? projectEpics.filter(e => !e.phaseId || !phases.some(p => p.id === e.phaseId)) : [];
+  const homelessStories = projectStories.filter(st =>
+    structure.epics ? !st.epicId || !projectEpics.some(e => e.id === st.epicId) : structure.phases && (!st.phaseId || !phases.some(p => p.id === st.phaseId))
+  );
 
   // ── Time at each level ──────────────────────────────────────────────────────
   const planData: PlanData = { project, milestones, epics, stories, tasks };
@@ -118,6 +136,9 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
             {subs.filter(s => s.status === 'done').length}/{subs.length} subtasks
           </span>
         )}
+        {taskPlacementIssue(task, structure) && !inBacklog(task) && (
+          <span className="text-[10px] font-semibold text-waiting">{taskPlacementIssue(task, structure)}</span>
+        )}
         {(() => {
           const outside = outsideWindow(task.startDate, task.dueDate, taskWindow(task, planData));
           return outside ? <span className="text-[10px] font-semibold text-danger">{outside}</span> : null;
@@ -131,7 +152,8 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
 
   /** "+ Link existing task" for a story, epic or phase */
   const linkTask = (links: PlanLinks, exclude: (t: Task) => boolean) => {
-    const options = mainTasks.filter(t => !exclude(t));
+    // With moving turned off, only tasks still in the Backlog can be placed
+    const options = mainTasks.filter(t => !exclude(t) && (structure.allowMove || inBacklog(t)));
     if (!canEdit || options.length === 0) return null;
     return (
       <select
@@ -169,8 +191,33 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
     </button>
   );
 
+  /** The one "+" a card gets: the level directly below it in this project's structure */
+  const addChild = (level: PlanLevel, id: string) => {
+    const child = childOf(level);
+    const label = child === 'task' ? 'Task' : child === 'epic' ? 'Epic' : 'Story';
+    const open = () =>
+      child === 'task' ? setDialog({ kind: 'task', links: { [LINK_KEY[level]]: id } })
+        : child === 'epic' ? setDialog({ kind: 'epic', phaseId: id })
+          : setDialog({ kind: 'story', epicId: level === 'epic' ? id : undefined, phaseId: level === 'phase' ? id : undefined });
+    return <Button variant={level === 'phase' ? 'secondary' : 'ghost'} size="xs" icon={Plus} onClick={open}>{label}</Button>;
+  };
+
+  const article = (level: PlanLevel | 'task') => (level === 'epic' ? 'an' : 'a');
+
+  /** Tasks sitting at a level above where this project keeps tasks */
+  const misplacedGroup = (list: Task[]) =>
+    list.length > 0 && lowest ? (
+      <div className="space-y-1 rounded-lg border border-waiting/30 bg-waiting/5 p-2">
+        <p className="text-[10px] font-semibold uppercase tracking-wider text-waiting">
+          Needs {article(lowest)} {LEVEL_LABEL[lowest].one} ({list.length})
+        </p>
+        <p className="text-[11px] text-muted">Open a task and choose its {LEVEL_LABEL[lowest].one}.</p>
+        <ul className="space-y-1">{list.map(t => taskRow(t))}</ul>
+      </div>
+    ) : null;
+
   const storyBlock = (story: Story) => {
-    const scope = tasksInStory(story.id);
+    const scope = tasksIn('story', story.id);
     return (
       <div key={story.id} className="rounded-xl border border-line bg-paper-elevated">
         <div className="flex flex-wrap items-start justify-between gap-2 px-3 py-2">
@@ -180,14 +227,14 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
             <span className="min-w-0">
               <span className="block text-xs font-semibold text-ink">{story.title}</span>
               {story.acceptanceCriteria && <span className="block text-[11px] text-muted">✓ {story.acceptanceCriteria}</span>}
-              {timeLine(storySpan(story, planData), story.durationUnit, scope, storyWindow(story.epicId, planData), !(story.startDate && story.endDate))}
+              {timeLine(storySpan(story, planData), story.durationUnit, scope, storyWindow(story, planData), !(story.startDate && story.endDate))}
             </span>
           </button>
           <div className="flex items-center gap-2">
             <PriorityBadge priority={story.priority} showLabel={false} />
             <span className="text-[10px] text-muted">{scope.length} task{scope.length === 1 ? '' : 's'} · {progressOf(scope)}%</span>
             {actions(<>
-              <Button variant="ghost" size="xs" icon={Plus} onClick={() => setDialog({ kind: 'task', links: { storyId: story.id } })}>Task</Button>
+              {addChild('story', story.id)}
               {iconAction(Pencil, "Edit story", () => setDialog({ kind: 'story', story }))}
               {iconAction(Trash2, "Delete story", () => confirmDelete('Delete story', `"${story.title}" will be deleted. Its ${scope.length} task(s) stay in the epic.`, () => deleteStory(story.id)), true)}
             </>)}
@@ -208,9 +255,9 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
   };
 
   const epicBlock = (epic: Epic) => {
-    const scope = tasksInEpic(epic.id);
-    const epicStories = projectStories.filter(s => s.epicId === epic.id);
-    const direct = scope.filter(t => !t.storyId);
+    const scope = tasksIn('epic', epic.id);
+    const epicStories = structure.stories ? storiesIn('epic', epic.id) : [];
+    const isLowest = lowest === 'epic';
     return (
       <div key={epic.id} className="rounded-xl border border-line bg-paper overflow-hidden" style={{ borderLeft: `4px solid ${epic.color}` }}>
         <div className="flex flex-wrap items-start justify-between gap-2 px-3 py-2.5">
@@ -225,13 +272,12 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
           </button>
           <div className="flex items-center gap-2">
             <span className="text-[10px] text-muted">
-              {epicStories.length} stor{epicStories.length === 1 ? 'y' : 'ies'} · {scope.length} task{scope.length === 1 ? '' : 's'}
+              {structure.stories && `${epicStories.length} stor${epicStories.length === 1 ? 'y' : 'ies'} · `}{scope.length} task{scope.length === 1 ? '' : 's'}
             </span>
             <div className="w-20"><ProgressBar value={progressOf(scope)} /></div>
             <span className="text-[10px] font-mono text-muted w-8 text-right">{progressOf(scope)}%</span>
             {actions(<>
-              <Button variant="ghost" size="xs" icon={Plus} onClick={() => setDialog({ kind: 'story', epicId: epic.id })}>Story</Button>
-              <Button variant="ghost" size="xs" icon={Plus} onClick={() => setDialog({ kind: 'task', links: { epicId: epic.id } })}>Task</Button>
+              {addChild('epic', epic.id)}
               {iconAction(Pencil, "Edit epic", () => setDialog({ kind: 'epic', epic }))}
               {iconAction(Trash2, "Delete epic", () => confirmDelete('Delete epic', `"${epic.name}" will be deleted. Its stories and tasks stay, without an epic.`, () => deleteEpic(epic.id)), true)}
             </>)}
@@ -240,14 +286,12 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
         {isOpen(epic.id) && (
           <div className="px-3 pb-3 pl-9 space-y-2">
             {epicStories.map(s => storyBlock(s))}
-            {direct.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Directly in this epic</p>
-                <ul className="space-y-1">{direct.map(t => taskRow(t))}</ul>
-              </div>
+            {isLowest && scope.length > 0 && <ul className="space-y-1">{scope.map(t => taskRow(t))}</ul>}
+            {misplacedGroup(misplacedIn('epic', epic.id))}
+            {(isLowest ? scope.length === 0 : epicStories.length === 0) && (
+              <p className="text-[11px] text-muted italic">No {isLowest ? 'tasks' : 'stories'} yet.</p>
             )}
-            {epicStories.length === 0 && direct.length === 0 && <p className="text-[11px] text-muted italic">No stories or tasks yet.</p>}
-            {linkTask({ epicId: epic.id }, t => t.epicId === epic.id)}
+            {isLowest && linkTask({ epicId: epic.id }, t => t.epicId === epic.id)}
           </div>
         )}
       </div>
@@ -255,9 +299,12 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
   };
 
   const phaseSection = (phase: Milestone) => {
-    const scope = tasksInPhase(phase.id);
-    const phaseEpics = projectEpics.filter(e => e.phaseId === phase.id);
-    const direct = scope.filter(t => !t.epicId);
+    const scope = tasksIn('phase', phase.id);
+    const phaseEpics = structure.epics ? epicsInPhase(phase.id) : [];
+    const phaseStories = !structure.epics && structure.stories ? storiesIn('phase', phase.id) : [];
+    const isLowest = lowest === 'phase';
+    const children = isLowest ? scope.length : phaseEpics.length + phaseStories.length;
+    const child = childOf('phase');
     const achieved = phase.status === 'achieved' || phase.status === 'completed';
     return (
       <section key={phase.id} className="rounded-2xl border border-line bg-paper-elevated shadow-xs">
@@ -276,7 +323,9 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
               </span>
               <span className="block mt-0.5">{timeLine(phaseSpan(phase, project), phase.durationUnit, scope, projectWindow(project))}</span>
               <span className="block text-[11px] text-muted">
-                {phaseEpics.length} epic{phaseEpics.length === 1 ? '' : 's'} · {scope.length} task{scope.length === 1 ? '' : 's'}
+                {structure.epics && `${phaseEpics.length} epic${phaseEpics.length === 1 ? '' : 's'} · `}
+                {phaseStories.length > 0 && `${phaseStories.length} stor${phaseStories.length === 1 ? 'y' : 'ies'} · `}
+                {scope.length} task{scope.length === 1 ? '' : 's'}
               </span>
             </span>
           </button>
@@ -284,8 +333,7 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
             <div className="w-28"><ProgressBar value={progressOf(scope)} /></div>
             <span className="text-xs font-mono font-semibold text-ink w-9 text-right">{progressOf(scope)}%</span>
             {actions(<>
-              <Button variant="secondary" size="xs" icon={Plus} onClick={() => setDialog({ kind: 'epic', phaseId: phase.id })}>Epic</Button>
-              <Button variant="ghost" size="xs" icon={Plus} onClick={() => setDialog({ kind: 'task', links: { milestoneId: phase.id } })}>Task</Button>
+              {addChild('phase', phase.id)}
               {iconAction(
                 achieved ? RotateCcw : CheckCircle2,
                 achieved ? 'Reopen phase' : 'Mark achieved',
@@ -302,16 +350,13 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
         {isOpen(phase.id) && (
           <div className="p-4 space-y-2.5">
             {phaseEpics.map(e => epicBlock(e))}
-            {direct.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Directly in this phase</p>
-                <ul className="space-y-1">{direct.map(t => taskRow(t))}</ul>
-              </div>
+            {phaseStories.map(st => storyBlock(st))}
+            {isLowest && scope.length > 0 && <ul className="space-y-1">{scope.map(t => taskRow(t))}</ul>}
+            {misplacedGroup(misplacedIn('phase', phase.id).filter(t => !t.epicId && !t.storyId))}
+            {children === 0 && (
+              <p className="text-xs text-muted italic">Nothing here yet. Add {article(child)} {LEVEL_LABEL[child].one}.</p>
             )}
-            {phaseEpics.length === 0 && direct.length === 0 && (
-              <p className="text-xs text-muted italic">No epics or tasks yet. Add an epic, or a task straight into this phase.</p>
-            )}
-            {linkTask({ milestoneId: phase.id }, t => t.milestoneId === phase.id)}
+            {isLowest && linkTask({ milestoneId: phase.id }, t => t.milestoneId === phase.id)}
           </div>
         )}
       </section>
@@ -327,13 +372,17 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
           <div>
             <h1 className="text-xl font-bold text-ink flex items-center gap-2"><Map className="w-5 h-5 text-flash-deep" /> Plan</h1>
             <p className="mt-1 flex flex-wrap items-center gap-1.5 text-xs text-muted">
-              {['Phase', 'Epic', 'Story', 'Task', 'Subtask'].map((level, i) => (
+              {[...levels.map(l => LEVEL_LABEL[l].one), 'task', ...(structure.subtasks ? ['subtask'] : [])].map((level, i) => (
                 <span key={level} className="flex items-center gap-1.5">
                   {i > 0 && <ArrowRight className="w-3 h-3" />}
-                  <span className="px-1.5 py-0.5 rounded-md bg-mist text-ink-soft font-medium">{level}</span>
+                  <span className="px-1.5 py-0.5 rounded-md bg-mist text-ink-soft font-medium capitalize">{level}</span>
                 </span>
               ))}
-              <span className="ml-1">Every level above Task is optional.</span>
+              {canEdit && (
+                <Link href={`/projects/${projectId}/settings#structure`} className="ml-1 text-flash-deep hover:underline">
+                  Change structure
+                </Link>
+              )}
             </p>
             {(() => {
               const w = projectWindow(project);
@@ -351,39 +400,67 @@ export default function ProjectPlanPage({ params }: { params: Promise<{ projectI
           </div>
           {canEdit && (
             <div className="flex flex-wrap items-center gap-2">
-              <Button variant="secondary" size="sm" icon={BookOpen} onClick={() => setDialog({ kind: 'story' })}>New story</Button>
-              <Button variant="secondary" size="sm" icon={Layers} onClick={() => setDialog({ kind: 'epic' })}>New epic</Button>
-              <Button variant="primary" size="sm" icon={Flag} onClick={() => setDialog({ kind: 'phase' })}>New phase</Button>
+              {/* Only the top level is created from here; everything else inside its parent */}
+              {levels[0] === 'phase' && <Button variant="primary" size="sm" icon={Flag} onClick={() => setDialog({ kind: 'phase' })}>New phase</Button>}
+              {levels[0] === 'epic' && <Button variant="primary" size="sm" icon={Layers} onClick={() => setDialog({ kind: 'epic' })}>New epic</Button>}
+              {levels[0] === 'story' && <Button variant="primary" size="sm" icon={BookOpen} onClick={() => setDialog({ kind: 'story' })}>New story</Button>}
+              {!levels[0] && <Button variant="primary" size="sm" icon={Plus} onClick={() => setDialog({ kind: 'task', links: {} })}>New task</Button>}
             </div>
           )}
         </div>
 
-        {phases.map(p => phaseSection(p))}
+        {/* The top level of this project's structure */}
+        {levels[0] === 'phase' && phases.map(p => phaseSection(p))}
+        {levels[0] === 'epic' && projectEpics.map(e => epicBlock(e))}
+        {levels[0] === 'story' && projectStories.map(st => storyBlock(st))}
+        {!levels[0] && (
+          <section className="rounded-2xl border border-line bg-paper-elevated p-4 space-y-2">
+            <h2 className="text-sm font-bold text-ink">Tasks</h2>
+            {mainTasks.length > 0 ? <ul className="space-y-1">{mainTasks.map(t => taskRow(t))}</ul> : <p className="text-xs text-muted italic">No tasks yet.</p>}
+          </section>
+        )}
+        {levels[0] && (levels[0] === 'phase' ? phases : levels[0] === 'epic' ? projectEpics : projectStories).length === 0 && (
+          <p className="rounded-2xl border border-dashed border-line p-6 text-center text-xs text-muted">
+            No {LEVEL_LABEL[levels[0]].many} yet. Start with &quot;New {LEVEL_LABEL[levels[0]].one}&quot;.
+          </p>
+        )}
 
-        {(unphasedEpics.length > 0 || looseStories.length > 0 || unplannedTasks.length > 0 || phases.length === 0) && (
-          <section className="rounded-2xl border border-dashed border-line bg-paper-elevated/50 p-4 space-y-2.5">
+        {/* Items whose parent level is in use but which have no parent */}
+        {(homelessEpics.length > 0 || homelessStories.length > 0) && (
+          <section className="rounded-2xl border border-dashed border-waiting/40 bg-waiting/5 p-4 space-y-2.5">
             <div>
-              <h2 className="text-sm font-bold text-ink">Not in a phase</h2>
-              <p className="text-[11px] text-muted">Epics, stories and tasks that aren&apos;t planned into a phase yet.</p>
+              <h2 className="text-sm font-bold text-ink">Needs a place in the plan</h2>
+              <p className="text-[11px] text-muted">
+                {homelessEpics.length > 0 && 'Epics need a phase. '}
+                {homelessStories.length > 0 && `Stories need ${structure.epics ? 'an epic' : 'a phase'}. `}
+                Edit each one to choose it.
+              </p>
             </div>
-            {unphasedEpics.map(e => epicBlock(e))}
-            {looseStories.map(s => storyBlock(s))}
-            {unplannedTasks.length > 0 && (
-              <div className="space-y-1">
-                <p className="text-[10px] font-semibold uppercase tracking-wider text-muted">Unplanned tasks ({unplannedTasks.length})</p>
-                <ul className="space-y-1">{unplannedTasks.map(t => taskRow(t))}</ul>
-              </div>
-            )}
-            {phases.length === 0 && unphasedEpics.length === 0 && unplannedTasks.length === 0 && (
-              <p className="text-xs text-muted italic">Nothing planned yet. Start with a phase, or an epic if this project doesn&apos;t use phases.</p>
-            )}
+            {homelessEpics.map(e => epicBlock(e))}
+            {homelessStories.map(st => storyBlock(st))}
+          </section>
+        )}
+
+        {/* Tasks not placed anywhere yet */}
+        {lowest && backlogTasks.length > 0 && (
+          <section className={cn('rounded-2xl border border-dashed p-4 space-y-2', structure.backlog ? 'border-line bg-paper-elevated/50' : 'border-waiting/40 bg-waiting/5')}>
+            <div>
+              <h2 className="text-sm font-bold text-ink">
+                {structure.backlog ? 'Backlog' : `Needs ${article(lowest)} ${LEVEL_LABEL[lowest].one}`} ({backlogTasks.length})
+              </h2>
+              <p className="text-[11px] text-muted">
+                Tasks not placed in {article(lowest)} {LEVEL_LABEL[lowest].one} yet. Open one and choose its {LEVEL_LABEL[lowest].one}, or use
+                &quot;Link existing task&quot; on {article(lowest)} {LEVEL_LABEL[lowest].one}.
+              </p>
+            </div>
+            <ul className="space-y-1">{backlogTasks.map(t => taskRow(t))}</ul>
           </section>
         )}
       </div>
 
       {dialog?.kind === 'phase' && <PhaseModal projectId={projectId} phase={dialog.phase} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'epic' && <EpicModal projectId={projectId} epic={dialog.epic} defaultPhaseId={dialog.phaseId} onClose={() => setDialog(null)} />}
-      {dialog?.kind === 'story' && <StoryModal projectId={projectId} story={dialog.story} defaultEpicId={dialog.epicId} onClose={() => setDialog(null)} />}
+      {dialog?.kind === 'story' && <StoryModal projectId={projectId} story={dialog.story} defaultEpicId={dialog.epicId} defaultPhaseId={dialog.phaseId} onClose={() => setDialog(null)} />}
       {dialog?.kind === 'task' && (
         <CreateTaskModal
           isOpen
