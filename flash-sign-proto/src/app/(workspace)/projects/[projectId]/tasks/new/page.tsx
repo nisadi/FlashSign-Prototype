@@ -26,7 +26,9 @@ import { placeIn, projectBoards } from '@/lib/board-columns';
 import { PlacementSelect } from '@/components/tasks/placement-select';
 import { PlanPicker } from '@/components/plan/plan-picker';
 import { projectStructure, taskLinksError } from '@/lib/structure';
-import { TaskTimeFields, rangeError, type TaskTime } from '@/components/shared/duration-fields';
+import {
+  TaskTimeFields, SubtaskTimeFields, EffortField, daysFromDates, rangeError, type TaskTime,
+} from '@/components/shared/duration-fields';
 import { subtaskWindow, taskWindow } from '@/lib/schedule';
 import type { PlanLinks } from '@/lib/plan';
 
@@ -38,6 +40,9 @@ export default function CreateTaskPage({
   const { projectId } = use(params);
   const router = useRouter();
   const { projects, users, sprints, milestones, tasks, epics, stories, addTask } = useApp();
+
+  // Planned hours of work; optional for tasks and subtasks
+  const [effortMinutes, setEffortMinutes] = useState<number | undefined>(undefined);
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) return notFound();
@@ -100,7 +105,7 @@ export default function CreateTaskPage({
       newErrors.title = 'Task title is required.';
     }
 
-    if (!time.days || time.days <= 0) {
+    if (!parentId && (!time.days || time.days <= 0)) {
       newErrors.duration = 'Estimated duration must be a positive number of days.';
     }
 
@@ -139,8 +144,10 @@ export default function CreateTaskPage({
       // A subtask is in its task's phase; a task goes where the plan picker says
       ...(parentTask ? { milestoneId: parentTask.milestoneId } : planLinks),
       parentId: parentId || undefined,
-      estimatedDuration: time.days,
-      durationUnit: time.unit,
+      // A subtask's length comes from its dates (it has hours instead of a day estimate)
+      estimatedDuration: parentId ? daysFromDates(time.start, time.due) : time.days,
+      durationUnit: parentId ? undefined : time.unit,
+      effortMinutes,
       startDate: time.start || undefined,
       dueDate: time.due || undefined,
       labels,
@@ -299,14 +306,33 @@ export default function CreateTaskPage({
               <span className="flex items-center gap-1 text-xs font-semibold text-ink">
                 <Clock className="w-3.5 h-3.5 text-flash-deep" /> Time
               </span>
-              <TaskTimeFields
-                value={time}
-                onChange={(t) => {
-                  setTime(t);
-                  setErrors((prev) => ({ ...prev, duration: undefined, dates: undefined }));
-                }}
-                window={timeWindow}
-              />
+              {parentTask ? (
+                <SubtaskTimeFields
+                  value={{ effortMinutes, start: time.start, due: time.due }}
+                  onChange={(t) => {
+                    setEffortMinutes(t.effortMinutes);
+                    setTime((prev) => ({ ...prev, start: t.start, due: t.due }));
+                    setErrors((prev) => ({ ...prev, dates: undefined }));
+                  }}
+                  window={timeWindow}
+                />
+              ) : (
+                <>
+                  <TaskTimeFields
+                    value={time}
+                    onChange={(t) => {
+                      setTime(t);
+                      setErrors((prev) => ({ ...prev, duration: undefined, dates: undefined }));
+                    }}
+                    window={timeWindow}
+                  />
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[11px] font-semibold text-ink">Effort (optional)</span>
+                    <EffortField minutes={effortMinutes} onChange={setEffortMinutes} />
+                    <span className="text-[11px] text-muted">planned hours of work, compared with the hours logged</span>
+                  </div>
+                </>
+              )}
               {errors.dates && (
                 <p className="text-danger text-[11px] flex items-center gap-1">
                   <AlertCircle className="w-3.5 h-3.5" /> {errors.dates}

@@ -216,6 +216,11 @@ export interface Task {
   milestoneId?: string;
   /** The unit the estimate was entered in ("2 weeks"); the estimate itself is stored in days */
   durationUnit?: DurationUnit;
+  /**
+   * Planned hours of work (effort), in minutes, compared with the hours logged on the timer.
+   * Separate from the estimate in days, which is calendar time for the timeline.
+   */
+  effortMinutes?: number;
   /** Optional plan links: Phase → Epic → Story → Task. A subtask follows its task. */
   epicId?: string;
   storyId?: string;

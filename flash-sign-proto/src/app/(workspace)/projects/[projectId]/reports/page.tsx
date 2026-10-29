@@ -5,18 +5,17 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
-import { Card, StatCard, Button, ProgressBar } from '@/components/shared/ui';
-import { Avatar } from '@/components/shared/avatar';
+import { Card } from '@/components/shared/ui';
 import { TaskTimeReport } from '@/components/reports/task-time-report';
+import { TimelineReport } from '@/components/reports/timeline-report';
+import { ProjectOverview } from '@/components/reports/project-overview';
+import { sprintBurndown } from '@/lib/project-health';
+import { useNow } from '@/lib/use-now';
 import { formatDate } from '@/lib/utils';
 import {
   BarChart3,
-  Download,
   Calendar,
-  CheckSquare,
   TrendingUp,
-  AlertTriangle,
-  Clock,
   PieChart as PieIcon,
   Filter,
 } from 'lucide-react';
@@ -41,10 +40,13 @@ export default function ProjectReportsPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, tasks, sprints, milestones, users } = useApp();
+  const { projects, tasks, sprints, milestones, taskStatusChanges } = useApp();
+  const now = useNow();
   const [mounted, setMounted] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [sprintFilter, setSprintFilter] = useState('all');
+  // Overview (charts), Timeline (the plan against time) or Task time
+  const [view, setView] = useState<'overview' | 'timeline' | 'task-time'>('overview');
 
   useEffect(() => {
     setMounted(true);
@@ -56,11 +58,10 @@ export default function ProjectReportsPage({
   const projectTasks = tasks.filter((t) => t.projectId === projectId);
   const projectSprints = sprints.filter((s) => s.projectId === projectId);
   const projectMilestones = milestones.filter((m) => m.projectId === projectId);
-  const projectMembers = users.filter((u) => project.memberIds.includes(u.id));
 
   // Filter tasks for analytics
   const activeTasks = useMemo(() => {
-    return projectTasks.filter((t) => {
+    return projectTasks.filter((t) => !t.parentId).filter((t) => {
       const matchStatus = statusFilter === 'all' || t.status === statusFilter;
       const matchSprint = sprintFilter === 'all' || t.sprintId === sprintFilter;
       return matchStatus && matchSprint;
@@ -72,13 +73,7 @@ export default function ProjectReportsPage({
   const reviewCount = activeTasks.filter((t) => t.status === 'review').length;
   const todoCount = activeTasks.filter((t) => t.status === 'todo').length;
   const blockedCount = activeTasks.filter((t) => t.status === 'blocked').length;
-  const overdueCount = activeTasks.filter(
-    (t) => t.dueDate && new Date(t.dueDate) < new Date() && t.status !== 'done'
-  ).length;
 
-  const completionPct = activeTasks.length
-    ? Math.round((doneCount / activeTasks.length) * 100)
-    : 0;
 
   // Status Distribution Data
   const statusData = [
@@ -113,39 +108,15 @@ export default function ProjectReportsPage({
     },
   ];
 
-  // Burndown / Velocity Simulation trend data
-  const velocityTrend = [
-    { day: 'Day 1', ideal: 100, actual: 100 },
-    { day: 'Day 3', ideal: 85, actual: 88 },
-    { day: 'Day 6', ideal: 70, actual: 72 },
-    { day: 'Day 9', ideal: 55, actual: 50 },
-    { day: 'Day 12', ideal: 40, actual: 36 },
-    { day: 'Day 14', ideal: 25, actual: 18 },
-  ];
+  // Burndown from real data: the chosen sprint, else the active one, else the latest that started
+  const burndownSprint =
+    projectSprints.find((sp) => sp.id === sprintFilter) ??
+    projectSprints.find((sp) => sp.status === 'active') ??
+    [...projectSprints].sort((x, y) => y.startDate.localeCompare(x.startDate))[0];
+  const velocityTrend = burndownSprint && now !== null ? sprintBurndown(burndownSprint, projectTasks, taskStatusChanges, now) : [];
+  const lastActual = [...velocityTrend].reverse().find((d) => d.actual !== null);
+  const burnGap = lastActual ? Math.round(((lastActual.actual ?? 0) - lastActual.ideal) * 10) / 10 : 0;
 
-  // Export CSV
-  const handleExportCSV = () => {
-    const headers = ['Task ID', 'Key', 'Title', 'Status', 'Priority', 'Points', 'Due Date'];
-    const rows = activeTasks.map((t) => [
-      t.id,
-      t.key,
-      `"${t.title.replace(/"/g, '""')}"`,
-      t.status,
-      t.priority,
-      t.points || 0,
-      t.dueDate || '',
-    ]);
-    const csvContent =
-      'data:text/csv;charset=utf-8,' +
-      [headers.join(','), ...rows.map((e) => e.join(','))].join('\n');
-    const encodedUri = encodeURI(csvContent);
-    const link = document.createElement('a');
-    link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `${project.key}_Project_Report.csv`);
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
-  };
 
   return (
     <div className="min-h-full bg-paper pb-16">
@@ -159,16 +130,50 @@ export default function ProjectReportsPage({
               <BarChart3 className="w-5 h-5 text-flash-deep" /> Analytics & Performance Reports
             </h1>
             <p className="text-xs text-muted">
-              Live metrics and velocity calculated directly from project task states
+              How the project is doing, worked out live from its tasks, timers and plan
             </p>
           </div>
+        </div>
 
+        {/* Report tabs */}
+        <div className="flex gap-1 border-b border-line" role="tablist">
+          {([
+            ['overview', 'Overview'],
+            ['timeline', 'Timeline'],
+            ['task-time', 'Task time'],
+          ] as const).map(([id, label]) => (
+            <button
+              key={id}
+              type="button"
+              role="tab"
+              aria-selected={view === id}
+              onClick={() => setView(id)}
+              className={`px-3 py-2 -mb-px text-xs font-semibold border-b-2 transition-colors ${
+                view === id ? 'border-flash-deep text-ink' : 'border-transparent text-muted hover:text-ink'
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+
+        {view === 'timeline' && <TimelineReport projectId={projectId} />}
+
+        {view === 'overview' && (<>
+        <ProjectOverview projectId={projectId} onOpenTimeline={() => setView('timeline')} />
+
+        {/* Breakdown: the detail charts, with their filters */}
+        <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-3 pt-2">
+          <div>
+            <h2 className="text-sm font-semibold text-ink">Breakdown</h2>
+            <p className="text-xs text-muted">Tasks by status and priority, and the sprint burndown. Subtasks count inside their tasks.</p>
+          </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {/* Sprint Filter */}
             <select
               value={sprintFilter}
               onChange={(e) => setSprintFilter(e.target.value)}
               className="px-2.5 py-1.5 bg-paper-elevated border border-line rounded-lg text-xs text-ink outline-none focus:border-flash"
+              aria-label="Sprint"
             >
               <option value="all">All Sprints</option>
               {projectSprints.map((s) => (
@@ -177,65 +182,20 @@ export default function ProjectReportsPage({
                 </option>
               ))}
             </select>
-
-            {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value)}
               className="px-2.5 py-1.5 bg-paper-elevated border border-line rounded-lg text-xs text-ink outline-none focus:border-flash"
+              aria-label="Status"
             >
               <option value="all">All Statuses</option>
-              <option value="done">Done</option>
-              <option value="in_progress">In Progress</option>
               <option value="todo">To Do</option>
+              <option value="in_progress">In Progress</option>
+              <option value="review">In Review</option>
+              <option value="done">Done</option>
               <option value="blocked">Blocked</option>
             </select>
-
-            <Button
-              variant="secondary"
-              size="sm"
-              icon={Download}
-              onClick={handleExportCSV}
-            >
-              Export CSV
-            </Button>
           </div>
-        </div>
-
-        {/* Top Metric Cards */}
-        <div className="grid grid-cols-2 lg:grid-cols-5 gap-4">
-          <StatCard
-            label="Total Tasks"
-            value={activeTasks.length}
-            icon={CheckSquare}
-            iconColor="var(--flash)"
-          />
-          <StatCard
-            label="Completed"
-            value={doneCount}
-            delta={`${completionPct}%`}
-            deltaPositive
-            icon={CheckSquare}
-            iconColor="#00c2a8"
-          />
-          <StatCard
-            label="In Progress"
-            value={inProgressCount}
-            icon={TrendingUp}
-            iconColor="#3b82f6"
-          />
-          <StatCard
-            label="Overdue"
-            value={overdueCount}
-            icon={Clock}
-            iconColor="var(--waiting)"
-          />
-          <StatCard
-            label="Blocked"
-            value={blockedCount}
-            icon={AlertTriangle}
-            iconColor="var(--danger)"
-          />
         </div>
 
         {/* Chart Rows */}
@@ -344,16 +304,22 @@ export default function ProjectReportsPage({
             <div className="flex items-center justify-between mb-2">
               <div>
                 <h2 className="text-sm font-semibold text-ink flex items-center gap-2">
-                  <TrendingUp className="w-4 h-4 text-flash-deep" /> Sprint Burndown & Velocity
+                  <TrendingUp className="w-4 h-4 text-flash-deep" /> Sprint Burndown
                 </h2>
-                <p className="text-xs text-muted">Ideal vs actual story points completed</p>
+                <p className="text-xs text-muted">
+                  {burndownSprint
+                    ? `${burndownSprint.name}: estimated days of work still open each day, against a straight line to zero`
+                    : 'No sprints in this project yet'}
+                </p>
               </div>
-              <span className="text-xs font-mono text-flash-deep font-bold bg-flash/10 px-2 py-0.5 rounded-full">
-                Velocity: +12% Ahead
-              </span>
+              {lastActual && (
+                <span className="text-xs font-semibold text-ink bg-mist px-2 py-0.5 rounded-full">
+                  {burnGap > 0 ? `${burnGap} days of work behind the line` : burnGap < 0 ? `${-burnGap} days of work ahead of the line` : 'On the line'}
+                </span>
+              )}
             </div>
 
-            {mounted ? (
+            {mounted && velocityTrend.length > 0 ? (
               <div className="h-60 w-full mt-3">
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={velocityTrend}>
@@ -375,7 +341,7 @@ export default function ProjectReportsPage({
                       stroke="#94a3b8"
                       strokeDasharray="4 4"
                       fill="transparent"
-                      name="Ideal Guideline"
+                      name="Straight line to zero"
                     />
                     <Area
                       type="monotone"
@@ -383,55 +349,28 @@ export default function ProjectReportsPage({
                       stroke="#00c2a8"
                       fill="#00c2a8"
                       fillOpacity={0.15}
-                      name="Actual Burn"
+                      name="Work still open (days)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>
               </div>
             ) : (
               <div className="h-60 flex items-center justify-center text-xs text-muted">
-                Loading burndown trend…
+                {mounted ? 'Add a sprint with tasks to see its burndown.' : 'Loading burndown trend…'}
               </div>
             )}
           </Card>
         </div>
 
-        {/* Team Member Workload Breakdown */}
-        <Card className="p-5">
-          <h2 className="text-sm font-semibold text-ink mb-4">Team Member Workload Distribution</h2>
-          <div className="space-y-3">
-            {projectMembers.map((member) => {
-              const memberTasks = activeTasks.filter((t) => t.assigneeId === member.id);
-              const done = memberTasks.filter((t) => t.status === 'done').length;
-              const pct = memberTasks.length ? Math.round((done / memberTasks.length) * 100) : 0;
-
-              return (
-                <div key={member.id} className="p-3 bg-paper rounded-xl border border-line text-xs">
-                  <div className="flex items-center justify-between mb-1.5">
-                    <div className="flex items-center gap-2">
-                      <Avatar user={member} size="xs" />
-                      <span className="font-semibold text-ink">{member.name}</span>
-                      <span className="text-[10px] text-muted">({member.role})</span>
-                    </div>
-                    <span className="font-mono text-muted text-[11px]">
-                      {done} / {memberTasks.length} tasks ({pct}%)
-                    </span>
-                  </div>
-                  <ProgressBar value={pct} color="var(--flash)" className="h-1.5" />
-                </div>
-              );
-            })}
-          </div>
-        </Card>
+        </>)}
 
         {/* Task time: In Progress -> In Review */}
-        <div className="space-y-3">
-          <div>
-            <h2 className="text-sm font-semibold text-ink">Task time</h2>
+        {view === 'task-time' && (
+          <div className="space-y-3">
             <p className="text-xs text-muted">How long each task took from In Progress to In Review.</p>
+            <TaskTimeReport projectId={projectId} />
           </div>
-          <TaskTimeReport projectId={projectId} />
-        </div>
+        )}
       </div>
     </div>
   );

@@ -241,3 +241,95 @@ export function TaskTimeFields({ value, onChange, window: w }: { value: TaskTime
     </div>
   );
 }
+
+/**
+ * Planned hours of work (effort), optional. Takes hours like "6" or "1.5"; stored in minutes,
+ * rounded to the quarter hour. Empty means no effort estimate.
+ */
+export function EffortField({
+  minutes,
+  onChange,
+  className,
+  'aria-label': ariaLabel = 'Effort in hours',
+}: {
+  minutes?: number;
+  onChange: (minutes?: number) => void;
+  className?: string;
+  'aria-label'?: string;
+}) {
+  const [draft, setDraft] = useState<string | null>(null);
+  const shown = minutes ? String(Math.round((minutes / 60) * 100) / 100) : '';
+  return (
+    <div className={cn('flex items-center gap-1', className)}>
+      <input
+        type="text"
+        inputMode="decimal"
+        value={draft ?? shown}
+        placeholder="—"
+        onChange={e => {
+          const text = e.target.value.replace(/[^\d.]/g, '').replace(/(\..*)\./g, '$1').slice(0, 6);
+          setDraft(text);
+          const hours = Number(text);
+          onChange(text && hours > 0 ? Math.max(15, Math.round((hours * 60) / 15) * 15) : undefined);
+        }}
+        onBlur={() => setDraft(null)}
+        className={cn(field, 'w-16 font-mono')}
+        aria-label={ariaLabel}
+      />
+      <span className="text-[11px] text-muted">hours</span>
+    </div>
+  );
+}
+
+export interface SubtaskTime {
+  effortMinutes?: number;
+  start: string;
+  due: string;
+}
+
+/**
+ * A subtask's time: planned hours (effort), and start and due dates inside its task's time.
+ * All optional; with both dates the subtask's length in days follows from them.
+ */
+export function SubtaskTimeFields({ value, onChange, window: w }: { value: SubtaskTime; onChange: (t: SubtaskTime) => void; window?: TimeWindow }) {
+  const error = rangeError({ start: value.start, end: value.due }, w);
+  return (
+    <div className="space-y-1.5">
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+        <div>
+          <span className={label}>Effort (optional)</span>
+          <EffortField minutes={value.effortMinutes} onChange={effortMinutes => onChange({ ...value, effortMinutes })} />
+        </div>
+        <label>
+          <span className={label}>Start date</span>
+          <input
+            type="date"
+            value={value.start}
+            min={w?.start}
+            max={w?.end}
+            onChange={e => onChange({ ...value, start: e.target.value })}
+            className={cn(field, 'font-mono')}
+          />
+        </label>
+        <label>
+          <span className={label}>Due date</span>
+          <input
+            type="date"
+            value={value.due}
+            min={value.start || w?.start}
+            max={w?.end}
+            onChange={e => onChange({ ...value, due: e.target.value })}
+            className={cn(field, 'font-mono', error && 'border-danger')}
+          />
+        </label>
+      </div>
+      <WindowHint window={w} error={error} />
+    </div>
+  );
+}
+
+/** A subtask's length in days from its dates, for the timeline; undefined without both dates */
+export function daysFromDates(start: string, due: string): number | undefined {
+  if (!start || !due) return undefined;
+  return Math.max(1, Math.round((new Date(due).getTime() - new Date(start).getTime()) / 86_400_000));
+}

@@ -234,6 +234,26 @@ function startParentOf(
   };
 }
 
+/**
+ * The next key for a new task: the project's key and the next number (FSV2-112), or for a
+ * subtask its task's key and the next number (FSV2-105-3).
+ */
+function nextTaskKey(tasks: Task[], projects: Project[], projectId: string, parentId?: string): string {
+  if (parentId) {
+    const parent = tasks.find(t => t.id === parentId);
+    if (parent) {
+      const nums = tasks.filter(t => t.parentId === parentId).map(t => Number(t.key.slice(parent.key.length + 1))).filter(n => Number.isFinite(n));
+      return `${parent.key}-${Math.max(0, ...nums) + 1}`;
+    }
+  }
+  const prefix = projects.find(p => p.id === projectId)?.key ?? 'TASK';
+  const nums = tasks
+    .filter(t => t.projectId === projectId && !t.parentId && t.key.startsWith(`${prefix}-`))
+    .map(t => Number(t.key.slice(prefix.length + 1)))
+    .filter(n => Number.isFinite(n));
+  return `${prefix}-${Math.max(0, ...nums) + 1}`;
+}
+
 /** Re-derive the plan links of the tasks that match, after an epic or story changed */
 function relinkTasks(tasks: Task[], affected: (t: Task) => boolean, epics: Epic[], stories: Story[]): Task[] {
   return tasks.map(t => (affected(t) ? { ...t, ...resolvePlan(t, epics, stories) } : t));
@@ -352,7 +372,8 @@ interface AppActions {
   agentAddNote: (taskId: string, agent: AgentClient, text: string) => void;
   agentPauseTask: (agent: AgentClient, note?: string) => void;
   agentFinishTask: (taskId: string, agent: AgentClient, summary: string) => void;
-  logManualTime: (taskId: string, minutes: number, date: string, note?: string) => void;
+  /** Hours worked without the timer; for someone else when `userId` is given (e.g. a manager logging for the team) */
+  logManualTime: (taskId: string, minutes: number, date: string, note?: string, userId?: string) => void;
   updateAgentSettings: (updates: Partial<AgentSettings>) => void;
   updateWorkSession: (id: string, updates: Partial<WorkSession>) => void;
   // Files
@@ -420,7 +441,7 @@ export type AppContextValue = AppState & AppActions;
 const AppContext = createContext<AppContextValue | null>(null);
 
 // Bump the version when the demo data changes, so browsers drop older saved demo data
-const STORAGE_KEY = 'flashsign-proto-state-v5';
+const STORAGE_KEY = 'flashsign-proto-state-v6';
 
 function getInitialState(): AppState {
   return {
@@ -429,7 +450,8 @@ function getInitialState(): AppState {
     currentUserId: DEMO_ROLE_USERS[FEATURES.roleSwitcher ? 'project_manager' : FIXED_DEMO_ROLE],
     org: MOCK_ORG,
     users: MOCK_USERS,
-    projects: MOCK_PROJECTS,
+    // Worked out from the sample tasks, so the current end and health match today's date
+    projects: MOCK_PROJECTS.map(p => calculateProjectTimeline(p, MOCK_TASKS, MOCK_MILESTONES, MOCK_STATUS_CHANGES)),
     tasks: MOCK_TASKS,
     sprints: MOCK_SPRINTS,
     milestones: MOCK_MILESTONES,
@@ -806,7 +828,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     addTask: (t) => update(s => {
       const newTask: Task = {
         id: t.id || `t-${Date.now()}`,
-        key: t.key || `FS-${s.tasks.length + 1}`,
+        key: t.key || nextTaskKey(s.tasks, s.projects, t.projectId, t.parentId),
         title: t.title,
         description: t.description || '',
         type: t.type || (t.parentId ? 'subtask' : 'task'),
@@ -821,6 +843,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         parentId: t.parentId,
         ...resolvePlan(t, s.epics, s.stories),
         durationUnit: t.durationUnit,
+        effortMinutes: t.effortMinutes,
         estimatedDuration: Math.max(1, Number(t.estimatedDuration) || (t.parentId ? 1 : 3)),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
@@ -857,9 +880,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     }),
     addTasks: (newTaskList) => update(s => {
+      // Keys are handed out one by one, so tasks added together don't share one
+      const keyed: Task[] = [];
       const addedTasks: Task[] = newTaskList.map((t, idx) => ({
         id: t.id || `t-${Date.now()}-${idx}`,
-        key: t.key || `FS-${s.tasks.length + idx + 1}`,
+        key: t.key || (() => {
+          const key = nextTaskKey([...s.tasks, ...keyed], s.projects, t.projectId, t.parentId);
+          keyed.push({ key, projectId: t.projectId, parentId: t.parentId } as Task);
+          return key;
+        })(),
         title: t.title,
         description: t.description || '',
         type: t.type || (t.parentId ? 'subtask' : 'task'),
@@ -874,6 +903,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         parentId: t.parentId,
         ...resolvePlan(t, s.epics, s.stories),
         durationUnit: t.durationUnit,
+        effortMinutes: t.effortMinutes,
         estimatedDuration: Math.max(1, Number(t.estimatedDuration) || (t.parentId ? 1 : 3)),
         storyPoints: t.storyPoints || t.points,
         points: t.points || t.storyPoints,
@@ -1846,7 +1876,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         agentEvents: [...s.agentEvents, agentEvent(s.currentUserId, agent, 'finished', taskId, summary)],
       };
     }),
-    logManualTime: (taskId, minutes, date, note) => update(s => {
+    logManualTime: (taskId, minutes, date, note, userId) => update(s => {
       const start = new Date(`${date}T09:00:00`);
       const end = new Date(start.getTime() + minutes * 60_000);
       return {
@@ -1854,7 +1884,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         workSessions: [
           ...s.workSessions,
           {
-            id: `ws-${Date.now()}`, userId: s.currentUserId, taskId, source: 'manual',
+            id: `ws-${Date.now()}`, userId: userId ?? s.currentUserId, taskId, source: 'manual',
             startedAt: start.toISOString(), endedAt: end.toISOString(), lastActivityAt: end.toISOString(),
             endReason: 'paused', note,
           },

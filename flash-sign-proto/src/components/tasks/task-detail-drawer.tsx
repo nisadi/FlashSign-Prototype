@@ -4,7 +4,8 @@ import React, { useState } from 'react';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
-import { formatDate, formatRelative } from '@/lib/utils';
+import { cn, formatDate, formatRelative } from '@/lib/utils';
+import { formatMinutes } from '@/lib/agent-connection';
 import { placeIn, placementOf, projectBoards, type ResolvedBoard } from '@/lib/board-columns';
 import { boardNameAt, taskJourney } from '@/lib/task-journey';
 import { useNow } from '@/lib/use-now';
@@ -13,8 +14,12 @@ import { SubtaskStateSelect } from '@/components/tasks/subtask-state-select';
 import { PlanPicker } from '@/components/plan/plan-picker';
 import { planOf } from '@/lib/plan';
 import { inBacklog, projectStructure } from '@/lib/structure';
-import { EstimateField } from '@/components/shared/duration-fields';
-import { formatDays, type DurationUnit } from '@/lib/durations';
+import {
+  EstimateField, EffortField, SubtaskTimeFields, WindowHint, daysFromDates, rangeError, type SubtaskTime,
+} from '@/components/shared/duration-fields';
+import { TimeLog } from '@/components/tasks/time-log';
+import { subtaskWindow, taskWindow } from '@/lib/schedule';
+import { formatDays } from '@/lib/durations';
 import { notify } from '@/components/shared/toaster';
 import { useGuardedMove } from '@/components/tasks/use-guarded-move';
 import { TaskJourney } from '@/components/tasks/task-journey';
@@ -41,8 +46,9 @@ export function TaskDetailDrawer() {
   const [newChecklistText, setNewChecklistText] = useState('');
   const [newCommentText, setNewCommentText] = useState('');
   const [newSubtaskTitle, setNewSubtaskTitle] = useState('');
-  const [newSubtaskDuration, setNewSubtaskDuration] = useState(2);
-  const [newSubtaskUnit, setNewSubtaskUnit] = useState<DurationUnit>('days');
+  // New subtask: who does it and its time (all optional)
+  const [newSubtaskAssignee, setNewSubtaskAssignee] = useState('');
+  const [newSubtaskTime, setNewSubtaskTime] = useState<SubtaskTime>({ start: '', due: '' });
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
   if (!activeTaskDrawerId) return null;
@@ -58,6 +64,7 @@ export function TaskDetailDrawer() {
   const parentTask = task.parentId ? tasks.find(t => t.id === task.parentId) : undefined;
   const subtasks = tasks.filter(t => t.parentId === task.id);
   const structure = projectStructure(project);
+  const planData = project ? { project, milestones, epics, stories, tasks } : undefined;
   const boards = projectBoards(project);
   const placement = placementOf(task, boards);
   // The Journey matters once a project has more than one board
@@ -237,19 +244,23 @@ export function TaskDetailDrawer() {
             </select>
           </div>
 
-          {/* Estimated Duration (Live Timeline Recalculation!) */}
+          {/* Estimate: days for a task (the timeline), planned hours for a subtask */}
           <div>
             <label className="block text-[10px] font-semibold text-muted uppercase mb-1 flex items-center gap-1">
               <Clock className="w-2.5 h-2.5 text-flash-deep" />
-              Estimate
+              {parentTask ? 'Effort' : 'Estimate'}
             </label>
-            <EstimateField
-              key={task.id}
-              days={task.estimatedDuration || 3}
-              unit={task.durationUnit ?? 'days'}
-              start={task.startDate?.slice(0, 10)}
-              onChange={(days, unit) => updateTask(task.id, { estimatedDuration: days, durationUnit: unit })}
-            />
+            {parentTask ? (
+              <EffortField key={task.id} minutes={task.effortMinutes} onChange={effortMinutes => updateTask(task.id, { effortMinutes })} />
+            ) : (
+              <EstimateField
+                key={task.id}
+                days={task.estimatedDuration || 3}
+                unit={task.durationUnit ?? 'days'}
+                start={task.startDate?.slice(0, 10)}
+                onChange={(days, unit) => updateTask(task.id, { estimatedDuration: days, durationUnit: unit })}
+              />
+            )}
           </div>
 
           {/* Assignee */}
@@ -267,6 +278,57 @@ export function TaskDetailDrawer() {
             </select>
           </div>
         </div>
+
+        {/* Dates and planned hours: a subtask is tracked like a task, inside its task's time */}
+        {(() => {
+          const timeWindow = planData ? (parentTask ? subtaskWindow(parentTask, planData) : taskWindow(task, planData)) : undefined;
+          const start = task.startDate?.slice(0, 10) ?? '';
+          const due = task.dueDate?.slice(0, 10) ?? '';
+          const error = rangeError({ start, end: due }, timeWindow);
+          const overdue = due && now !== null && due < new Date(now).toISOString().slice(0, 10) && task.status !== 'done' && task.status !== 'review';
+          const setDates = (next: { start?: string; due?: string }) => {
+            const s2 = next.start ?? start;
+            const d2 = next.due ?? due;
+            updateTask(task.id, {
+              startDate: s2 || undefined,
+              dueDate: d2 || undefined,
+              ...(parentTask ? { estimatedDuration: daysFromDates(s2, d2) } : {}),
+            });
+          };
+          const dateField = 'w-full text-xs font-mono px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash';
+          return (
+            <div className="px-4 sm:px-6 py-3 border-b border-line bg-paper-elevated space-y-1.5">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+                <label>
+                  <span className="block text-[10px] font-semibold text-muted uppercase mb-1">Start date</span>
+                  <input type="date" value={start} min={timeWindow?.start} max={timeWindow?.end} onChange={e => setDates({ start: e.target.value })} className={dateField} />
+                </label>
+                <label>
+                  <span className="block text-[10px] font-semibold text-muted uppercase mb-1">
+                    Due date
+                    {overdue && <span className="ml-1.5 normal-case rounded-full bg-danger/10 border border-danger/30 px-1.5 text-danger font-semibold">Overdue</span>}
+                  </span>
+                  <input type="date" value={due} min={start || timeWindow?.start} max={timeWindow?.end} onChange={e => setDates({ due: e.target.value })} className={cn(dateField, error && 'border-danger')} />
+                </label>
+                {!parentTask && (
+                  <div>
+                    <span className="block text-[10px] font-semibold text-muted uppercase mb-1">Effort</span>
+                    <EffortField key={task.id} minutes={task.effortMinutes} onChange={effortMinutes => updateTask(task.id, { effortMinutes })} />
+                  </div>
+                )}
+                {!parentTask && subtasks.some(st => st.effortMinutes) && (
+                  <div>
+                    <span className="block text-[10px] font-semibold text-muted uppercase mb-1">Subtasks</span>
+                    <span className="text-xs text-ink-soft">
+                      {formatMinutes(subtasks.reduce((sum, st) => sum + (st.effortMinutes ?? 0), 0))} planned
+                    </span>
+                  </div>
+                )}
+              </div>
+              <WindowHint window={timeWindow} error={error} />
+            </div>
+          );
+        })()}
 
         {/* Where the task sits in the plan: Phase → Epic → Story (a subtask follows its task) */}
         <div className="px-4 sm:px-6 py-3 border-b border-line bg-paper-elevated">
@@ -494,7 +556,8 @@ export function TaskDetailDrawer() {
                         </div>
                         <div className="flex items-center gap-2 shrink-0">
                           <span className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-mist text-ink">
-                            {formatDays(sub.estimatedDuration || 1, sub.durationUnit, sub.startDate)}
+                            {sub.effortMinutes ? `${formatMinutes(sub.effortMinutes)} planned` : formatDays(sub.estimatedDuration || 1, sub.durationUnit, sub.startDate)}
+                            {sub.dueDate && ` · due ${formatDate(sub.dueDate).replace(/, \d{4}$/, '')}`}
                           </span>
                           <SubtaskStateSelect
                             status={sub.status}
@@ -516,7 +579,9 @@ export function TaskDetailDrawer() {
                 )}
 
                 {/* Quick Add Subtask Form (only in projects that use subtasks) */}
-                {structure.subtasks && (
+                {structure.subtasks && (() => {
+                  const subtaskTime = planData ? subtaskWindow(task, planData) : undefined;
+                  return (
                 <form
                   onSubmit={e => {
                     e.preventDefault();
@@ -524,40 +589,52 @@ export function TaskDetailDrawer() {
                       notify('Type a name for the subtask first.', 'error');
                       return;
                     }
+                    const problem = rangeError({ start: newSubtaskTime.start, end: newSubtaskTime.due }, subtaskTime);
+                    if (problem) {
+                      notify(`${problem}.`, 'error');
+                      return;
+                    }
                     addTask({
                       title: newSubtaskTitle.trim(),
                       projectId: task.projectId,
                       parentId: task.id,
                       milestoneId: task.milestoneId,
-                      estimatedDuration: newSubtaskDuration,
-                      durationUnit: newSubtaskUnit,
+                      assigneeId: newSubtaskAssignee || undefined,
+                      effortMinutes: newSubtaskTime.effortMinutes,
+                      startDate: newSubtaskTime.start || undefined,
+                      dueDate: newSubtaskTime.due || undefined,
+                      estimatedDuration: daysFromDates(newSubtaskTime.start, newSubtaskTime.due),
                       status: 'todo',
                       priority: 'medium',
                       type: 'subtask',
                     });
                     notify(`Subtask "${newSubtaskTitle.trim()}" added to ${task.key}`);
                     setNewSubtaskTitle('');
-                    setNewSubtaskDuration(2);
-                    setNewSubtaskUnit('days');
+                    setNewSubtaskAssignee('');
+                    setNewSubtaskTime({ start: '', due: '' });
                   }}
-                  className="flex flex-col sm:flex-row items-stretch sm:items-center gap-2 pt-2"
+                  className="space-y-2 pt-2 rounded-xl border border-dashed border-line p-3"
                 >
-                  <input
-                    type="text"
-                    value={newSubtaskTitle}
-                    onChange={e => setNewSubtaskTitle(e.target.value)}
-                    placeholder="New subtask title..."
-                    className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-flash"
-                  />
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <EstimateField
-                      days={newSubtaskDuration}
-                      unit={newSubtaskUnit}
-                      onChange={(days, unit) => {
-                        setNewSubtaskDuration(days);
-                        setNewSubtaskUnit(unit);
-                      }}
+                  <div className="flex flex-col sm:flex-row gap-2">
+                    <input
+                      type="text"
+                      value={newSubtaskTitle}
+                      onChange={e => setNewSubtaskTitle(e.target.value)}
+                      placeholder="New subtask title..."
+                      className="flex-1 px-3 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink focus:outline-none focus:ring-1 focus:ring-flash"
                     />
+                    <select
+                      value={newSubtaskAssignee}
+                      onChange={e => setNewSubtaskAssignee(e.target.value)}
+                      className="px-2.5 py-1.5 text-xs rounded-lg border border-line bg-paper text-ink"
+                      aria-label="Assignee for the new subtask"
+                    >
+                      <option value="">Unassigned</option>
+                      {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                    </select>
+                  </div>
+                  <SubtaskTimeFields value={newSubtaskTime} onChange={setNewSubtaskTime} window={subtaskTime} />
+                  <div className="flex justify-end">
                     <button
                       type="submit"
                       className="px-3 py-1.5 text-xs font-semibold rounded-lg bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"
@@ -566,7 +643,8 @@ export function TaskDetailDrawer() {
                     </button>
                   </div>
                 </form>
-                )}
+                  );
+                })()}
               </div>
               )}
 
@@ -665,7 +743,12 @@ export function TaskDetailDrawer() {
           )}
 
           {/* Actual work against the plan, for the task and each subtask */}
-          {activeTab === 'progress' && now !== null && <TaskProgress task={task} subtasks={subtasks} now={now} />}
+          {activeTab === 'progress' && now !== null && (
+            <div className="space-y-4">
+              <TimeLog key={task.id} task={task} subtasks={subtasks} now={now} />
+              <TaskProgress task={task} subtasks={subtasks} now={now} />
+            </div>
+          )}
 
           {/* The boards a card has been on (only when the project has more than one board) */}
           {activeTab === 'journey' && journey.length > 0 && (

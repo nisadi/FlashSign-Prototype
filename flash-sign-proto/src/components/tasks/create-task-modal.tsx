@@ -10,7 +10,9 @@ import { Plus, AlertCircle, Calendar, Flag, User, Clock, CheckSquare } from 'luc
 import { PlanPicker } from '@/components/plan/plan-picker';
 import { projectStructure, taskLinksError } from '@/lib/structure';
 import type { PlanLinks } from '@/lib/plan';
-import { TaskTimeFields, rangeError, type TaskTime } from '@/components/shared/duration-fields';
+import {
+  TaskTimeFields, SubtaskTimeFields, EffortField, daysFromDates, rangeError, type TaskTime,
+} from '@/components/shared/duration-fields';
 import { subtaskWindow, taskWindow } from '@/lib/schedule';
 
 interface CreateTaskModalProps {
@@ -43,6 +45,8 @@ export function CreateTaskModal({
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
   const [time, setTime] = useState<TaskTime>({ days: 5, unit: 'days', start: '', due: '' });
+  // Planned hours of work; optional for tasks and subtasks
+  const [effortMinutes, setEffortMinutes] = useState<number | undefined>(undefined);
   const [planLinks, setPlanLinks] = useState<PlanLinks>({});
   const [priority, setPriority] = useState<TaskPriority>('medium');
   const [status, setStatus] = useState<TaskStatus>('todo');
@@ -54,6 +58,7 @@ export function CreateTaskModal({
       setTitle('');
       setDescription('');
       setTime({ days: isSubtask ? 2 : 5, unit: 'days', start: '', due: '' });
+      setEffortMinutes(undefined);
       setPlanLinks({ milestoneId: defaultMilestoneId, epicId: defaultEpicId, storyId: defaultStoryId });
       setPriority('medium');
       setStatus('todo');
@@ -76,7 +81,7 @@ export function CreateTaskModal({
       newErrors.title = isSubtask ? 'Subtask title is required.' : 'Task title is required.';
     }
 
-    if (!time.days || time.days <= 0) {
+    if (!isSubtask && (!time.days || time.days <= 0)) {
       newErrors.duration = 'Estimated duration must be at least 1 day.';
     }
 
@@ -104,8 +109,10 @@ export function CreateTaskModal({
       parentId: defaultParentId || undefined,
       // A subtask follows its task; a task goes where the plan picker says
       ...(isSubtask ? { milestoneId: parentMilestoneId } : planLinks),
-      estimatedDuration: time.days,
-      durationUnit: time.unit,
+      // A subtask's length comes from its dates (it has hours instead of a day estimate)
+      estimatedDuration: isSubtask ? daysFromDates(time.start, time.due) : time.days,
+      durationUnit: isSubtask ? undefined : time.unit,
+      effortMinutes,
       startDate: time.start || undefined,
       dueDate: time.due || undefined,
     });
@@ -198,7 +205,26 @@ export function CreateTaskModal({
             <span className="flex items-center gap-1 text-[11px] font-semibold text-ink">
               <Clock className="w-3 h-3 text-flash-deep" /> Time
             </span>
-            <TaskTimeFields value={time} onChange={t => { setTime(t); setErrors(prev => ({ ...prev, duration: undefined, dates: undefined })); }} window={timeWindow} />
+            {isSubtask ? (
+              <SubtaskTimeFields
+                value={{ effortMinutes, start: time.start, due: time.due }}
+                onChange={t => {
+                  setEffortMinutes(t.effortMinutes);
+                  setTime(prev => ({ ...prev, start: t.start, due: t.due }));
+                  setErrors(prev => ({ ...prev, dates: undefined }));
+                }}
+                window={timeWindow}
+              />
+            ) : (
+              <>
+                <TaskTimeFields value={time} onChange={t => { setTime(t); setErrors(prev => ({ ...prev, duration: undefined, dates: undefined })); }} window={timeWindow} />
+                <div className="flex items-center gap-2 pt-1">
+                  <span className="text-[11px] font-semibold text-ink">Effort (optional)</span>
+                  <EffortField minutes={effortMinutes} onChange={setEffortMinutes} />
+                  <span className="text-[11px] text-muted">planned hours of work, compared with the hours logged</span>
+                </div>
+              </>
+            )}
             {errors.dates && (
               <p className="text-danger text-[11px] flex items-center gap-1">
                 <AlertCircle className="w-3 h-3" /> {errors.dates}

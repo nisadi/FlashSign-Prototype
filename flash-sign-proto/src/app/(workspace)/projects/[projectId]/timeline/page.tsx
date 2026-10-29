@@ -154,7 +154,7 @@ export default function ProjectTimelinePage({
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
               <h2 className="text-sm font-bold text-ink flex items-center gap-2">
-                <CalendarIcon className="w-4 h-4 text-flash-deep" /> Dynamic Project Timeline & Schedule Baseline
+                <CalendarIcon className="w-4 h-4 text-flash-deep" /> Project Schedule & Baseline
               </h2>
               <p className="text-xs text-muted">
                 Original baseline is preserved while task and subtask duration changes dynamically update the planned delivery forecast.

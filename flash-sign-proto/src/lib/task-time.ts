@@ -68,6 +68,8 @@ export interface TaskTimeRow {
   sources: WorkSession['source'][];
   running: boolean;
   autoStops: number;
+  /** Timer minutes per person */
+  minutesByWorker: Record<string, number>;
 }
 
 export function taskTimeRows(
@@ -123,9 +125,79 @@ export function taskTimeRows(
       sources: [...new Set(ws.map(w => w.source))],
       running: ws.some(w => !w.endedAt),
       autoStops: ws.filter(w => w.endReason === 'idle_timeout' || w.endReason === 'day_cutoff').length,
+      minutesByWorker: Object.fromEntries(byWorker),
     });
   }
   return rows;
+}
+
+/** A task with its subtasks: the task's totals add up its own time and its subtasks' */
+export interface TaskTimeGroup {
+  /** The task's figures with its subtasks added in */
+  row: TaskTimeRow;
+  /** Time logged on the task itself */
+  ownMinutes: number;
+  subtasks: TaskTimeRow[];
+  subtaskTotal: number;
+  subtaskDone: number;
+  /** Planned hours (minutes): the task's own plus its subtasks' */
+  effortMinutes: number;
+}
+
+/**
+ * Group time rows under their tasks. A task shows up when it or any of its subtasks has time;
+ * its start is the earliest start, its review is the task's own move to review, and its
+ * worked time, people and sources add up its subtasks'.
+ */
+export function groupTaskTime(rows: TaskTimeRow[], tasks: Task[], now: number): TaskTimeGroup[] {
+  const byId = new Map(rows.map(r => [r.task.id, r]));
+  const subRows = new Map<string, TaskTimeRow[]>();
+  for (const r of rows) {
+    if (r.task.parentId) subRows.set(r.task.parentId, [...(subRows.get(r.task.parentId) ?? []), r]);
+  }
+  const groups: TaskTimeGroup[] = [];
+  for (const task of tasks.filter(t => !t.parentId)) {
+    const own = byId.get(task.id);
+    const subs = subRows.get(task.id) ?? [];
+    if (!own && subs.length === 0) continue;
+    const allSubtasks = tasks.filter(t => t.parentId === task.id);
+    const parts = [...(own ? [own] : []), ...subs];
+
+    const minutesByWorker: Record<string, number> = {};
+    for (const p of parts) for (const [id, m] of Object.entries(p.minutesByWorker)) minutesByWorker[id] = (minutesByWorker[id] ?? 0) + m;
+    const workerIds = Object.entries(minutesByWorker).sort((a, b) => b[1] - a[1]).map(([id]) => id);
+    if (workerIds.length === 0 && task.assigneeId) workerIds.push(task.assigneeId);
+
+    const startedAt = parts.map(p => p.startedAt).sort()[0];
+    const lastSubReview = subs.map(s => s.reviewAt).filter((x): x is string => Boolean(x)).sort().pop();
+    const reviewAt = task.status === 'review' || task.status === 'done' ? own?.reviewAt ?? lastSubReview : undefined;
+    const running = parts.some(p => p.running);
+    const active = running || task.status === 'in_progress' || allSubtasks.some(s => s.status === 'in_progress');
+    // Calendar time: to the review, or to now while work goes on, or to where the last piece stopped
+    const lastEnd = Math.max(...parts.map(p => new Date(p.startedAt).getTime() + p.elapsedMinutes * 60_000));
+    const end = reviewAt ? new Date(reviewAt).getTime() : active ? now : lastEnd;
+
+    groups.push({
+      row: {
+        task,
+        workerIds,
+        startedAt,
+        reviewAt,
+        workedMinutes: parts.reduce((sum, p) => sum + p.workedMinutes, 0),
+        elapsedMinutes: Math.max(0, Math.round((end - new Date(startedAt).getTime()) / 60_000)),
+        sources: [...new Set(parts.flatMap(p => p.sources))],
+        running,
+        autoStops: parts.reduce((sum, p) => sum + p.autoStops, 0),
+        minutesByWorker,
+      },
+      ownMinutes: own?.workedMinutes ?? 0,
+      subtasks: subs.sort((a, b) => a.task.key.localeCompare(b.task.key, undefined, { numeric: true })),
+      subtaskTotal: allSubtasks.length,
+      subtaskDone: allSubtasks.filter(s => s.status === 'done' || s.status === 'review').length,
+      effortMinutes: (task.effortMinutes ?? 0) + allSubtasks.reduce((sum, s) => sum + (s.effortMinutes ?? 0), 0),
+    });
+  }
+  return groups;
 }
 
 /** "2d 3h" for long spans, "3h 20m" otherwise */

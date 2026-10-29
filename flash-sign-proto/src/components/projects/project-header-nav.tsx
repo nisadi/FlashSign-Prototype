@@ -68,7 +68,8 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
       count: projectTasks.filter((t) => !t.parentId).length,
     },
     { id: 'board', label: 'Board', href: `/projects/${projectId}/board`, icon: Kanban },
-    { id: 'timeline', label: 'Timeline', href: `/projects/${projectId}/timeline`, icon: Calendar },
+    // The team's task schedule (a Gantt chart); Reports > Timeline is the manager's view of it
+    { id: 'timeline', label: 'Schedule', href: `/projects/${projectId}/timeline`, icon: Calendar },
     {
       id: 'sprints',
       label: 'Sprints',

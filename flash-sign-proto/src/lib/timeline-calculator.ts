@@ -1,5 +1,6 @@
 import type { Project, ProjectHealth, Task, Milestone, TaskStatusChange, TimelineStatus } from '@/types';
 import { forecastEnd } from './schedule';
+import { progressOfTasks } from './subtasks';
 
 /**
  * Standardize date to YYYY-MM-DD string
@@ -126,15 +127,22 @@ export function calculateTaskEffectiveSchedule(
 }
 
 /**
- * Health that follows the timeline: more than 10% later than the baseline is At Risk,
- * more than 25% is Delayed.
+ * Health that follows the timeline: more than 10% later than the baseline is At Risk, more than
+ * 25% is Delayed. Work far behind the calendar (more than 25 points less work done than time
+ * used) is At Risk too, even before the end date moves.
  */
-export function healthFromTimeline(status: TimelineStatus, difference: number, originalDuration: number): ProjectHealth {
-  if (status !== 'extended') return 'on_track';
-  const late = difference / Math.max(1, originalDuration);
+export function healthFromTimeline(status: TimelineStatus, difference: number, originalDuration: number, paceGap = 0): ProjectHealth {
+  const late = status === 'extended' ? difference / Math.max(1, originalDuration) : 0;
   if (late > 0.25) return 'delayed';
-  if (late > 0.1) return 'at_risk';
+  if (late > 0.1 || paceGap > 25) return 'at_risk';
   return 'on_track';
+}
+
+/** Percentage points by which the share of time used is ahead of the share of work done */
+function paceGapOf(start: string, end: string, tasks: Task[], now: number): number {
+  const span = Math.max(1, diffCalendarDays(start, end));
+  const used = Math.min(100, Math.max(0, (diffCalendarDays(start, new Date(now).toISOString().slice(0, 10)) / span) * 100));
+  return used - progressOfTasks(tasks);
 }
 
 /**
@@ -235,7 +243,11 @@ export function calculateProjectTimeline(
   return {
     ...project,
     // Health follows the timeline unless someone set it by hand in Settings
-    health: project.healthMode === 'manual' ? project.health : healthFromTimeline(timelineStatus, timelineDifference, originalDuration),
+    health: project.healthMode === 'manual'
+      ? project.health
+      : project.status === 'completed'
+        ? 'on_track'
+        : healthFromTimeline(timelineStatus, timelineDifference, originalDuration, paceGapOf(originalStartDate, originalEndDate, projectTasks, now)),
     startDate: currentStartDate,
     endDate: currentEndDate,
     dueDate: currentEndDate,

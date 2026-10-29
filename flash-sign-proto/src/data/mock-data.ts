@@ -382,14 +382,14 @@ const RAW_TASKS: Task[] = [
     id: 'sub1', key: 'FSV2-101-1', title: 'Canvas coordinate engine & snapping',
     description: 'Grid snapping logic and matrix transformation for multi-DPI displays',
     type: 'subtask', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u6', reporterId: 'u6',
-    parentId: 'task1', milestoneId: 'm1', estimatedDuration: 6, startDate: d(-14), dueDate: d(-8),
+    parentId: 'task1', milestoneId: 'm1', estimatedDuration: 6, effortMinutes: 2160, startDate: d(-14), dueDate: d(-8),
     tags: ['canvas'], comments: [], attachments: [], createdAt: d(-14), updatedAt: d(-8),
   },
   {
     id: 'sub2', key: 'FSV2-101-2', title: 'Touch & stylus gesture calibration',
     description: 'Apple Pencil and Android tablet stylus curve smoothing and pressure thresholds',
     type: 'subtask', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u6', reporterId: 'u6',
-    parentId: 'task1', milestoneId: 'm1', estimatedDuration: 8, startDate: d(-8), dueDate: d(-3),
+    parentId: 'task1', milestoneId: 'm1', estimatedDuration: 8, effortMinutes: 2880, startDate: d(-8), dueDate: d(-3),
     tags: ['tablet'], comments: [], attachments: [], createdAt: d(-8), updatedAt: d(-3),
   },
 
@@ -411,14 +411,14 @@ const RAW_TASKS: Task[] = [
     id: 'sub3', key: 'FSV2-102-1', title: 'OCR & bounding box parsing pipeline',
     description: 'Extract text bounding boxes and line anchors from PDF pages',
     type: 'subtask', status: 'done', priority: 'high', projectId: 'p1', sprintId: 's1', assigneeId: 'u5', reporterId: 'u3',
-    parentId: 'task2', milestoneId: 'm1', estimatedDuration: 8, startDate: d(-10), dueDate: d(-2),
+    parentId: 'task2', milestoneId: 'm1', estimatedDuration: 8, effortMinutes: 720, startDate: d(-10), dueDate: d(-2),
     tags: ['ai'], comments: [], attachments: [], createdAt: d(-10), updatedAt: d(-2),
   },
   {
     id: 'sub4', key: 'FSV2-102-2', title: 'Claude vision prompt tuning & scoring',
     description: 'System prompt iteration to improve accuracy on non-standard NDA templates',
     type: 'subtask', status: 'in_progress', priority: 'critical', projectId: 'p1', sprintId: 's1', assigneeId: 'u5', reporterId: 'u3',
-    parentId: 'task2', milestoneId: 'm1', estimatedDuration: 12, startDate: d(-2), dueDate: d(10),
+    parentId: 'task2', milestoneId: 'm1', estimatedDuration: 12, effortMinutes: 960, startDate: d(-2), dueDate: d(10),
     tags: ['ai', 'claude'], comments: [], attachments: [], createdAt: d(-2), updatedAt: d(-1),
   },
 
@@ -450,7 +450,7 @@ const RAW_TASKS: Task[] = [
   {
     id: 'task5', key: 'FSV2-105', title: 'Bulk send agreements',
     description: 'Allow document managers to send a template to multiple recipients in one operation.',
-    type: 'story', status: 'todo', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
+    type: 'story', status: 'in_progress', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
     milestoneId: 'm2', estimatedDuration: 18,
     storyPoints: 8, startDate: d(1), dueDate: d(19), tags: ['bulk', 'feature'],
     checklist: [
@@ -463,15 +463,15 @@ const RAW_TASKS: Task[] = [
   {
     id: 'sub5', key: 'FSV2-105-1', title: 'CSV recipient parsing & schema validation',
     description: 'Sanitize emails, names, custom field values from uploaded CSV files',
-    type: 'subtask', status: 'todo', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
-    parentId: 'task5', milestoneId: 'm2', estimatedDuration: 6, startDate: d(1), dueDate: d(7),
+    type: 'subtask', status: 'in_progress', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u6', reporterId: 'u3',
+    parentId: 'task5', milestoneId: 'm2', estimatedDuration: 6, effortMinutes: 480, startDate: d(1), dueDate: d(7),
     tags: ['bulk'], comments: [], attachments: [], createdAt: d(-5), updatedAt: d(-5),
   },
   {
     id: 'sub6', key: 'FSV2-105-2', title: 'Parallel envelope dispatch queue worker',
     description: 'High-throughput async background worker with exponential backoff on bounce',
-    type: 'subtask', status: 'todo', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u4', reporterId: 'u3',
-    parentId: 'task5', milestoneId: 'm2', estimatedDuration: 12, startDate: d(7), dueDate: d(19),
+    type: 'subtask', status: 'in_progress', priority: 'medium', projectId: 'p1', sprintId: 's2', assigneeId: 'u4', reporterId: 'u3',
+    parentId: 'task5', milestoneId: 'm2', estimatedDuration: 12, effortMinutes: 600, startDate: d(7), dueDate: d(19),
     tags: ['queue'], comments: [], attachments: [], createdAt: d(-5), updatedAt: d(-5),
   },
 

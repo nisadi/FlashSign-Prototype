@@ -7,7 +7,8 @@ import { Avatar } from '@/components/shared/avatar';
 import { SubtaskStateSelect } from '@/components/tasks/subtask-state-select';
 import { inProgressSince, subtaskCounts } from '@/lib/subtasks';
 import { useNow } from '@/lib/use-now';
-import { cn } from '@/lib/utils';
+import { cn, formatDate } from '@/lib/utils';
+import { formatMinutes, sessionMinutes } from '@/lib/agent-connection';
 import type { Task, TaskStatus } from '@/types';
 
 const SEGMENT: Record<TaskStatus, string> = {
@@ -67,7 +68,11 @@ export function CardSubtasks({
       <ul className="space-y-1">
         {shown.map(sub => {
           const assignee = users.find(u => u.id === sub.assigneeId);
-          const running = workSessions.some(w => w.taskId === sub.id && !w.endedAt);
+          const sessions = workSessions.filter(w => w.taskId === sub.id);
+          const running = sessions.some(w => !w.endedAt);
+          const worked = now ? sessions.reduce((sum, w) => sum + sessionMinutes(w.startedAt, w.endedAt, now), 0) : 0;
+          const finished = sub.status === 'done' || sub.status === 'review';
+          const overdue = !finished && sub.dueDate && now !== null && sub.dueDate.slice(0, 10) < new Date(now).toISOString().slice(0, 10);
           return (
             <li
               key={sub.id}
@@ -78,6 +83,22 @@ export function CardSubtasks({
               <span className={cn('flex-1 min-w-0 truncate text-[11px]', sub.status === 'done' ? 'text-muted line-through' : 'text-ink')}>
                 {sub.title}
               </span>
+              {(sub.effortMinutes || worked > 0) && (
+                <span
+                  className={cn('shrink-0 text-[9px] font-mono', sub.effortMinutes && worked > sub.effortMinutes ? 'text-waiting font-semibold' : 'text-muted')}
+                  title={sub.effortMinutes ? `${formatMinutes(worked)} worked of ${formatMinutes(sub.effortMinutes)} planned` : `${formatMinutes(worked)} worked`}
+                >
+                  {formatMinutes(worked)}{sub.effortMinutes ? `/${formatMinutes(sub.effortMinutes)}` : ''}
+                </span>
+              )}
+              {sub.dueDate && !finished && (
+                <span
+                  className={cn('shrink-0 text-[9px] font-mono', overdue ? 'rounded bg-danger/10 px-1 text-danger font-semibold' : 'text-muted')}
+                  title={overdue ? 'Overdue' : 'Due date'}
+                >
+                  {overdue ? 'Overdue · ' : ''}{formatDate(sub.dueDate).replace(/, \d{4}$/, '')}
+                </span>
+              )}
               {running && <Timer className="w-3 h-3 shrink-0 text-flash-deep" aria-label="Timer running" />}
               {assignee && <Avatar user={assignee} size="xs" />}
               <SubtaskStateSelect
