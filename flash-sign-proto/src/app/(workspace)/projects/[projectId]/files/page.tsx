@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Card, Button, EmptyState } from '@/components/shared/ui';
@@ -51,6 +51,15 @@ export default function ProjectFilesPage({
   const [categoryFilter, setCategoryFilter] = useState('all');
   const [viewMode, setViewMode] = useState<'list' | 'grid'>('list');
   const [showUploadModal, setShowUploadModal] = useState(false);
+  // The header's "+ New" menu opens this dialog with ?create=upload
+  const createRequested = useSearchParams().get('create') === 'upload';
+  const router = useRouter();
+  const pathname = usePathname();
+  const dialogOpen = showUploadModal || createRequested;
+  const closeDialog = () => {
+    setShowUploadModal(false);
+    if (createRequested) router.replace(pathname);
+  };
   const [previewFile, setPreviewFile] = useState<ProjectFile | null>(null);
 
   // Workflow modals state
@@ -117,7 +126,7 @@ export default function ProjectFilesPage({
 
     showToast(`File "${newFileName.trim()}" uploaded successfully.`);
     setNewFileName('');
-    setShowUploadModal(false);
+    closeDialog();
   };
 
   const handleFileRowClick = (file: ProjectFile) => {
@@ -670,8 +679,8 @@ export default function ProjectFilesPage({
 
       {/* Upload Modal (Rendered outside animate-fade-up via shared Modal) */}
       <Modal
-        isOpen={showUploadModal}
-        onClose={() => setShowUploadModal(false)}
+        isOpen={dialogOpen}
+        onClose={closeDialog}
         size="sm"
         aria-labelledby="modal-upload-title"
       >
@@ -680,7 +689,7 @@ export default function ProjectFilesPage({
           description="Add a demonstration file attachment to this project workspace."
           icon={UploadCloud}
           iconColor="text-flash-deep"
-          onClose={() => setShowUploadModal(false)}
+          onClose={closeDialog}
           id="modal-upload-title"
         />
         <form onSubmit={handleUploadMock} className="flex flex-col flex-1 min-h-0">
@@ -746,7 +755,7 @@ export default function ProjectFilesPage({
               type="button"
               variant="secondary"
               size="sm"
-              onClick={() => setShowUploadModal(false)}
+              onClick={closeDialog}
             >
               Cancel
             </Button>

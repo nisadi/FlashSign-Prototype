@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Card, Button, ProgressBar, EmptyState } from '@/components/shared/ui';
@@ -33,6 +33,15 @@ export default function ProjectSprintsPage({
   const { projects, sprints, tasks, addSprint, updateSprint, deleteSprint } = useApp();
 
   const [showCreateModal, setShowCreateModal] = useState(false);
+  // The header's "+ New" menu opens this dialog with ?create=sprint
+  const createRequested = useSearchParams().get('create') === 'sprint';
+  const router = useRouter();
+  const pathname = usePathname();
+  const dialogOpen = showCreateModal || createRequested;
+  const closeDialog = () => {
+    setShowCreateModal(false);
+    if (createRequested) router.replace(pathname);
+  };
   const [sprintName, setSprintName] = useState('');
   const [sprintGoal, setSprintGoal] = useState('');
   const [startDate, setStartDate] = useState('');
@@ -69,7 +78,7 @@ export default function ProjectSprintsPage({
     setSprintGoal('');
     setStartDate('');
     setEndDate('');
-    setShowCreateModal(false);
+    closeDialog();
   };
 
   const handleStartSprint = (sprintId: string) => {
@@ -108,8 +117,8 @@ export default function ProjectSprintsPage({
 
         {/* Create Sprint Modal */}
         <Modal
-          isOpen={showCreateModal}
-          onClose={() => setShowCreateModal(false)}
+          isOpen={dialogOpen}
+          onClose={closeDialog}
           size="sm"
         >
           <div className="p-6 space-y-4">
@@ -166,7 +175,7 @@ export default function ProjectSprintsPage({
                   type="button"
                   variant="secondary"
                   size="sm"
-                  onClick={() => setShowCreateModal(false)}
+                  onClick={closeDialog}
                 >
                   Cancel
                 </Button>

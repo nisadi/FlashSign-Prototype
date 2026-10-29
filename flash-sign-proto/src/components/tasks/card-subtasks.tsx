@@ -79,26 +79,30 @@ export function CardSubtasks({
               onClick={() => openTaskDrawer(sub.id)}
               className="flex items-center gap-1.5 rounded-lg px-1.5 py-1 hover:bg-mist/50 cursor-pointer"
             >
-              <CornerDownRight className="w-3 h-3 shrink-0 text-muted" />
-              <span className={cn('flex-1 min-w-0 truncate text-[11px]', sub.status === 'done' ? 'text-muted line-through' : 'text-ink')}>
-                {sub.title}
+              <CornerDownRight className="w-3 h-3 shrink-0 text-muted self-start mt-0.5" />
+              {/* Title on top; hours and due date on a small line under it, so the title keeps its room */}
+              <span className="flex-1 min-w-0">
+                <span className={cn('block truncate text-[11px]', sub.status === 'done' ? 'text-muted line-through' : 'text-ink')}>
+                  {sub.title}
+                </span>
+                {((sub.effortMinutes || worked > 0) || (sub.dueDate && !finished)) && (
+                  <span className="flex flex-wrap items-center gap-x-1.5 text-[9px] font-mono">
+                    {(sub.effortMinutes || worked > 0) && (
+                      <span
+                        className={cn(sub.effortMinutes && worked > sub.effortMinutes ? 'text-waiting font-semibold' : 'text-muted')}
+                        title={sub.effortMinutes ? `${formatMinutes(worked)} worked of ${formatMinutes(sub.effortMinutes)} planned` : `${formatMinutes(worked)} worked`}
+                      >
+                        {formatMinutes(worked)}{sub.effortMinutes ? ` / ${formatMinutes(sub.effortMinutes)}` : ''}
+                      </span>
+                    )}
+                    {sub.dueDate && !finished && (
+                      <span className={cn(overdue ? 'rounded bg-danger/10 px-1 text-danger font-semibold' : 'text-muted')} title={overdue ? 'Overdue' : 'Due date'}>
+                        {overdue ? 'Overdue · ' : 'Due '}{formatDate(sub.dueDate).replace(/, \d{4}$/, '')}
+                      </span>
+                    )}
+                  </span>
+                )}
               </span>
-              {(sub.effortMinutes || worked > 0) && (
-                <span
-                  className={cn('shrink-0 text-[9px] font-mono', sub.effortMinutes && worked > sub.effortMinutes ? 'text-waiting font-semibold' : 'text-muted')}
-                  title={sub.effortMinutes ? `${formatMinutes(worked)} worked of ${formatMinutes(sub.effortMinutes)} planned` : `${formatMinutes(worked)} worked`}
-                >
-                  {formatMinutes(worked)}{sub.effortMinutes ? `/${formatMinutes(sub.effortMinutes)}` : ''}
-                </span>
-              )}
-              {sub.dueDate && !finished && (
-                <span
-                  className={cn('shrink-0 text-[9px] font-mono', overdue ? 'rounded bg-danger/10 px-1 text-danger font-semibold' : 'text-muted')}
-                  title={overdue ? 'Overdue' : 'Due date'}
-                >
-                  {overdue ? 'Overdue · ' : ''}{formatDate(sub.dueDate).replace(/, \d{4}$/, '')}
-                </span>
-              )}
               {running && <Timer className="w-3 h-3 shrink-0 text-flash-deep" aria-label="Timer running" />}
               {assignee && <Avatar user={assignee} size="xs" />}
               <SubtaskStateSelect

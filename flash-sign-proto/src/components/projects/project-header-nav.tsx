@@ -3,7 +3,7 @@
 import Link from 'next/link';
 import { useApp } from '@/context/app-context';
 import { ProjectStatusBadge, HealthBadge } from '@/components/shared/badges';
-import { Button } from '@/components/shared/ui';
+import { NewMenu } from '@/components/projects/new-menu';
 import {
   LayoutDashboard,
   CheckSquare,
@@ -16,7 +16,6 @@ import {
   Activity,
   BarChart3,
   Settings,
-  Plus,
   ArrowLeft,
   Star,
 } from 'lucide-react';
@@ -130,11 +129,7 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
           </div>
 
           <div className="flex items-center gap-2 self-start sm:self-auto shrink-0">
-            <Link href={`/projects/${projectId}/tasks/new`}>
-              <Button variant="primary" size="sm" icon={Plus}>
-                New Task
-              </Button>
-            </Link>
+            <NewMenu projectId={projectId} />
           </div>
         </div>
 

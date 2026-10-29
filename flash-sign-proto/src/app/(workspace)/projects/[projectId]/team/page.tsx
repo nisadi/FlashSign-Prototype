@@ -2,7 +2,7 @@
 
 import { use, useState } from 'react';
 import Link from 'next/link';
-import { notFound } from 'next/navigation';
+import { notFound, usePathname, useRouter, useSearchParams } from 'next/navigation';
 import { useApp } from '@/context/app-context';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Card, Button, ProgressBar } from '@/components/shared/ui';
@@ -31,6 +31,15 @@ export default function ProjectTeamPage({
 
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
+  // The header's "+ New" menu opens this dialog with ?create=member
+  const createRequested = useSearchParams().get('create') === 'member';
+  const router = useRouter();
+  const pathname = usePathname();
+  const dialogOpen = showAddModal || createRequested;
+  const closeDialog = () => {
+    setShowAddModal(false);
+    if (createRequested) router.replace(pathname);
+  };
   const [selectedUserToView, setSelectedUserToView] = useState<User | null>(null);
 
   const project = projects.find((p) => p.id === projectId);
@@ -51,7 +60,7 @@ export default function ProjectTeamPage({
     updateProject(projectId, {
       memberIds: [...project.memberIds, userId],
     });
-    setShowAddModal(false);
+    closeDialog();
   };
 
   const handleRemoveMember = (userId: string) => {
@@ -110,8 +119,8 @@ export default function ProjectTeamPage({
 
         {/* Add Member Modal */}
         <Modal
-          isOpen={showAddModal}
-          onClose={() => setShowAddModal(false)}
+          isOpen={dialogOpen}
+          onClose={closeDialog}
           size="sm"
         >
           <div className="p-6 space-y-4">
@@ -151,7 +160,7 @@ export default function ProjectTeamPage({
             )}
 
             <div className="flex justify-end pt-2">
-              <Button variant="secondary" size="sm" onClick={() => setShowAddModal(false)}>
+              <Button variant="secondary" size="sm" onClick={closeDialog}>
                 Close
               </Button>
             </div>
