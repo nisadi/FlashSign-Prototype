@@ -2,14 +2,14 @@
 
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
-import { FilePen, Search, Eye, Plus, LayoutTemplate } from 'lucide-react';
+import { FilePen, Search, Eye, Plus, LayoutTemplate, PenLine, Trash2 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { FEATURES } from '@/lib/features';
 import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 
 export default function DraftSignaturesPage() {
-  const { signatureRequests, documentItems, contracts } = useApp();
+  const { signatureRequests, documentItems, contracts, trashSignatureRequests } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
 
   const draftRequests = useMemo(() => {
@@ -27,7 +27,7 @@ export default function DraftSignaturesPage() {
         );
       }
       return true;
-    }).sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+    }).sort((a, b) => new Date(b.draft?.savedAt ?? b.createdAt).getTime() - new Date(a.draft?.savedAt ?? a.createdAt).getTime());
   }, [draftRequests, searchQuery]);
 
   return (
@@ -52,7 +52,7 @@ export default function DraftSignaturesPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href="/signatures/new"
+              href="/signatures/upload?mode=send"
               className="px-4 py-2 bg-flash hover:bg-flash-deep text-ink font-semibold rounded-lg text-sm transition-colors shadow-sm inline-flex items-center gap-1.5"
             >
               <Plus className="w-4 h-4" />
@@ -115,6 +115,15 @@ export default function DraftSignaturesPage() {
                         </span>
                         <span>•</span>
                         <span>Started {new Date(req.createdAt).toLocaleDateString()}</span>
+                        {req.draft && (
+                          <>
+                            <span>•</span>
+                            <span>
+                              {req.pdfs?.length ?? 1} PDF{(req.pdfs?.length ?? 1) === 1 ? '' : 's'} · {req.fields.length} fields ·
+                              {' '}{req.draft.mode === 'self' ? 'sign yourself' : 'get signatures'} · saved {new Date(req.draft.savedAt).toLocaleString()}
+                            </span>
+                          </>
+                        )}
                         {(linkedContract || linkedDoc) && (
                           <>
                             <span>•</span>
@@ -126,6 +135,27 @@ export default function DraftSignaturesPage() {
                       </div>
                     </div>
 
+                    {req.draft ? (
+                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (window.confirm(`Move the draft "${req.title}" to the Trash?`)) trashSignatureRequests([req.id]);
+                        }}
+                        className="px-3 py-1.5 bg-paper hover:bg-mist/50 border border-line text-ink-soft text-xs font-semibold rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                        Delete
+                      </button>
+                      <Link
+                        href={`/signatures/upload?draft=${req.id}`}
+                        className="px-3.5 py-1.5 bg-flash hover:bg-flash-deep text-ink text-xs font-semibold rounded-lg transition-colors flex items-center gap-1"
+                      >
+                        <PenLine className="w-3.5 h-3.5" />
+                        Continue draft
+                      </Link>
+                    </div>
+                    ) : (
                     <div className="flex items-center gap-2 shrink-0 self-end sm:self-center">
                       <Link
                         href={`/signatures/${req.id}/fields`}
@@ -144,6 +174,7 @@ export default function DraftSignaturesPage() {
                         Details
                       </Link>
                     </div>
+                    )}
                   </div>
                 );
               })}

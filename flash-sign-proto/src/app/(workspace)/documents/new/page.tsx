@@ -22,7 +22,9 @@ import {
   AlertCircle
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
-import { DocumentType } from '@/types/documents';
+import { DocumentType, PdfAttachment } from '@/types/documents';
+import { preparePdfUpload, formatFileSize } from '@/components/pdf/prepare-upload';
+import { DocPages } from '@/components/pdf/pdf-pages';
 import { notify } from '@/components/shared/toaster';
 
 export default function NewDocumentPage() {
@@ -39,6 +41,25 @@ export default function NewDocumentPage() {
   const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [previewMode, setPreviewMode] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // "Upload PDF": the real file, kept in this browser
+  const [attachment, setAttachment] = useState<PdfAttachment | null>(null);
+  const [processing, setProcessing] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+
+  const handlePdf = async (file: File | undefined) => {
+    if (!file) return;
+    setError(null);
+    setProcessing(true);
+    const result = await preparePdfUpload(file);
+    setProcessing(false);
+    if ('error' in result) {
+      setError(result.error);
+      return;
+    }
+    setAttachment(result.attachment);
+    setType('pdf');
+    setTitle(t => t || file.name.replace(/\.pdf$/i, ''));
+  };
 
   const handleSelectTemplate = (tplId: string) => {
     setSelectedTemplateId(tplId);
@@ -60,6 +81,31 @@ export default function NewDocumentPage() {
 
     if (!title.trim()) {
       setError('Please provide a document title.');
+      return;
+    }
+
+    if (mode === 'upload') {
+      if (!attachment) {
+        setError('Please choose a PDF file to upload.');
+        return;
+      }
+      const docId = `doc-${Date.now()}`;
+      addDocumentItem({
+        id: docId,
+        title: title.trim(),
+        description: description.trim(),
+        type,
+        folderId: folderId || null,
+        relatedProjectId: projectId || undefined,
+        content: `Uploaded PDF: ${attachment.name}`,
+        status: 'draft',
+        isEditable: false,
+        fileSize: formatFileSize(attachment.sizeBytes),
+        pages: attachment.pageCount,
+        pdf: { ...attachment, documentId: docId },
+      });
+      notify(`"${title.trim()}" uploaded to Documents`);
+      router.push(`/documents/${docId}`);
       return;
     }
 
@@ -139,8 +185,8 @@ export default function NewDocumentPage() {
             }`}
           >
             <UploadCloud className={`w-5 h-5 mb-1.5 ${mode === 'upload' ? 'text-blue-600' : 'text-muted'}`} />
-            <div className="text-xs font-bold text-ink">Demo File Record</div>
-            <p className="text-[11px] text-muted mt-0.5">Register a simulated PDF or DOCX</p>
+            <div className="text-xs font-bold text-ink">Upload PDF</div>
+            <p className="text-[11px] text-muted mt-0.5">Add a real PDF, up to 5 MB</p>
           </button>
         </div>
 
@@ -265,7 +311,38 @@ export default function NewDocumentPage() {
             </div>
           </div>
 
-          {/* Editor Area with Toolbar */}
+          {mode === 'upload' ? (
+            <div className="space-y-3 pt-2">
+              <label
+                className={`block rounded-xl border-2 border-dashed p-8 text-center cursor-pointer transition-colors ${dragOver ? 'border-flash bg-flash/10' : 'border-line hover:border-flash/60 hover:bg-mist/30'}`}
+                onDragOver={e => { e.preventDefault(); setDragOver(true); }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={e => { e.preventDefault(); setDragOver(false); void handlePdf(e.dataTransfer.files[0]); }}
+              >
+                <UploadCloud className="w-8 h-8 mx-auto text-flash-deep" />
+                <p className="mt-2 text-sm font-semibold text-ink">
+                  {processing ? 'Reading PDF…' : attachment ? attachment.name : 'Drop a PDF here or click to choose a file'}
+                </p>
+                <p className="text-xs text-muted">
+                  {attachment
+                    ? `${formatFileSize(attachment.sizeBytes)} · ${attachment.pageCount} page${attachment.pageCount === 1 ? '' : 's'} · click to choose another`
+                    : 'PDF only, up to 5 MB'}
+                </p>
+                <input
+                  type="file"
+                  accept="application/pdf,.pdf"
+                  className="hidden"
+                  onChange={e => { void handlePdf(e.target.files?.[0]); e.target.value = ''; }}
+                />
+              </label>
+              {attachment && (
+                <div className="max-h-[420px] overflow-y-auto rounded-xl bg-mist/30 p-3">
+                  <DocPages doc={attachment} maxWidth={520} />
+                </div>
+              )}
+            </div>
+          ) : (
+          /* Editor Area with Toolbar */
           <div className="space-y-2 pt-2">
             <div className="flex items-center justify-between border-b border-line pb-2">
               <div className="flex items-center gap-1">
@@ -335,6 +412,7 @@ export default function NewDocumentPage() {
               />
             )}
           </div>
+          )}
 
           {/* Actions */}
           <div className="flex items-center justify-end gap-3 pt-4 border-t border-line">
@@ -349,7 +427,7 @@ export default function NewDocumentPage() {
               className="inline-flex items-center gap-2 px-5 py-2 text-xs font-semibold rounded-lg bg-flash hover:bg-flash-deep text-ink hover:text-white transition-colors shadow-sm"
             >
               <Save className="w-4 h-4" />
-              Save Document Draft
+              {mode === 'upload' ? 'Save to Documents' : 'Save Document Draft'}
             </button>
           </div>
         </form>

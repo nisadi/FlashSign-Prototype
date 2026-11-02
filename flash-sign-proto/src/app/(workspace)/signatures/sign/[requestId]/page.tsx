@@ -10,8 +10,25 @@ import { SignatureEditor, isCompleteDraft, initialsFromName } from '@/components
 import { SignatureMark, type SignatureDraft } from '@/components/signature/signature-mark';
 import { cn } from '@/lib/utils';
 import { Modal } from '@/components/shared/modal';
+import { PdfSigningView } from '@/components/pdf/pdf-signing-view';
 
-export default function DemoSigningExperiencePage() {
+/** Requests made from an uploaded or sample PDF are signed on the real pages */
+export default function SigningPage() {
+  const params = useParams();
+  // A personal signing link works for its signer, whoever is signed in (the page checks the link)
+  const { allSignatureRequests } = useApp();
+  const request = allSignatureRequests.find(r => r.id === params?.requestId && !r.deletedAt);
+  if (request?.pdf) {
+    return (
+      <React.Suspense fallback={<div className="p-8 text-center text-xs text-muted">Loading…</div>}>
+        <PdfSigningView request={request} />
+      </React.Suspense>
+    );
+  }
+  return <DemoSigningExperiencePage />;
+}
+
+function DemoSigningExperiencePage() {
   const params = useParams();
   const router = useRouter();
   const requestId = params?.requestId as string;

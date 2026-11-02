@@ -12,7 +12,8 @@ import {
   Info
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
-import { DocumentType } from '@/types/documents';
+import { DocumentType, PdfAttachment } from '@/types/documents';
+import { preparePdfUpload, formatFileSize } from '@/components/pdf/prepare-upload';
 import { ClientPortal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
 
@@ -38,7 +39,8 @@ export function UploadDemoDialog({
   const [type, setType] = useState<DocumentType>('pdf');
   const [folderId, setFolderId] = useState<string>(defaultFolderId || '');
   const [projectId, setProjectId] = useState<string>('');
-  const [pages, setPages] = useState<number>(4);
+  const [attachment, setAttachment] = useState<PdfAttachment | null>(null);
+  const [processing, setProcessing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   if (!open) return null;
@@ -69,37 +71,54 @@ export function UploadDemoDialog({
     }
   };
 
-  const handleFileSelected = (file: File) => {
+  // The real file is read, checked (PDF only, up to 5 MB) and kept in this browser
+  const handleFileSelected = async (file: File) => {
+    setError(null);
+    setProcessing(true);
+    const result = await preparePdfUpload(file);
+    setProcessing(false);
+    if ('error' in result) {
+      setError(result.error);
+      return;
+    }
+    const { pageCount, sizeBytes } = result.attachment;
+    setAttachment(result.attachment);
     setSelectedFileName(file.name);
-    const sizeInMB = (file.size / (1024 * 1024)).toFixed(1);
-    setFileSize(`${sizeInMB} MB`);
-    const cleanTitle = file.name.replace(/\.[^/.]+$/, '');
-    setTitle(cleanTitle);
-
-    if (file.name.endsWith('.pdf')) setType('pdf');
-    else if (file.name.endsWith('.docx') || file.name.endsWith('.doc')) setType('docx');
-    else setType('agreement');
+    setFileSize(`${formatFileSize(sizeBytes)} · ${pageCount} page${pageCount === 1 ? '' : 's'}`);
+    setTitle(t => t || file.name.replace(/\.[^/.]+$/, ''));
+    setType('pdf');
   };
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
 
+    if (!attachment) {
+      setError('Please choose a PDF file.');
+      return;
+    }
     if (!title.trim()) {
       setError('Please provide a document title.');
       return;
     }
 
-    const newId = addDocumentItem({
+    const newId = `doc-${Date.now()}`;
+    addDocumentItem({
+      id: newId,
       title: title.trim(),
       type,
       folderId: folderId || null,
       relatedProjectId: projectId || undefined,
-      fileSize: fileSize || '1.8 MB',
-      pages: Number(pages) || 4,
+      fileSize: formatFileSize(attachment.sizeBytes),
+      pages: attachment.pageCount,
       status: 'draft',
-      content: `# ${title.trim()}\n\nUploaded demo file representation (${selectedFileName || title + '.pdf'}).\n\n### Document Scope\nThis document record was imported into the Flash Sign demo library. Fields and signature workflows can be configured directly from the document details workspace.`,
+      isEditable: false,
+      pdf: { ...attachment, documentId: newId },
+      content: `Uploaded PDF: ${attachment.name}`,
     });
+    setAttachment(null);
+    setSelectedFileName('');
+    setTitle('');
 
     notify(`Document "${title.trim()}" added to the library`);
     onOpenChange(false);
@@ -121,8 +140,8 @@ export function UploadDemoDialog({
               <UploadCloud className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-lg font-bold text-ink">Upload Demo Document</h3>
-              <p className="text-xs text-muted">Add a PDF, Word DOCX, or agreement into your local library.</p>
+              <h3 className="text-lg font-bold text-ink">Upload PDF</h3>
+              <p className="text-xs text-muted">Add a PDF (up to 5 MB) to your Documents. You can sign it or send it for signature later.</p>
             </div>
           </div>
           <button
@@ -167,7 +186,7 @@ export function UploadDemoDialog({
               type="file"
               id="file-upload-input"
               className="hidden"
-              accept=".pdf,.doc,.docx,.txt"
+              accept=".pdf,application/pdf"
               onChange={handleFileChange}
             />
 
@@ -177,7 +196,7 @@ export function UploadDemoDialog({
                   <FileText className="w-5 h-5" />
                 </div>
                 <div className="text-xs font-bold text-ink truncate max-w-xs mx-auto">{selectedFileName}</div>
-                <div className="text-[11px] text-muted">{fileSize} • Ready to import</div>
+                <div className="text-[11px] text-muted">{processing ? 'Reading PDF…' : `${fileSize} • Ready to add`}</div>
                 <label
                   htmlFor="file-upload-input"
                   className="inline-block text-[11px] text-flash-deep font-semibold hover:underline cursor-pointer pt-1"
@@ -283,7 +302,7 @@ export function UploadDemoDialog({
               type="submit"
               className="px-5 py-2 text-xs font-semibold rounded-lg bg-flash hover:bg-flash-deep text-ink hover:text-white transition-colors shadow-sm"
             >
-              Add to Demo Library
+              Add to Documents
             </button>
           </div>
         </form>

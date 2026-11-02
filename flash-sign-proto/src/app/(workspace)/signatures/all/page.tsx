@@ -1,273 +1,288 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
+import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
-import {
-  FileCheck2,
-  Search,
-  Filter,
-  Send,
-  Eye,
-  Clock,
-  CheckCircle2,
-  BellRing,
-  XCircle,
-  Copy,
-  PenTool,
-  AlertTriangle
-} from 'lucide-react';
-import { useApp } from '@/context/app-context';
-import {
-  SignatureRequestStatusBadge,
-  SignerStatusBadge
-} from '@/components/documents/document-badges';
-import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
-import { SignatureRequestStatus } from '@/types/documents';
+import { usePathname, useSearchParams } from 'next/navigation';
+import { Search, Send, PenTool, Trash2, X, ChevronLeft, ChevronRight, FileText, PenLine, CalendarDays } from 'lucide-react';
+import { useApp, useCurrentUser } from '@/context/app-context';
+import type { SignatureRequest } from '@/types';
+import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
+import { Button, EmptyState } from '@/components/shared/ui';
+import { notify } from '@/components/shared/toaster';
+import { requestPdfs } from '@/components/pdf/fields';
+import { cn } from '@/lib/utils';
+
+/** The inbox's filters, as in Flash Sign's agreements list. All of them live in the URL. */
+const SCOPES = [
+  { id: 'all', label: 'All requests' },
+  { id: 'sent', label: 'Sent by me' },
+  { id: 'received', label: 'Sent to me' },
+] as const;
+const STATUSES = [
+  { id: 'all', label: 'Any status' },
+  { id: 'action', label: 'Need to sign' },
+  { id: 'waiting', label: 'Waiting for others' },
+  { id: 'completed', label: 'Completed' },
+  { id: 'draft', label: 'Draft' },
+  { id: 'closed', label: 'Declined / expired / cancelled' },
+] as const;
+const PAGE_SIZES = [25, 50, 100];
+const SIX_MONTHS_MS = 183 * 86400000;
+const OPEN = ['sent', 'viewed', 'partially_signed'];
 
 export default function AllSignaturesPage() {
-  const {
-    signatureRequests,
-    sendSignatureReminder,
-    cancelSignatureRequest,
-    duplicateSignatureRequest
-  } = useApp();
+  return (
+    <Suspense fallback={<div className="p-8 text-center text-xs text-muted">Loading…</div>}>
+      <Inbox />
+    </Suspense>
+  );
+}
 
-  const [searchQuery, setSearchQuery] = useState('');
-  const [statusFilter, setStatusFilter] = useState<string>('all');
-  const [reminderToast, setReminderToast] = useState<string | null>(null);
+/** The latest thing that happened to a request */
+const lastChange = (r: SignatureRequest) =>
+  [r.completedAt, r.sentAt, r.createdAt, r.draft?.savedAt, ...(r.events ?? []).map(e => e.timestamp)]
+    .filter((v): v is string => !!v)
+    .sort()
+    .pop() ?? r.createdAt;
 
-  const filteredRequests = useMemo(() => {
+function Inbox() {
+  const pathname = usePathname();
+  const params = useSearchParams();
+  const { signatureRequests, trashSignatureRequests } = useApp();
+  const me = useCurrentUser();
+  const myEmail = me?.email.toLowerCase() ?? '';
+
+  const q = params.get('q') ?? '';
+  const scope = params.get('scope') ?? 'all';
+  const status = params.get('status') ?? 'all';
+  const sender = params.get('sender') ?? '';
+  const recentOnly = params.get('recent') !== '0';
+  const size = PAGE_SIZES.includes(Number(params.get('size'))) ? Number(params.get('size')) : 25;
+  const page = Math.max(1, Number(params.get('page')) || 1);
+
+  const setParams = (updates: Record<string, string | null>, keepPage = false) => {
+    // Start from the address bar, so quick changes in a row don't undo each other
+    const next = new URLSearchParams(window.location.search);
+    Object.entries(updates).forEach(([k, v]) => (v === null || v === '' ? next.delete(k) : next.set(k, v)));
+    if (!keepPage) next.delete('page');
+    // The native history API updates the address at once (Next keeps useSearchParams in step)
+    window.history.replaceState(null, '', `${pathname}${next.toString() ? `?${next}` : ''}`);
+  };
+
+  // Search waits for a pause in typing (300 ms), like Flash Sign's
+  const [search, setSearch] = useState(q);
+  useEffect(() => {
+    if (search === q) return;
+    const timer = setTimeout(() => setParams({ q: search }), 300);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [search]);
+
+  const [selected, setSelected] = useState<string[]>([]);
+
+  const isMineToSign = (r: SignatureRequest) =>
+    OPEN.includes(r.status) && r.signers.some(s => s.email.toLowerCase() === myEmail && (s.status === 'pending' || s.status === 'viewed'));
+  const isSentByMe = (r: SignatureRequest) => r.senderId === me?.id;
+  const isSentToMe = (r: SignatureRequest) =>
+    !isSentByMe(r) && (r.signers.some(s => s.email.toLowerCase() === myEmail) || !!r.ccRecipients?.some(c => c.email.toLowerCase() === myEmail));
+
+  const senders = useMemo(
+    () => [...new Set(signatureRequests.map(r => r.senderName).filter((n): n is string => !!n))].sort(),
+    [signatureRequests]
+  );
+
+  const filtered = useMemo(() => {
+    const term = q.trim().toLowerCase();
+    // Read once per filtering so the date window stays fixed while the list is shown
+    // eslint-disable-next-line react-hooks/purity
+    const now = Date.now();
     return signatureRequests
-      .filter(req => {
-        if (statusFilter !== 'all' && req.status !== statusFilter) return false;
-        if (searchQuery.trim()) {
-          const q = searchQuery.toLowerCase();
-          return (
-            req.title.toLowerCase().includes(q) ||
-            (req.senderName || '').toLowerCase().includes(q) ||
-            req.id.toLowerCase().includes(q) ||
-            req.signers.some(s => s.name.toLowerCase().includes(q) || s.email.toLowerCase().includes(q))
-          );
+      .filter(r => scope === 'all' || (scope === 'sent' ? isSentByMe(r) : isSentToMe(r)))
+      .filter(r => {
+        switch (status) {
+          case 'action': return isMineToSign(r);
+          case 'waiting': return OPEN.includes(r.status) && !isMineToSign(r);
+          case 'completed': return r.status === 'completed';
+          case 'draft': return r.status === 'draft';
+          case 'closed': return ['declined', 'expired', 'cancelled'].includes(r.status);
+          default: return true;
         }
-        return true;
       })
-      .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
-  }, [signatureRequests, statusFilter, searchQuery]);
+      .filter(r => !sender || r.senderName === sender)
+      .filter(r => !recentOnly || now - new Date(lastChange(r)).getTime() <= SIX_MONTHS_MS)
+      .filter(r => !term || [
+        r.title, r.senderName ?? '', ...requestPdfs(r).map(p => p.name),
+        ...r.signers.flatMap(s => [s.name, s.email]), ...(r.ccRecipients ?? []).flatMap(c => [c.name, c.email]),
+      ].some(v => v.toLowerCase().includes(term)))
+      .sort((a, b) => lastChange(b).localeCompare(lastChange(a)));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signatureRequests, q, scope, status, sender, recentOnly, myEmail, me?.id]);
 
-  const handleSendReminder = (requestId: string) => {
-    sendSignatureReminder(requestId);
-    setReminderToast(`Simulated reminder dispatched to pending signers for ${requestId}`);
-    setTimeout(() => setReminderToast(null), 3000);
+  const pages = Math.max(1, Math.ceil(filtered.length / size));
+  const current = Math.min(page, pages);
+  const rows = filtered.slice((current - 1) * size, current * size);
+  // Only requests you sent from a PDF can be deleted (the samples belong to no one)
+  const deletable = (r: SignatureRequest) => !!r.pdf && isSentByMe(r);
+  const chosen = selected.filter(id => rows.some(r => r.id === id && deletable(r)));
+  const selectableOnPage = rows.filter(deletable);
+  const filtersOn = !!q || scope !== 'all' || status !== 'all' || !!sender || !recentOnly;
+
+  const deleteRequests = (ids: string[]) => {
+    if (!window.confirm(`Move ${ids.length} request${ids.length === 1 ? '' : 's'} to the Trash?`)) return;
+    trashSignatureRequests(ids);
+    setSelected([]);
+    notify(`Moved ${ids.length} to the Trash`);
   };
 
   return (
-    <div className="min-h-full bg-paper pb-16">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-7xl mx-auto space-y-6">
-        <DemoNoticeBanner />
-
-        {reminderToast && (
-          <div className="p-3 bg-flash/20 border border-flash text-flash-deep font-semibold text-xs rounded-xl flex items-center justify-between shadow-sm animate-in fade-in">
-            <span>{reminderToast}</span>
-            <button onClick={() => setReminderToast(null)} className="text-xs hover:underline">Dismiss</button>
-          </div>
-        )}
-
-        {/* Header */}
-        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-flash/10 text-flash flex items-center justify-center border border-flash/20">
-                <FileCheck2 className="w-5 h-5" />
-              </div>
-              <div>
-                <h1 className="text-2xl font-bold text-ink">All Signature Requests</h1>
-                <p className="text-sm text-muted">
-                  Registry of all electronic signature packages, signing workflows, and execution audit states
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="flex items-center gap-2">
-            <Link
-              href="/signatures/new"
-              className="px-4 py-2 bg-flash hover:bg-flash-deep text-ink font-semibold rounded-lg text-sm transition-colors shadow-sm inline-flex items-center gap-1.5"
-            >
-              <Send className="w-4 h-4" />
-              New Signature Request
-            </Link>
-          </div>
+    <div className="p-4 sm:p-6 max-w-7xl mx-auto space-y-4">
+      <div className="flex flex-wrap items-end justify-between gap-3">
+        <div>
+          <h1 className="text-xl font-bold text-ink">All requests</h1>
+          <p className="text-sm text-muted">Everything you sent, and everything sent to you.</p>
         </div>
+        <Link href="/signatures/upload?mode=send"><Button variant="primary" icon={Send}>Get signatures</Button></Link>
+      </div>
 
-        {/* Search & Filters */}
-        <div className="bg-paper-elevated border border-line rounded-xl p-4 flex flex-col md:flex-row gap-3 items-center justify-between shadow-sm">
-          <div className="relative w-full md:w-80">
-            <Search className="w-4 h-4 text-muted absolute left-3 top-1/2 -translate-y-1/2" />
+      {/* Filters */}
+      <div className="rounded-xl border border-line bg-paper-elevated p-3 space-y-2.5">
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="relative flex-1 min-w-[220px]">
+            <Search className="w-4 h-4 text-muted absolute left-2.5 top-1/2 -translate-y-1/2" />
             <input
-              type="text"
-              placeholder="Search by title, signer, sender..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-9 pr-3 py-2 bg-paper border border-line rounded-lg text-sm text-ink placeholder:text-muted focus:outline-none focus:ring-2 focus:ring-flash/30 focus:border-flash"
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+              placeholder="Search by title, document, sender or recipient"
+              className="w-full pl-8 pr-3 py-2 text-xs rounded-lg border border-line bg-paper focus:outline-none focus:border-flash"
             />
           </div>
-
-          <div className="flex items-center gap-2 w-full md:w-auto overflow-x-auto">
-            <Filter className="w-4 h-4 text-muted shrink-0" />
-            <select
-              value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
-              aria-label="Filter by signature status"
-              className="px-3 py-1.5 bg-paper border border-line rounded-lg text-xs font-medium text-ink focus:outline-none focus:border-flash"
-            >
-              <option value="all">All Statuses</option>
-              <option value="draft">Draft</option>
-              <option value="sent">Sent</option>
-              <option value="viewed">Viewed</option>
-              <option value="partially_signed">Partially Signed</option>
-              <option value="completed">Completed</option>
-              <option value="declined">Declined</option>
-              <option value="expired">Expired</option>
-              <option value="cancelled">Cancelled</option>
-            </select>
-            <span className="text-xs text-muted font-medium ml-2 shrink-0">
-              {filteredRequests.length} package{filteredRequests.length === 1 ? '' : 's'}
-            </span>
-          </div>
+          <select value={scope} onChange={e => setParams({ scope: e.target.value === 'all' ? null : e.target.value })}
+            className="px-2 py-2 text-xs rounded-lg border border-line bg-paper" aria-label="Scope">
+            {SCOPES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+          <select value={status} onChange={e => setParams({ status: e.target.value === 'all' ? null : e.target.value })}
+            className="px-2 py-2 text-xs rounded-lg border border-line bg-paper" aria-label="Status">
+            {STATUSES.map(s => <option key={s.id} value={s.id}>{s.label}</option>)}
+          </select>
+          <select value={sender} onChange={e => setParams({ sender: e.target.value || null })}
+            className="px-2 py-2 text-xs rounded-lg border border-line bg-paper" aria-label="Sender">
+            <option value="">Any sender</option>
+            {senders.map(s => <option key={s} value={s}>{s}</option>)}
+          </select>
         </div>
+        <div className="flex flex-wrap items-center gap-2 text-xs">
+          {recentOnly ? (
+            <span className="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-flash/15 text-flash-deep font-semibold">
+              <CalendarDays className="w-3.5 h-3.5" /> Date: Last 6 months
+              <button type="button" onClick={() => setParams({ recent: '0' })} aria-label="Show all dates" className="hover:text-ink"><X className="w-3.5 h-3.5" /></button>
+            </span>
+          ) : (
+            <button type="button" onClick={() => setParams({ recent: null })} className="px-2 py-1 rounded-full border border-line text-muted hover:text-ink">
+              + Date: Last 6 months
+            </button>
+          )}
+          {filtersOn && (
+            <button type="button" onClick={() => { setSearch(''); window.history.replaceState(null, '', pathname); }} className="font-semibold text-flash-deep hover:underline">
+              Clear all
+            </button>
+          )}
+          <span className="ml-auto text-muted">{filtered.length} request{filtered.length === 1 ? '' : 's'}</span>
+        </div>
+      </div>
 
-        {/* Table of Requests */}
-        {filteredRequests.length === 0 ? (
-          <div className="bg-paper-elevated border border-line rounded-xl p-12 text-center shadow-sm">
-            <FileCheck2 className="w-12 h-12 text-muted/40 mx-auto mb-3" />
-            <h3 className="text-base font-semibold text-ink">No signature requests found</h3>
-            <p className="text-sm text-muted mt-1 max-w-sm mx-auto">
-              Try adjusting your search criteria or create a new signature request.
-            </p>
+      {filtered.length === 0 ? (
+        <EmptyState icon={FileText} title="No requests here" description="Try another filter or search, or start a new request." />
+      ) : (
+        <div className="rounded-xl border border-line bg-paper-elevated overflow-hidden">
+          <div className="flex flex-wrap items-center gap-3 px-4 py-2.5 border-b border-line bg-mist/30">
+            <label className="flex items-center gap-2 text-xs font-semibold text-ink">
+              <input
+                type="checkbox"
+                disabled={selectableOnPage.length === 0}
+                checked={selectableOnPage.length > 0 && chosen.length === selectableOnPage.length}
+                onChange={e => setSelected(e.target.checked ? selectableOnPage.map(r => r.id) : [])}
+              />
+              Select all on this page
+            </label>
+            {chosen.length > 0 && (
+              <Button size="xs" variant="danger" icon={Trash2} onClick={() => deleteRequests(chosen)}>Delete ({chosen.length})</Button>
+            )}
           </div>
-        ) : (
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-sm overflow-hidden">
-            <div className="divide-y divide-line">
-              {filteredRequests.map((req) => {
-                const totalSigners = req.signers.length;
-                const signedCount = req.signers.filter(s => s.status === 'signed').length;
-                const progressPct = totalSigners > 0 ? Math.round((signedCount / totalSigners) * 100) : 0;
-                const isComplete = req.status === 'completed';
-                const isDeclined = req.status === 'declined';
-                const isActionable = req.status !== 'completed' && req.status !== 'declined' && req.status !== 'cancelled';
 
-                return (
-                  <div
-                    key={req.id}
-                    className="p-5 flex flex-col lg:flex-row lg:items-center justify-between gap-4 hover:bg-mist/20 transition-colors"
-                  >
-                    <div className="space-y-2 flex-1 min-w-0">
-                      <div className="flex items-center gap-2 flex-wrap">
-                        <span className="text-xs font-mono font-medium text-muted bg-paper px-2 py-0.5 rounded border border-line">
-                          {req.id}
-                        </span>
-                        <SignatureRequestStatusBadge status={req.status} />
-                        <span className="text-xs text-muted">
-                          Order: <strong className="text-ink-soft capitalize">{req.signingOrder}</strong>
-                        </span>
-                        <span>•</span>
-                        <span className="text-xs text-muted">
-                          Sender: <strong className="text-ink-soft">{req.senderName}</strong>
-                        </span>
-                      </div>
-
-                      <h3 className="font-bold text-ink text-base">
-                        <Link href={`/signatures/${req.id}`} className="hover:text-flash-deep transition-colors">
-                          {req.title}
-                        </Link>
-                      </h3>
-
-                      {/* Progress Bar & Signers row */}
-                      <div className="space-y-1.5 max-w-md">
-                        <div className="flex items-center justify-between text-xs text-muted">
-                          <span>{signedCount} of {totalSigners} signers recorded</span>
-                          <span className="font-semibold text-ink-soft">{progressPct}%</span>
-                        </div>
-                        <div className="w-full bg-line/60 rounded-full h-1.5 overflow-hidden">
-                          <div
-                            className={`h-full transition-all duration-300 ${
-                              isComplete ? 'bg-flash' : isDeclined ? 'bg-danger' : 'bg-flash-deep'
-                            }`}
-                            style={{ width: `${progressPct}%` }}
-                          />
-                        </div>
-                      </div>
-
-                      {/* Signer Avatars / Status pills */}
-                      <div className="flex items-center gap-2 flex-wrap pt-1">
-                        {req.signers.map(signer => (
-                          <div
-                            key={signer.id}
-                            className="inline-flex items-center gap-1.5 text-[11px] px-2 py-0.5 rounded-full bg-paper border border-line"
-                          >
-                            <span className="font-medium text-ink-soft">{signer.name}</span>
-                            <SignerStatusBadge status={signer.status} />
-                          </div>
-                        ))}
-                      </div>
-                    </div>
-
-                    {/* Actions */}
-                    <div className="flex items-center gap-2 shrink-0 self-end lg:self-center flex-wrap">
-                      {isActionable && (
-                        <button
-                          onClick={() => handleSendReminder(req.id)}
-                          className="px-3 py-1.5 bg-paper hover:bg-mist/50 border border-line text-ink-soft text-xs font-semibold rounded-lg transition-colors flex items-center gap-1"
-                          title="Simulate sending email reminder"
-                        >
-                          <BellRing className="w-3.5 h-3.5 text-flash-deep" />
-                          Remind
-                        </button>
-                      )}
-
-                      {isActionable && (
-                        <Link
-                          href={`/signatures/sign/${req.id}`}
-                          className="px-3 py-1.5 bg-flash/20 hover:bg-flash/30 border border-flash/30 text-flash-deep text-xs font-bold rounded-lg transition-colors flex items-center gap-1"
-                          title="Test demo signing experience"
-                        >
-                          <PenTool className="w-3.5 h-3.5" />
-                          Test Sign
-                        </Link>
-                      )}
-
-                      <button
-                        onClick={() => duplicateSignatureRequest(req.id)}
-                        className="p-1.5 bg-paper hover:bg-mist/50 border border-line text-muted hover:text-ink rounded-lg transition-colors"
-                        title="Duplicate request"
-                      >
-                        <Copy className="w-4 h-4" />
-                      </button>
-
-                      {isActionable && (
-                        <button
-                          onClick={() => cancelSignatureRequest(req.id)}
-                          className="p-1.5 bg-paper hover:bg-danger/10 border border-line text-muted hover:text-danger rounded-lg transition-colors"
-                          title="Cancel request"
-                        >
-                          <XCircle className="w-4 h-4" />
-                        </button>
-                      )}
-
-                      <Link
-                        href={`/signatures/${req.id}`}
-                        className="px-3.5 py-1.5 bg-ink hover:bg-ink-soft text-paper-elevated text-xs font-semibold rounded-lg transition-colors flex items-center gap-1 shadow-sm"
-                      >
-                        <Eye className="w-3.5 h-3.5" />
-                        Details
-                      </Link>
-                    </div>
+          <ul className="divide-y divide-line">
+            {rows.map(r => {
+              const signed = r.signers.filter(s => s.status === 'signed').length;
+              const pct = r.signers.length ? Math.round((signed / r.signers.length) * 100) : 0;
+              const toMe = !isSentByMe(r) && isSentToMe(r);
+              const people = toMe ? `From: ${r.senderName || 'Unknown'}` : `To: ${r.signers.map(s => s.name).join(', ') || '—'}`;
+              const changed = new Date(lastChange(r));
+              return (
+                <li key={r.id} className="flex flex-wrap md:flex-nowrap items-center gap-3 px-4 py-3 hover:bg-mist/20">
+                  <input
+                    type="checkbox"
+                    disabled={!deletable(r)}
+                    checked={chosen.includes(r.id)}
+                    onChange={e => setSelected(s => (e.target.checked ? [...s, r.id] : s.filter(id => id !== r.id)))}
+                    aria-label={`Select ${r.title}`}
+                    className="disabled:opacity-30"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <Link href={r.status === 'draft' && r.draft ? `/signatures/upload?draft=${r.id}` : `/signatures/${r.id}`}
+                      className="text-sm font-semibold text-ink hover:underline truncate block">
+                      {r.title}
+                    </Link>
+                    <p className="text-[11px] text-muted truncate">{people}{r.pdf ? '' : ' · sample'}</p>
                   </div>
-                );
-              })}
+                  <div className="w-32 hidden sm:block">
+                    <div className="h-1.5 rounded-full bg-mist overflow-hidden">
+                      <div className={cn('h-full', r.status === 'completed' ? 'bg-emerald-500' : 'bg-flash')} style={{ width: `${r.status === 'completed' ? 100 : pct}%` }} />
+                    </div>
+                    <p className="text-[10px] text-muted mt-0.5">{signed} of {r.signers.length} signed</p>
+                  </div>
+                  <SignatureRequestStatusBadge status={r.status} />
+                  <div className="w-28 text-right text-[11px] text-muted">
+                    <p>{changed.toLocaleDateString()}</p>
+                    <p>{changed.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</p>
+                  </div>
+                  <div className="flex items-center gap-1.5 w-[170px] justify-end">
+                    {isMineToSign(r) && (
+                      <Link href={`/signatures/sign/${r.id}`}><Button size="xs" variant="primary" icon={PenTool}>Sign</Button></Link>
+                    )}
+                    {r.status === 'draft' && r.draft ? (
+                      <Link href={`/signatures/upload?draft=${r.id}`}><Button size="xs" icon={PenLine}>Continue</Button></Link>
+                    ) : (
+                      <Link href={`/signatures/${r.id}`}><Button size="xs">Open</Button></Link>
+                    )}
+                    {deletable(r) && (
+                      <button type="button" onClick={() => deleteRequests([r.id])} className="p-1 text-muted hover:text-danger" aria-label={`Delete ${r.title}`}>
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+
+          {/* Paging: 25 / 50 / 100 per page */}
+          <div className="flex flex-wrap items-center justify-between gap-2 px-4 py-2.5 border-t border-line text-xs text-muted">
+            <label className="flex items-center gap-1.5">
+              Rows per page
+              <select value={size} onChange={e => setParams({ size: e.target.value === '25' ? null : e.target.value })}
+                className="px-1.5 py-1 rounded-md border border-line bg-paper">
+                {PAGE_SIZES.map(n => <option key={n} value={n}>{n}</option>)}
+              </select>
+            </label>
+            <div className="flex items-center gap-2">
+              <span>Page {current} of {pages} ({filtered.length} items)</span>
+              <button type="button" disabled={current <= 1} onClick={() => setParams({ page: String(current - 1) }, true)}
+                className="p-1 rounded border border-line disabled:opacity-30" aria-label="Previous page"><ChevronLeft className="w-4 h-4" /></button>
+              <button type="button" disabled={current >= pages} onClick={() => setParams({ page: String(current + 1) }, true)}
+                className="p-1 rounded border border-line disabled:opacity-30" aria-label="Next page"><ChevronRight className="w-4 h-4" /></button>
             </div>
           </div>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

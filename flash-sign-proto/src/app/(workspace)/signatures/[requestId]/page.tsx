@@ -31,8 +31,29 @@ import {
   SignerStatusBadge
 } from '@/components/documents/document-badges';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
+import { PdfRequestDetail } from '@/components/pdf/pdf-request-detail';
 
-export default function SigningProgressPage() {
+/** Requests made from an uploaded or sample PDF have their own details page */
+export default function RequestDetailPage() {
+  const params = useParams();
+  const { signatureRequests, trashedSignatureRequests, allSignatureRequests } = useApp();
+  const id = params?.requestId as string;
+  const request = signatureRequests.find(r => r.id === id) ?? trashedSignatureRequests.find(r => r.id === id);
+  if (request?.pdf) return <PdfRequestDetail request={request} />;
+  // As in Flash Sign: only the sender and the recipients can open an uploaded-PDF request
+  if (allSignatureRequests.some(r => r.id === id && r.pdf)) {
+    return (
+      <div className="p-6 max-w-lg mx-auto text-center space-y-2">
+        <h1 className="text-base font-bold text-ink">Request not found</h1>
+        <p className="text-xs text-muted">This request doesn&apos;t exist, or it belongs to another account.</p>
+        <Link href="/signatures/all" className="text-xs font-semibold text-flash-deep hover:underline">Back to the inbox</Link>
+      </div>
+    );
+  }
+  return <SigningProgressPage />;
+}
+
+function SigningProgressPage() {
   const params = useParams();
   const router = useRouter();
   const requestId = params?.requestId as string;

@@ -13,6 +13,7 @@ import { SearchCommand } from '@/components/shared/search-command';
 // Pages whose title differs from their URL segment (applied when the page is the current one)
 const PAGE_TITLES: Record<string, string> = {
   '/teams': 'Team Analytics',
+  '/signatures/upload': 'Upload & Sign',
 };
 
 // Crumb labels that differ from their URL segment wherever they appear in the trail

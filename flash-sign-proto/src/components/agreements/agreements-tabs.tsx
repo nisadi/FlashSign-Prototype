@@ -7,7 +7,8 @@ import { FEATURES } from '@/lib/features';
 export type AgreementsTabGroup = 'inbox' | 'documents';
 
 function useTabGroups(): Record<AgreementsTabGroup, SectionTab[]> {
-  const { signatureRequests } = useApp();
+  const { signatureRequests, trashedSignatureRequests } = useApp();
+  const drafts = signatureRequests.filter(r => r.status === 'draft').length;
   // Same count as the sidebar "Action Required" badge
   const actionRequired = signatureRequests?.filter(
     r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed'
@@ -27,7 +28,10 @@ function useTabGroups(): Record<AgreementsTabGroup, SectionTab[]> {
           { label: 'Expired', href: '/signatures/expired' },
         ],
       },
-      { label: 'Drafts', href: '/signatures/drafts' },
+      { label: 'Drafts', href: '/signatures/drafts', badge: drafts || undefined },
+      // Emails the demo would have sent, with each signer's signing link
+      { label: 'Outbox', href: '/signatures/outbox' },
+      { label: 'Trash', href: '/signatures/trash', badge: trashedSignatureRequests.length || undefined },
     ],
     documents: [
       { label: 'All Documents', href: '/documents/all' },

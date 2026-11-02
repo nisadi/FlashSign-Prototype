@@ -23,8 +23,8 @@ const DAY_MS = 1000 * 60 * 60 * 24;
 const EXPIRING_SOON_DAYS = 7;
 
 const START_ACTIONS = [
-  { label: 'Get Signatures', shortLabel: 'Get Signatures', description: 'Send a document for others to sign', href: '/signatures/new', icon: Send },
-  { label: 'Sign a Document', shortLabel: 'Sign Document', description: 'Sign a document yourself', href: '/signatures/new', icon: PenLine },
+  { label: 'Get Signatures', shortLabel: 'Get Signatures', description: 'Upload a PDF for others to sign', href: '/signatures/upload?mode=send', icon: Send },
+  { label: 'Sign a Document', shortLabel: 'Sign Document', description: 'Upload a PDF and sign it yourself', href: '/signatures/upload?mode=self', icon: PenLine },
   { label: 'Use a Template', shortLabel: 'Use Template', description: 'Start from a saved template', href: '/documents/templates', icon: LayoutTemplate },
   { label: 'New Document', shortLabel: 'New Document', description: 'Write or upload a document', href: '/documents/new', icon: FilePlus2 },
 ];

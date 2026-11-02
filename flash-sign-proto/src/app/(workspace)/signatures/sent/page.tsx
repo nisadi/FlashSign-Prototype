@@ -85,7 +85,7 @@ export default function SentSignatureRequestsPage() {
           </div>
           <div className="flex items-center gap-2">
             <Link
-              href="/signatures/new"
+              href="/signatures/upload?mode=send"
               className="px-4 py-2 bg-flash hover:bg-flash-deep text-ink font-semibold rounded-lg text-sm transition-colors shadow-sm inline-flex items-center gap-1.5"
             >
               <Send className="w-4 h-4" />

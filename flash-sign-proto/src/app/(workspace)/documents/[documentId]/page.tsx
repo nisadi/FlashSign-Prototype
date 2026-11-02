@@ -31,6 +31,11 @@ import { FEATURES } from '@/lib/features';
 import { DocumentStatusBadge, DocumentTypeBadge } from '@/components/documents/document-badges';
 import { MoveFolderDialog } from '@/components/documents/move-folder-dialog';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
+import { DocPages } from '@/components/pdf/pdf-pages';
+import { loadAttachmentBytes, downloadBytes } from '@/lib/pdf/file-store';
+import { requestPdfs } from '@/components/pdf/fields';
+import { notify } from '@/components/shared/toaster';
+import { PenLine } from 'lucide-react';
 
 export default function DocumentDetailsPage({
   params,
@@ -51,6 +56,8 @@ export default function DocumentDetailsPage({
     deleteDocumentItem,
     addDocumentComment,
     updateDocumentItem,
+    signatureRequests,
+    isHydrated,
   } = useApp();
   const currentUser = useCurrentUser();
 
@@ -60,7 +67,11 @@ export default function DocumentDetailsPage({
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const doc = documentItems.find(d => d.id === documentId);
+  // Saved documents (e.g. uploaded PDFs) arrive once the browser data is read
+  if (!doc && !isHydrated) return <div className="p-8 text-center text-xs text-muted">Loading…</div>;
   if (!doc) return notFound();
+  // Signature requests made from this PDF
+  const usedIn = doc.pdf ? signatureRequests.filter(r => requestPdfs(r).some(p => p.documentId === doc.id)) : [];
 
   const owner = users.find(u => u.id === doc.ownerId);
   const folder = documentFolders.find(f => f.id === doc.folderId);
@@ -72,7 +83,13 @@ export default function DocumentDetailsPage({
     setTimeout(() => setToastMessage(null), 3000);
   };
 
-  const handleDownloadDemo = () => {
+  const handleDownloadDemo = async () => {
+    if (doc.pdf) {
+      const bytes = await loadAttachmentBytes(doc.pdf);
+      if (bytes) downloadBytes(bytes, doc.pdf.name);
+      else notify('The PDF is not in this browser any more.', 'error');
+      return;
+    }
     const blob = new Blob([doc.content], { type: 'text/markdown;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -137,6 +154,25 @@ export default function DocumentDetailsPage({
 
           {/* Action Buttons */}
           <div className="flex items-center gap-2 flex-wrap">
+            {doc.pdf ? (
+              <>
+                <Link
+                  href={`/signatures/upload?mode=self&documentId=${doc.id}`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border border-line bg-white hover:bg-paper text-ink transition-colors shadow-xs"
+                >
+                  <PenLine className="w-4 h-4 text-muted" />
+                  Sign it yourself
+                </Link>
+                <Link
+                  href={`/signatures/upload?mode=send&documentId=${doc.id}`}
+                  className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg bg-flash hover:bg-flash-deep text-ink hover:text-white transition-colors shadow-xs"
+                >
+                  <Send className="w-4 h-4" />
+                  Send for signature
+                </Link>
+              </>
+            ) : (
+            <>
             <Link
               href={`/documents/${doc.id}/edit`}
               className="inline-flex items-center gap-1.5 px-3.5 py-2 text-xs font-semibold rounded-lg border border-line bg-white hover:bg-paper text-ink transition-colors shadow-xs"
@@ -151,6 +187,8 @@ export default function DocumentDetailsPage({
               <FileSignature className="w-4 h-4" />
               Request Signature
             </Link>
+            </>
+            )}
           </div>
         </div>
 
@@ -194,7 +232,7 @@ export default function DocumentDetailsPage({
             <button
               onClick={handleDownloadDemo}
               className="p-1.5 rounded-lg border border-line bg-paper hover:bg-white text-muted hover:text-ink text-xs flex items-center gap-1"
-              title="Download Demo Copy"
+              title={doc.pdf ? 'Download the PDF' : 'Download Demo Copy'}
             >
               <Download className="w-3.5 h-3.5" /> Export
             </button>
@@ -247,7 +285,33 @@ export default function DocumentDetailsPage({
             </div>
 
             {/* Tab 1: Preview */}
-            {activeTab === 'preview' && (
+            {activeTab === 'preview' && doc.pdf && (
+              <div className="bg-white border border-line/70 rounded-2xl p-4 shadow-sm space-y-4">
+                <div className="flex flex-wrap items-center justify-between gap-2 text-xs text-muted">
+                  <span className="uppercase font-bold tracking-wider">PDF · {doc.pdf.name}</span>
+                  <span>{doc.fileSize}</span>
+                </div>
+                <div className="rounded-xl bg-mist/30 p-3">
+                  <DocPages doc={doc.pdf} />
+                </div>
+                <div className="border-t border-line/60 pt-3 text-xs">
+                  <p className="font-semibold text-ink mb-1">Signature requests using this PDF ({usedIn.length})</p>
+                  {usedIn.length === 0 ? (
+                    <p className="text-muted">Not sent for signature yet.</p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {usedIn.map(r => (
+                        <li key={r.id}>
+                          <Link href={`/signatures/${r.id}`} className="text-flash-deep hover:underline">{r.title}</Link>
+                          <span className="text-muted"> · {r.status.replace(/_/g, ' ')}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </div>
+              </div>
+            )}
+            {activeTab === 'preview' && !doc.pdf && (
               <div className="bg-white border border-line/70 rounded-2xl p-6 sm:p-10 shadow-sm space-y-6">
                 <div className="border-b border-line/60 pb-4 flex items-center justify-between">
                   <div className="text-xs text-muted uppercase font-bold tracking-wider">

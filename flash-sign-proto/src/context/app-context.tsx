@@ -27,6 +27,7 @@ import type {
   SignatureRequest, SignatureSigner, SignatureField, AuditEvent,
   DocumentComment, ContractReviewComment,
   SavedSignature, SigningDefaults, CompanySeal,
+  PdfAttachment, CopyRecipient, DemoEmail, SigningOrder, ReminderFrequency, PdfRequestDraft,
 } from '@/types/documents';
 import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signing';
 import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS, MOCK_STATUS_CHANGES } from '@/data/mock-agent-activity';
@@ -57,6 +58,31 @@ export type CreateCalendarEventInput = Partial<CalendarEvent> & { title: string;
 export type CreateTimeOffInput = Partial<TimeOffRequest> & { memberId: string; leaveType: LeaveType; startDate: string; endDate: string; durationDays: number };
 export type CreateMeetingInput = Partial<Meeting> & { title: string; date: string; startTime: string; endTime: string };
 export type CreateAnnouncementInput = Partial<Announcement> & { title: string; content: string };
+export interface CreatePdfRequestInput {
+  title: string;
+  /** One or more PDFs, in order */
+  pdfs: PdfAttachment[];
+  /** In signing order; for "sign it yourself" just the sender */
+  signers: { id: string; name: string; email: string; color?: string }[];
+  ccRecipients?: CopyRecipient[];
+  fields: SignatureField[];
+  signingOrder: SigningOrder;
+  message?: string;
+  expiresInDays: number;
+  reminderFrequency?: ReminderFrequency;
+  selfSign?: boolean;
+  /** Sending a saved draft: it becomes this request */
+  draftId?: string;
+}
+export interface SaveDraftInput {
+  /** Missing = a new draft */
+  id?: string;
+  title: string;
+  pdfs: PdfAttachment[];
+  signers: CreatePdfRequestInput['signers'];
+  fields: SignatureField[];
+  draft: Omit<PdfRequestDraft, 'savedAt'>;
+}
 
 export interface AppState {
   demoRole: DemoRole;
@@ -130,6 +156,100 @@ function statusChange(
 }
 
 type BoardMove = { from: string; to: string };
+
+/** An email the demo would have sent; it is shown in Agreements > Outbox instead */
+function demoEmail(
+  kind: DemoEmail['kind'], to: { name: string; email: string }, subject: string, body: string,
+  extra?: Partial<DemoEmail>
+): DemoEmail {
+  return {
+    id: `mail-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    kind, toName: to.name, toEmail: to.email, subject, body, sentAt: new Date().toISOString(), ...extra,
+  };
+}
+
+function signingInvite(req: { title: string; senderName?: string; message?: string }, signer: SignatureSigner): DemoEmail {
+  return demoEmail(
+    'invite', signer,
+    `${req.senderName || 'Someone'} sent you "${req.title}" to sign`,
+    `${req.message ? `${req.message}\n\n` : ''}Open your personal link to review and sign the document.`,
+    { signerId: signer.id }
+  );
+}
+
+/**
+ * Who may see a request (as in Flash Sign): its sender and the people it was sent to.
+ * The built-in sample requests (not made from a PDF) stay visible to everyone for the demo.
+ */
+export function canSeeSignatureRequest(r: SignatureRequest, user: { id: string; email: string } | undefined): boolean {
+  if (!r.pdf) return true;
+  if (!user) return false;
+  const email = user.email.toLowerCase();
+  return r.senderId === user.id
+    || r.signers.some(s => s.email.toLowerCase() === email)
+    || !!r.ccRecipients?.some(c => c.email.toLowerCase() === email);
+}
+
+const REMINDER_DAYS: Record<ReminderFrequency, number | null> = {
+  daily: 1, every_2_days: 2, every_3_days: 3, weekly: 7, never: null,
+};
+
+/**
+ * Flash Sign's background job (server/lib/scheduler.ts), run in the browser: open requests
+ * past their expiry date expire and the sender is emailed; otherwise signers who still have
+ * to sign are reminded when their reminder is due. Only uploaded-PDF requests take part.
+ * Returns null when nothing changed.
+ */
+function applySignatureSchedule(requests: SignatureRequest[], users: User[], now: number): SignatureRequest[] | null {
+  let changed = false;
+  const at = new Date(now).toISOString();
+  const next = requests.map(r => {
+    if (!r.pdf || r.deletedAt || !['sent', 'viewed', 'partially_signed'].includes(r.status)) return r;
+
+    if (new Date(`${r.expiresAt}T23:59:59`).getTime() < now) {
+      changed = true;
+      const sender = users.find(u => u.id === r.senderId);
+      return {
+        ...r,
+        status: 'expired' as const,
+        emails: [...(r.emails || []), ...(sender ? [demoEmail(
+          'expired', sender, `"${r.title}" expired`,
+          `It expired on ${r.expiresAt} before everyone signed. No one can sign it any more.`,
+          { sentAt: at }
+        )] : [])],
+        events: [...(r.events || []), { ...requestEvent(r.id, 'Request Expired', 'Flash Sign', `Expired on ${r.expiresAt}; the sender was emailed.`, 'status'), timestamp: at }],
+      };
+    }
+
+    const everyDays = REMINDER_DAYS[r.reminderFrequency ?? 'never'];
+    const last = new Date(r.lastReminderAt || r.sentAt || r.createdAt).getTime();
+    if (r.selfSign || everyDays === null || now - last < everyDays * 86400000) return r;
+    const waiting = r.signers.filter(s => s.status === 'pending' || s.status === 'viewed');
+    if (waiting.length === 0) return r;
+    changed = true;
+    return {
+      ...r,
+      lastReminderAt: at,
+      emails: [...(r.emails || []), ...waiting.map(sg => demoEmail(
+        'reminder', sg, `Reminder: please sign "${r.title}"`,
+        `${r.senderName || 'The sender'} is still waiting for your signature. (Automatic reminder)`,
+        { signerId: sg.id, sentAt: at }
+      ))],
+      events: [...(r.events || []), { ...requestEvent(r.id, 'Automatic Reminder Sent', 'Flash Sign', `Reminded ${waiting.map(s => s.name).join(', ')}.`, 'delivery'), timestamp: at }],
+    };
+  });
+  return changed ? next : null;
+}
+
+const shiftIso = (iso: string | undefined, days: number) =>
+  iso ? new Date(new Date(iso).getTime() - days * 86400000).toISOString() : iso;
+
+function requestEvent(requestId: string, eventName: string, actorName: string, description: string, category: AuditEvent['category']): AuditEvent {
+  return {
+    id: `ev-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+    requestId, eventName, actorName, description, category, timestamp: new Date().toISOString(),
+  };
+}
 
 /**
  * A card moved on the board (or in a task view). Moving into In Progress starts the worker's
@@ -420,6 +540,24 @@ interface AppActions {
   signDocumentSimulated: (requestId: string, signerId: string, signatureValue: string, seal?: { id: string; name: string }) => void;
   declineSignatureRequest: (requestId: string, signerId: string, reason: string) => void;
   updateSignatureFields: (requestId: string, fields: SignatureField[]) => void;
+  /** Send an uploaded/sample PDF for signing (or start "sign it yourself"); returns the request id */
+  createPdfRequest: (input: CreatePdfRequestInput) => string;
+  /** A signer opened their signing link */
+  markPdfSignerViewed: (requestId: string, signerId: string) => void;
+  /**
+   * A signer filled their fields and signed. Only works when it is their turn and the request
+   * is still open; the next signer is invited, and everyone gets the signed copy at the end.
+   */
+  completePdfSigning: (requestId: string, signerId: string, values: Record<string, string>, signatureValue: string) => void;
+  /** Create or update a draft (an uploaded-PDF request that is not sent yet); returns its id */
+  saveSignatureDraft: (input: SaveDraftInput) => string;
+  /** Move requests the signed-in user sent to the Trash */
+  trashSignatureRequests: (ids: string[]) => void;
+  restoreSignatureRequests: (ids: string[]) => void;
+  /** Delete for ever (only from the Trash) */
+  purgeSignatureRequests: (ids: string[]) => void;
+  /** Demo: make a request `days` older, then run the automatic reminders and expiry */
+  simulateTimePassing: (requestId: string, days: number) => void;
   // Approvals
   updateApproval: (id: string, updates: Partial<ApprovalRequest>) => void;
   // Agent Runs
@@ -436,7 +574,14 @@ interface AppActions {
   resetDemoData: () => void;
 }
 
-export type AppContextValue = AppState & AppActions;
+export type AppContextValue = AppState & AppActions & {
+  /** Every request, whoever may see it: for the demo Outbox and personal signing links only */
+  allSignatureRequests: SignatureRequest[];
+  /** Requests the signed-in user moved to the Trash */
+  trashedSignatureRequests: SignatureRequest[];
+  /** False until the saved data has been read from the browser (first render uses the samples) */
+  isHydrated: boolean;
+};
 
 const AppContext = createContext<AppContextValue | null>(null);
 
@@ -549,6 +694,11 @@ function saveState(state: AppState): void {
       agentSettings: state.agentSettings,
       taskStatusChanges: state.taskStatusChanges,
       agentRuns: state.agentRuns,
+      // Signature requests, including uploaded-PDF ones (their files are in IndexedDB)
+      signatureRequests: state.signatureRequests,
+      // The Documents library and its folders (uploaded PDFs are kept in IndexedDB)
+      documentItems: state.documentItems,
+      documentFolders: state.documentFolders,
       sidebarCollapsed: state.sidebarCollapsed,
       recentProjectIds: state.recentProjectIds,
       srsTaskHistories: state.srsTaskHistories,
@@ -590,7 +740,14 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     if (!hydrated) return;
     const check = () => setState(s => {
       const stopped = applyAutoStops(s.workSessions, s.agentSettings, Date.now());
-      return stopped ? { ...s, workSessions: stopped.sessions, agentEvents: [...s.agentEvents, ...stopped.events] } : s;
+      // Signature requests: automatic reminders and expiry
+      const scheduled = applySignatureSchedule(s.signatureRequests, s.users, Date.now());
+      if (!stopped && !scheduled) return s;
+      return {
+        ...s,
+        ...(stopped && { workSessions: stopped.sessions, agentEvents: [...s.agentEvents, ...stopped.events] }),
+        ...(scheduled && { signatureRequests: scheduled }),
+      };
     });
     check();
     const timer = setInterval(check, 60_000);
@@ -1940,6 +2097,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
             },
           ],
           comments: doc.comments || [],
+          pdf: doc.pdf,
           lastOpenedAt: new Date().toISOString(),
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
@@ -2314,9 +2472,17 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...s,
         signatureRequests: s.signatureRequests.map(r => {
           if (r.id === id) {
+            const cancelEmails = r.pdf && !r.selfSign
+              ? r.signers.filter(sg => sg.status !== 'signed').map(sg => demoEmail(
+                  'cancelled', sg,
+                  `"${r.title}" was cancelled`,
+                  `${user?.name || 'The sender'} cancelled this signature request. You no longer need to sign it.`
+                ))
+              : [];
             return {
               ...r,
               status: 'cancelled',
+              emails: [...(r.emails || []), ...cancelEmails],
               events: [
                 ...(r.events || []),
                 {
@@ -2359,8 +2525,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         signatureRequests: s.signatureRequests.map(r => {
           if (r.id === requestId) {
             const targetSigner = signerId ? r.signers.find(x => x.id === signerId)?.name : 'All pending signers';
+            const reminderEmails = r.pdf
+              ? r.signers
+                  .filter(sg => (signerId ? sg.id === signerId : true) && (sg.status === 'pending' || sg.status === 'viewed'))
+                  .map(sg => demoEmail(
+                    'reminder', sg,
+                    `Reminder: please sign "${r.title}"`,
+                    `${user?.name || 'The sender'} is waiting for your signature.`,
+                    { signerId: sg.id }
+                  ))
+              : [];
             return {
               ...r,
+              emails: [...(r.emails || []), ...reminderEmails],
               events: [
                 ...(r.events || []),
                 {
@@ -2498,8 +2675,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         signatureRequests: s.signatureRequests.map(r => {
           if (r.id === requestId) {
             const signerObj = r.signers.find(x => x.id === signerId || x.email === signerId);
+            // Uploaded-PDF requests follow the rules: only an open request, only on your turn
+            const canDecline = ['sent', 'viewed', 'partially_signed'].includes(r.status)
+              && !!signerObj && ['pending', 'viewed'].includes(signerObj.status);
+            if (r.pdf && !canDecline) return r;
+            const sender = s.users.find(u => u.id === r.senderId);
+            const declineEmails = r.pdf && sender && signerObj ? [demoEmail(
+              'declined', sender,
+              `${signerObj.name} declined "${r.title}"`,
+              `Reason given: "${reason}". The request is closed and no one else can sign it.`
+            )] : [];
             return {
               ...r,
+              emails: [...(r.emails || []), ...declineEmails],
               status: 'declined',
               signers: r.signers.map(sgn =>
                 sgn.id === signerId || sgn.email === signerId
@@ -2530,6 +2718,247 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         r.id === requestId ? { ...r, fields } : r
       ),
     })),
+
+    createPdfRequest: (input) => {
+      // A sent draft keeps its id, so its links and history carry on
+      const id = input.draftId || `sig-${Date.now()}`;
+      const first = input.pdfs[0];
+      const pages = input.pdfs.reduce((n, p) => n + p.pageCount, 0);
+      const docLabel = input.pdfs.length === 1 ? `"${first.name}"` : `${input.pdfs.length} documents`;
+      update(s => {
+        const sender = s.users.find(u => u.id === s.currentUserId);
+        const senderName = sender?.name || 'User';
+        const now = new Date().toISOString();
+        const sequential = input.signingOrder === 'sequential';
+        const signers: SignatureSigner[] = input.signers.map((sg, i) => ({
+          id: sg.id,
+          name: sg.name,
+          email: sg.email,
+          role: input.selfSign ? 'Signer (you)' : 'Signer',
+          order: i + 1,
+          // In order: only the first signer can sign now; at the same time: everyone
+          status: !sequential || i === 0 ? 'pending' : 'waiting',
+          required: true,
+          color: sg.color,
+        }));
+        const req: SignatureRequest = {
+          id,
+          title: input.title,
+          senderId: s.currentUserId,
+          senderName,
+          signers,
+          signingOrder: input.signingOrder,
+          status: 'sent',
+          createdAt: now,
+          sentAt: now,
+          expiresAt: new Date(Date.now() + input.expiresInDays * 86400000).toISOString().split('T')[0],
+          message: input.message,
+          reminderFrequency: input.selfSign ? 'never' : (input.reminderFrequency ?? 'every_2_days'),
+          reminderIntervalDays: REMINDER_DAYS[input.reminderFrequency ?? 'every_2_days'] ?? undefined,
+          fields: input.fields,
+          pdf: first,
+          pdfs: input.pdfs,
+          selfSign: input.selfSign,
+          ccRecipients: input.ccRecipients,
+          events: [
+            requestEvent(
+              id,
+              input.selfSign ? 'Document Prepared for Signing' : 'Signature Request Sent',
+              senderName,
+              input.selfSign
+                ? `${docLabel} (${pages} pages) prepared with ${input.fields.length} fields to sign yourself.`
+                : `${docLabel} sent to ${signers.length} signer(s)${input.ccRecipients?.length ? ` and ${input.ccRecipients.length} copy/view recipient(s)` : ''}.`,
+              'creation'
+            ),
+          ],
+        };
+        // Nothing is emailed when signing yourself; otherwise invite whoever can sign now
+        req.emails = input.selfSign ? [] : [
+          ...signers.filter(sg => sg.status === 'pending').map(sg => signingInvite(req, sg)),
+          ...(input.ccRecipients || []).map(cc => demoEmail(
+            'copy', cc,
+            `${senderName} shared "${input.title}" with you`,
+            cc.role === 'view'
+              ? 'Please view this document. You do not need to sign it. The signed copy will be emailed to you when everyone has signed.'
+              : 'You will receive a copy of this document. You do not need to sign it. The signed copy will be emailed to you when everyone has signed.'
+          )),
+        ];
+        const log: AuditLog = {
+          id: `act-${Date.now()}`,
+          actorId: s.currentUserId,
+          actorName: senderName,
+          action: input.selfSign ? 'started signing' : 'sent signature request',
+          resource: 'SignatureRequest',
+          resourceId: id,
+          detail: `"${input.title}"`,
+          timestamp: now,
+        };
+        // Documents these PDFs came from are now out for signature
+        const linked = new Set(input.pdfs.map(p => p.documentId).filter(Boolean));
+        return {
+          ...s,
+          documentItems: linked.size
+            ? s.documentItems.map(d => (linked.has(d.id) && d.status !== 'signed' ? { ...d, status: 'pending' as const, updatedAt: now } : d))
+            : s.documentItems,
+          signatureRequests: [req, ...s.signatureRequests.filter(r => r.id !== id)],
+          auditLogs: [log, ...s.auditLogs],
+          activities: [log, ...s.activities],
+        };
+      });
+      return id;
+    },
+
+    saveSignatureDraft: (input) => {
+      const id = input.id || `sig-${Date.now()}`;
+      update(s => {
+        const sender = s.users.find(u => u.id === s.currentUserId);
+        const now = new Date().toISOString();
+        const existing = s.signatureRequests.find(r => r.id === id);
+        const draft: SignatureRequest = {
+          id,
+          title: input.title || input.pdfs[0]?.name || 'Untitled',
+          senderId: existing?.senderId ?? s.currentUserId,
+          senderName: existing?.senderName ?? sender?.name,
+          signers: input.signers.map((sg, i) => ({
+            id: sg.id, name: sg.name, email: sg.email, role: 'Signer', order: i + 1,
+            status: 'waiting' as const, required: true, color: sg.color,
+          })),
+          signingOrder: input.draft.signingOrder,
+          status: 'draft',
+          createdAt: existing?.createdAt ?? now,
+          expiresAt: new Date(Date.now() + input.draft.expiresInDays * 86400000).toISOString().split('T')[0],
+          message: input.draft.message,
+          fields: input.fields,
+          pdf: input.pdfs[0],
+          pdfs: input.pdfs,
+          selfSign: input.draft.mode === 'self',
+          reminderFrequency: input.draft.reminderFrequency,
+          draft: { ...input.draft, savedAt: now },
+          events: existing?.events ?? [requestEvent(id, 'Draft Created', sender?.name || 'User', 'Saved as a draft.', 'creation')],
+        };
+        return {
+          ...s,
+          signatureRequests: existing
+            ? s.signatureRequests.map(r => (r.id === id ? draft : r))
+            : [draft, ...s.signatureRequests],
+        };
+      });
+      return id;
+    },
+
+    trashSignatureRequests: (ids) => update(s => {
+      const now = new Date().toISOString();
+      // Only the sender can delete (as in Flash Sign); the samples are not anyone's to delete
+      return {
+        ...s,
+        signatureRequests: s.signatureRequests.map(r =>
+          ids.includes(r.id) && r.pdf && r.senderId === s.currentUserId && !r.deletedAt ? { ...r, deletedAt: now } : r),
+      };
+    }),
+    restoreSignatureRequests: (ids) => update(s => ({
+      ...s,
+      signatureRequests: s.signatureRequests.map(r => (ids.includes(r.id) && r.deletedAt ? { ...r, deletedAt: undefined } : r)),
+    })),
+    purgeSignatureRequests: (ids) => update(s => ({
+      ...s,
+      signatureRequests: s.signatureRequests.filter(r => !(ids.includes(r.id) && r.deletedAt && r.senderId === s.currentUserId)),
+    })),
+
+    simulateTimePassing: (requestId, days) => update(s => {
+      const aged = s.signatureRequests.map(r => {
+        if (r.id !== requestId) return r;
+        const expires = new Date(`${r.expiresAt}T12:00:00`);
+        expires.setDate(expires.getDate() - days);
+        return {
+          ...r,
+          createdAt: shiftIso(r.createdAt, days)!,
+          sentAt: shiftIso(r.sentAt, days),
+          lastReminderAt: shiftIso(r.lastReminderAt, days),
+          expiresAt: expires.toISOString().split('T')[0],
+          events: [...(r.events || []), requestEvent(requestId, 'Demo: Time Moved Forward', 'Demo', `${days} day(s) passed.`, 'status')],
+        };
+      });
+      return { ...s, signatureRequests: applySignatureSchedule(aged, s.users, Date.now()) ?? aged };
+    }),
+
+    markPdfSignerViewed: (requestId, signerId) => update(s => {
+      const req = s.signatureRequests.find(r => r.id === requestId);
+      const signer = req?.signers.find(sg => sg.id === signerId);
+      if (!req || !signer || signer.status !== 'pending') return s;
+      const now = new Date().toISOString();
+      return {
+        ...s,
+        signatureRequests: s.signatureRequests.map(r => r.id !== requestId ? r : {
+          ...r,
+          status: r.status === 'sent' ? 'viewed' : r.status,
+          signers: r.signers.map(sg => sg.id === signerId ? { ...sg, status: 'viewed' as const, viewedAt: now } : sg),
+          events: [...(r.events || []), requestEvent(requestId, 'Document Opened', signer.name, `${signer.name} opened the document.`, 'signing')],
+        }),
+      };
+    }),
+
+    completePdfSigning: (requestId, signerId, values, signatureValue) => update(s => {
+      const req = s.signatureRequests.find(r => r.id === requestId);
+      const signer = req?.signers.find(sg => sg.id === signerId);
+      const open = req && ['sent', 'viewed', 'partially_signed'].includes(req.status);
+      if (!req || !signer || !open || !['pending', 'viewed'].includes(signer.status)) return s;
+
+      const now = new Date().toISOString();
+      let signers = req.signers.map(sg => sg.id === signerId
+        ? { ...sg, status: 'signed' as const, signedAt: now, signatureValue }
+        : sg);
+      const fields = req.fields.map(f => (f.signerId === signerId && values[f.id] !== undefined ? { ...f, value: values[f.id] } : f));
+      const emails: DemoEmail[] = [];
+      const events: AuditEvent[] = [
+        requestEvent(requestId, 'Document Signed', signer.name, `${signer.name} filled ${Object.keys(values).length} field(s) and signed.`, 'signing'),
+      ];
+
+      // In order: the next signer is now invited
+      if (req.signingOrder === 'sequential') {
+        const next = [...signers].sort((a, b) => a.order - b.order).find(sg => sg.status === 'waiting');
+        if (next) {
+          signers = signers.map(sg => (sg.id === next.id ? { ...sg, status: 'pending' as const } : sg));
+          emails.push(signingInvite(req, { ...next, status: 'pending' }));
+          events.push(requestEvent(requestId, 'Next Signer Invited', 'Flash Sign', `${next.name} can now sign.`, 'delivery'));
+        }
+      }
+
+      const done = signers.every(sg => sg.status === 'signed');
+      if (done) {
+        const sender = s.users.find(u => u.id === req.senderId);
+        const recipients = new Map<string, { name: string; email: string }>();
+        signers.forEach(sg => recipients.set(sg.email.toLowerCase(), sg));
+        (req.ccRecipients || []).forEach(cc => recipients.set(cc.email.toLowerCase(), cc));
+        if (sender) recipients.set(sender.email.toLowerCase(), sender);
+        recipients.forEach(to => emails.push(demoEmail(
+          'completed', to,
+          `Completed: "${req.title}"`,
+          req.selfSign
+            ? 'You signed this document. Your signed copy is attached.'
+            : 'Everyone has signed this document. The signed copy is attached.',
+          { withSignedPdf: true }
+        )));
+        events.push(requestEvent(requestId, 'Workflow Completed', 'Flash Sign', 'All signers have signed. The signed PDF was sent to everyone.', 'status'));
+      }
+
+      // A finished request marks the Documents it came from as signed
+      const signedDocs = done ? new Set((req.pdfs ?? []).map(p => p.documentId).filter(Boolean)) : new Set();
+      return {
+        ...s,
+        documentItems: signedDocs.size
+          ? s.documentItems.map(d => (signedDocs.has(d.id) ? { ...d, status: 'signed' as const, updatedAt: now } : d))
+          : s.documentItems,
+        signatureRequests: s.signatureRequests.map(r => r.id !== requestId ? r : {
+          ...r,
+          signers,
+          fields,
+          status: done ? 'completed' : 'partially_signed',
+          completedAt: done ? now : undefined,
+          emails: [...(r.emails || []), ...emails],
+          events: [...(r.events || []), ...events],
+        }),
+      };
+    }),
 
     // Approvals
     updateApproval: (id, updates) => update(s => ({
@@ -2566,7 +2995,19 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     },
   }), [update]);
 
-  const value: AppContextValue = useMemo(() => ({ ...state, ...actions }), [state, actions]);
+  // `signatureRequests` is what the signed-in user may see and has not deleted
+  const value: AppContextValue = useMemo(() => {
+    const me = state.users.find(u => u.id === state.currentUserId);
+    const visible = state.signatureRequests.filter(r => canSeeSignatureRequest(r, me));
+    return {
+      ...state,
+      ...actions,
+      signatureRequests: visible.filter(r => !r.deletedAt),
+      trashedSignatureRequests: visible.filter(r => r.deletedAt && r.senderId === state.currentUserId),
+      allSignatureRequests: state.signatureRequests,
+      isHydrated: hydrated,
+    };
+  }, [state, actions, hydrated]);
 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }

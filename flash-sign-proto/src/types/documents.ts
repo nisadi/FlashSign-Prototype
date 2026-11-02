@@ -76,6 +76,8 @@ export interface DocumentItem {
   lastOpenedAt?: string;
   createdAt: string;
   updatedAt: string;
+  /** An uploaded PDF: the file itself lives in the browser's file store */
+  pdf?: PdfAttachment;
 }
 
 export type TemplateCategory =
@@ -205,19 +207,33 @@ export type SignatureFieldType =
   | 'date'
   | 'name'
   | 'text'
-  | 'checkbox';
+  | 'checkbox'
+  // The rest of Flash Sign's 14 field types (used on uploaded-PDF requests)
+  | 'email'
+  | 'company'
+  | 'title'
+  | 'number'
+  | 'dropdown'
+  | 'radio'
+  | 'approve'
+  | 'decline';
 
 export interface SignatureField {
   id: string;
   type: SignatureFieldType;
   signerId: string;
   pageNumber: number;
+  /** On a request with a `pdf`: top-left corner and size as a percentage (0-100) of the page */
   positionX: number; // percentage 0-100 or px
   positionY: number; // percentage 0-100 or px
   width: number;
   height: number;
   required: boolean;
   value?: string;
+  /** Which of the request's PDFs the field is on; missing = the first one */
+  fileId?: string;
+  /** Choices for a dropdown or radio field */
+  options?: string[];
 }
 
 export type SignatureRequestStatus =
@@ -264,6 +280,71 @@ export interface SignatureRequest {
   reminderIntervalDays?: number;
   fields: SignatureField[];
   events?: AuditEvent[];
+  /** An uploaded or sample PDF; its bytes live in the browser's file store (src/lib/pdf/file-store.ts) */
+  pdf?: PdfAttachment;
+  /** "Sign it yourself": the sender is the only signer and nothing is sent */
+  selfSign?: boolean;
+  /** People who get a copy of the finished document but do not sign */
+  ccRecipients?: CopyRecipient[];
+  /** Emails the demo would have sent, shown in the Outbox instead */
+  emails?: DemoEmail[];
+  /** All PDFs of the request, in order (`pdf` is the first one) */
+  pdfs?: PdfAttachment[];
+  /** In the Trash since this time; restoring clears it */
+  deletedAt?: string;
+  /** How often signers who have not signed are reminded automatically */
+  reminderFrequency?: ReminderFrequency;
+  lastReminderAt?: string;
+  /** While status is 'draft': the setup screens' choices, so the draft can be continued */
+  draft?: PdfRequestDraft;
+}
+
+export type DraftRecipientKind = 'signer' | 'copy' | 'view';
+
+export interface PdfRequestDraft {
+  mode: 'self' | 'send';
+  step: number;
+  recipients: { id: string; name: string; email: string; kind: DraftRecipientKind }[];
+  signingOrder: SigningOrder;
+  message: string;
+  expiresInDays: number;
+  reminderFrequency: ReminderFrequency;
+  savedAt: string;
+}
+
+export interface PdfAttachment {
+  fileId: string;
+  name: string;
+  sizeBytes: number;
+  pageCount: number;
+  /** Set for built-in sample documents, which can be rebuilt if the stored file is gone */
+  sampleId?: string;
+  /** The Documents library item this PDF came from (or was saved to) */
+  documentId?: string;
+}
+
+export interface CopyRecipient {
+  id: string;
+  name: string;
+  email: string;
+  /** "Receives a copy" or "Needs to view"; both get the shared email and the signed copy */
+  role?: 'copy' | 'view';
+}
+
+export type DemoEmailKind = 'invite' | 'copy' | 'reminder' | 'completed' | 'declined' | 'cancelled' | 'expired';
+
+export interface DemoEmail {
+  id: string;
+  kind: DemoEmailKind;
+  toName: string;
+  toEmail: string;
+  subject: string;
+  body: string;
+  /** The recipient's personal signing link opens as this signer */
+  signerId?: string;
+  /** The signed PDF goes with it */
+  withSignedPdf?: boolean;
+  sentAt: string;
 }
 
 // ─── Saved Signatures, Signing Defaults & Company Seals ─────────────────────
