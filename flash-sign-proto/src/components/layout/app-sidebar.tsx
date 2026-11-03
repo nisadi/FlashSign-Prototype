@@ -37,7 +37,7 @@ export function AppSidebar() {
   // const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
   // const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
 
-  const actionRequiredSignatures = signatureRequests?.filter(r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed').length || 0;
+  const actionRequiredSignatures = signatureRequests?.filter(r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed' || r.status === 'awaiting_review').length || 0;
 
   interface NavItem {
     label: string;

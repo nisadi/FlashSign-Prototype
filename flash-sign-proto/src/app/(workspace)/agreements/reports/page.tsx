@@ -36,7 +36,7 @@ export default function AgreementReportsPage() {
 
     return {
       sent: sent.length,
-      inProgress: sent.filter(s => ['sent', 'viewed', 'partially_signed'].includes(s.status)).length,
+      inProgress: sent.filter(s => ['sent', 'viewed', 'partially_signed', 'awaiting_review'].includes(s.status)).length,
       completionRate: sent.length ? Math.round((completed.length / sent.length) * 100) : 0,
       avgDays: durations.length ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1) : '—',
       activeValue,

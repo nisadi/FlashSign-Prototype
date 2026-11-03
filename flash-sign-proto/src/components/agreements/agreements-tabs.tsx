@@ -11,7 +11,7 @@ function useTabGroups(): Record<AgreementsTabGroup, SectionTab[]> {
   const drafts = signatureRequests.filter(r => r.status === 'draft').length;
   // Same count as the sidebar "Action Required" badge
   const actionRequired = signatureRequests?.filter(
-    r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed'
+    r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed' || r.status === 'awaiting_review'
   ).length || 0;
 
   return {

@@ -241,6 +241,8 @@ export type SignatureRequestStatus =
   | 'sent'
   | 'viewed'
   | 'partially_signed'
+  /** Everyone has signed; it completes once every reviewer approves */
+  | 'awaiting_review'
   | 'completed'
   | 'declined'
   | 'expired'
@@ -286,6 +288,8 @@ export interface SignatureRequest {
   selfSign?: boolean;
   /** People who get a copy of the finished document but do not sign */
   ccRecipients?: CopyRecipient[];
+  /** People who check the signed document; the request is finished only when they all approve */
+  reviewers?: SignatureReviewer[];
   /** Emails the demo would have sent, shown in the Outbox instead */
   emails?: DemoEmail[];
   /** All PDFs of the request, in order (`pdf` is the first one) */
@@ -299,7 +303,7 @@ export interface SignatureRequest {
   draft?: PdfRequestDraft;
 }
 
-export type DraftRecipientKind = 'signer' | 'copy' | 'view';
+export type DraftRecipientKind = 'signer' | 'copy' | 'review';
 
 export interface PdfRequestDraft {
   mode: 'self' | 'send';
@@ -327,11 +331,27 @@ export interface CopyRecipient {
   id: string;
   name: string;
   email: string;
-  /** "Receives a copy" or "Needs to view"; both get the shared email and the signed copy */
+  /** "Receives a copy"; 'view' is the old "Needs to view" role, kept on requests sent before reviewers */
   role?: 'copy' | 'view';
 }
 
-export type DemoEmailKind = 'invite' | 'copy' | 'reminder' | 'completed' | 'declined' | 'cancelled' | 'expired';
+/**
+ * waiting: signers are still signing · pending: asked to review · approved / rejected: done.
+ * Rejecting closes the request as declined.
+ */
+export type ReviewerStatus = 'waiting' | 'pending' | 'approved' | 'rejected';
+
+export interface SignatureReviewer {
+  id: string;
+  name: string;
+  email: string;
+  status: ReviewerStatus;
+  reviewedAt?: string;
+  /** Optional comment when approving; the reason when rejecting */
+  note?: string;
+}
+
+export type DemoEmailKind = 'invite' | 'copy' | 'review' | 'reminder' | 'completed' | 'declined' | 'cancelled' | 'expired';
 
 export interface DemoEmail {
   id: string;
@@ -342,6 +362,8 @@ export interface DemoEmail {
   body: string;
   /** The recipient's personal signing link opens as this signer */
   signerId?: string;
+  /** The reviewer's personal review link opens as this reviewer */
+  reviewerId?: string;
   /** The signed PDF goes with it */
   withSignedPdf?: boolean;
   sentAt: string;

@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
   ArrowLeft, ArrowRight, Upload, FileText, Check, Plus, Trash2, ChevronUp, ChevronDown,
-  Send, PenLine, AlertTriangle, Wand2, Loader2, Users, Mail, Undo2, Redo2, Copy, Eye, Save, X,
+  Send, PenLine, AlertTriangle, Wand2, Loader2, Users, Mail, Undo2, Redo2, Copy, Eye, Save, X, ShieldCheck,
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import type {
@@ -38,9 +38,11 @@ const REMINDER_OPTIONS: { id: ReminderFrequency; label: string }[] = [
 ];
 const ROLE_LABELS: Record<DraftRecipientKind, string> = {
   signer: 'Needs to sign',
+  review: 'Needs to review',
   copy: 'Receives a copy',
-  view: 'Needs to view',
 };
+const COPY_COLOR = '#9aa8a6';
+const REVIEWER_COLOR = '#7c6bd6';
 const SELF_STEPS = ['Document', 'Place fields'];
 const SEND_STEPS = ['Document', 'Recipients', 'Place fields', 'Review & send'];
 /** Undo keeps this many steps, as in Flash Sign's field editor */
@@ -114,7 +116,8 @@ function UploadWizard() {
     setStep(d.step);
     setDocs(draftToLoad.pdfs ?? (draftToLoad.pdf ? [draftToLoad.pdf] : []));
     setTitle(draftToLoad.title);
-    setRecipients(d.recipients);
+    // Drafts saved before reviewers had a "Needs to view" role; it is now "Needs to review"
+    setRecipients(d.recipients.map(r => ((r.kind as string) === 'view' ? { ...r, kind: 'review' as const } : r)));
     setSigningOrder(d.signingOrder);
     setMessage(d.message);
     setExpiresInDays(d.expiresInDays);
@@ -150,7 +153,9 @@ function UploadWizard() {
       .filter(r => r.kind === 'signer')
       .map((r, i) => ({ id: r.id, name: r.name.trim(), email: r.email.trim(), color: SIGNER_COLORS[i % SIGNER_COLORS.length] }));
   }, [mode, recipients, currentUser]);
-  const copies = recipients.filter(r => r.kind !== 'signer');
+  const copies = recipients.filter(r => r.kind === 'copy');
+  const reviewers = recipients.filter(r => r.kind === 'review');
+  const reviewerNames = reviewers.map(r => r.name.trim() || r.email.trim() || 'the reviewer').join(', ');
   const placingFor = signers.find(s => s.id === activeSignerId) ?? signers[0];
   const activeDoc = docs.find(d => d.fileId === activeDocId) ?? docs[0];
   const colorOf = (id: string) => signers.find(s => s.id === id)?.color ?? '#999';
@@ -397,7 +402,8 @@ function UploadWizard() {
       title: title.trim(),
       pdfs,
       signers,
-      ccRecipients: copies.map(c => ({ id: c.id, name: c.name.trim(), email: c.email.trim(), role: c.kind === 'view' ? 'view' : 'copy' })),
+      ccRecipients: copies.map(c => ({ id: c.id, name: c.name.trim(), email: c.email.trim(), role: 'copy' })),
+      reviewers: mode === 'self' ? undefined : reviewers.map(r => ({ id: r.id, name: r.name.trim(), email: r.email.trim() })),
       fields,
       signingOrder: mode === 'self' ? 'sequential' : signingOrder,
       message: mode === 'self' ? undefined : message,
@@ -605,12 +611,12 @@ function UploadWizard() {
               </div>
             </div>
 
-            {recipients.length === 0 && <p className="text-xs text-muted">Add the people who need to sign, and anyone who should get a copy or view it.</p>}
+            {recipients.length === 0 && <p className="text-xs text-muted">Add the people who need to sign, anyone who should review it before it is finished, and anyone who should get a copy.</p>}
 
             <div className="space-y-2">
               {recipients.map((r, i) => {
                 const signerIndex = recipients.filter(x => x.kind === 'signer').findIndex(x => x.id === r.id);
-                const color = r.kind === 'signer' ? SIGNER_COLORS[signerIndex % SIGNER_COLORS.length] : '#9aa8a6';
+                const color = r.kind === 'signer' ? SIGNER_COLORS[signerIndex % SIGNER_COLORS.length] : r.kind === 'review' ? REVIEWER_COLOR : COPY_COLOR;
                 return (
                   <div key={r.id} className="flex flex-wrap sm:flex-nowrap items-center gap-2 p-2.5 rounded-lg border border-line" style={{ borderLeft: `4px solid ${color}` }}>
                     <span className="w-6 text-center text-xs font-bold text-muted">{r.kind === 'signer' && signingOrder === 'sequential' ? signerIndex + 1 : '•'}</span>
@@ -645,6 +651,19 @@ function UploadWizard() {
                 <Button size="sm" variant="outline" onClick={() => addRecipient({ name: currentUser.name, email: currentUser.email })}>Add me as a signer</Button>
               )}
             </div>
+
+            {/* Review step: on when anyone is set to "Needs to review" */}
+            <div
+              className={cn('flex items-start gap-2 p-2.5 rounded-lg text-[11px]', reviewers.length ? 'bg-violet-50 text-violet-900' : 'bg-mist/40 text-muted')}
+              style={{ borderLeft: `3px solid ${reviewers.length ? REVIEWER_COLOR : COPY_COLOR}` }}
+            >
+              <ShieldCheck className="w-3.5 h-3.5 flex-shrink-0 mt-px" />
+              {reviewers.length ? (
+                <p><b>Review step on.</b> When everyone has signed, {reviewerNames} {reviewers.length === 1 ? 'reviews' : 'review'} the signed document. It is finished only after {reviewers.length === 1 ? 'they approve' : 'all of them approve'}.</p>
+              ) : (
+                <p><b>No review step.</b> The document is finished as soon as everyone has signed. To add one, set a recipient to &quot;{ROLE_LABELS.review}&quot;.</p>
+              )}
+            </div>
           </Card>
 
           <div className="space-y-4">
@@ -660,6 +679,7 @@ function UploadWizard() {
                   <div className="flex gap-1">
                     <Button size="xs" onClick={() => addRecipient(c, 'signer')}>Signer</Button>
                     <Button size="xs" variant="ghost" onClick={() => addRecipient(c, 'copy')}>Copy</Button>
+                    <Button size="xs" variant="ghost" onClick={() => addRecipient(c, 'review')}>Reviewer</Button>
                   </div>
                 </div>
               ))}
@@ -865,10 +885,14 @@ function UploadWizard() {
                   <span className="ml-auto text-muted">{fields.filter(f => f.signerId === s.id).length} fields</span>
                 </div>
               ))}
+              <h3 className="text-xs font-bold text-ink mt-3 mb-1.5">Reviewers</h3>
+              {reviewers.length > 0
+                ? reviewers.map(r => <p key={r.id} className="text-xs text-ink">{r.name} <span className="text-muted">{r.email}</span></p>)
+                : <p className="text-xs text-muted">None. The document is finished when everyone has signed.</p>}
               {copies.length > 0 && (
                 <>
-                  <h3 className="text-xs font-bold text-ink mt-3 mb-1.5">Copy / view</h3>
-                  {copies.map(c => <p key={c.id} className="text-xs text-ink">{c.name} <span className="text-muted">{c.email} · {ROLE_LABELS[c.kind]}</span></p>)}
+                  <h3 className="text-xs font-bold text-ink mt-3 mb-1.5">Receives a copy</h3>
+                  {copies.map(c => <p key={c.id} className="text-xs text-ink">{c.name} <span className="text-muted">{c.email}</span></p>)}
                 </>
               )}
             </div>
@@ -880,10 +904,17 @@ function UploadWizard() {
               {signingOrder === 'sequential'
                 ? <li><b>{signers[0]?.name}</b> gets an email with a personal signing link first. Each next signer is emailed when the one before has signed.</li>
                 : <li>All {signers.length} signers get an email with their personal signing link now.</li>}
-              {copies.length > 0 && <li>{copies.length} copy/view recipient(s) are told the document was shared with them.</li>}
-              {reminderFrequency !== 'never' && <li>Signers who have not signed get a reminder {REMINDER_OPTIONS.find(o => o.id === reminderFrequency)?.label.toLowerCase()}.</li>}
-              <li>If not everyone has signed by {expiryLabel}, the request expires and you are emailed.</li>
-              <li>When everyone has signed, everyone gets the signed PDF.</li>
+              {copies.length > 0 && <li>{copies.length} copy recipient(s) are told the document was shared with them.</li>}
+              {reminderFrequency !== 'never' && <li>Anyone who has not signed{reviewers.length ? ' or reviewed' : ''} gets a reminder {REMINDER_OPTIONS.find(o => o.id === reminderFrequency)?.label.toLowerCase()}.</li>}
+              <li>If it is not finished by {expiryLabel}, the request expires and you are emailed.</li>
+              {reviewers.length > 0 ? (
+                <>
+                  <li>When everyone has signed, <b>{reviewerNames}</b> {reviewers.length === 1 ? 'is' : 'are'} asked to review the signed document.</li>
+                  <li>Once {reviewers.length === 1 ? 'they approve' : 'every reviewer approves'}, everyone gets the signed PDF. If a reviewer rejects it, the request is closed and you are emailed the reason.</li>
+                </>
+              ) : (
+                <li>When everyone has signed, everyone gets the signed PDF.</li>
+              )}
               <li>The emails appear in <b>Agreements › Outbox</b> (demo).</li>
             </ul>
             {message && <div className="p-2.5 rounded-md bg-mist/40 text-xs text-ink-soft whitespace-pre-line">{message}</div>}

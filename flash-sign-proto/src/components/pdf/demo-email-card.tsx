@@ -2,7 +2,7 @@
 
 import React, { useState } from 'react';
 import Link from 'next/link';
-import { Mail, PenTool, Paperclip, Bell, XCircle, Ban, Share2, CheckCircle2, Clock } from 'lucide-react';
+import { Mail, PenTool, Paperclip, Bell, XCircle, Ban, Share2, CheckCircle2, Clock, ShieldCheck } from 'lucide-react';
 import type { DemoEmail, DemoEmailKind, SignatureRequest } from '@/types';
 import { Button } from '@/components/shared/ui';
 import { downloadSignedPdf } from './fields';
@@ -11,6 +11,7 @@ import { cn } from '@/lib/utils';
 const KIND: Record<DemoEmailKind, { label: string; icon: React.ElementType; color: string }> = {
   invite: { label: 'Signing request', icon: PenTool, color: 'text-flash-deep bg-flash/10' },
   copy: { label: 'Shared copy', icon: Share2, color: 'text-indigo-700 bg-indigo-50' },
+  review: { label: 'Review request', icon: ShieldCheck, color: 'text-violet-700 bg-violet-50' },
   reminder: { label: 'Reminder', icon: Bell, color: 'text-amber-700 bg-amber-50' },
   completed: { label: 'Completed', icon: CheckCircle2, color: 'text-emerald-700 bg-emerald-50' },
   declined: { label: 'Declined', icon: XCircle, color: 'text-red-700 bg-red-50' },
@@ -25,6 +26,8 @@ export function DemoEmailCard({ email, request, showRequest = false }: { email: 
   const signer = email.signerId ? request.signers.find(s => s.id === email.signerId) : undefined;
   const linkWorks = !!signer && (signer.status === 'pending' || signer.status === 'viewed')
     && ['sent', 'viewed', 'partially_signed'].includes(request.status);
+  const reviewer = email.reviewerId ? request.reviewers?.find(r => r.id === email.reviewerId) : undefined;
+  const reviewLinkWorks = reviewer?.status === 'pending' && request.status === 'awaiting_review';
 
   return (
     <div className="p-3 rounded-lg border border-line bg-paper-elevated space-y-2">
@@ -46,6 +49,17 @@ export function DemoEmailCard({ email, request, showRequest = false }: { email: 
           ) : (
             <span className="text-[10px] text-muted italic">
               Link no longer active{signer?.status === 'signed' ? ' (already signed)' : ''}
+            </span>
+          )
+        )}
+        {email.reviewerId && (
+          reviewLinkWorks ? (
+            <Link href={`/signatures/review/${request.id}?as=${email.reviewerId}`}>
+              <Button size="xs" variant="primary" icon={ShieldCheck}>Open review link</Button>
+            </Link>
+          ) : (
+            <span className="text-[10px] text-muted italic">
+              Link no longer active{reviewer && reviewer.status !== 'pending' && reviewer.status !== 'waiting' ? ` (already ${reviewer.status})` : ''}
             </span>
           )
         )}

@@ -121,6 +121,16 @@ export async function buildSignedPdf(sources: { fileId: string; bytes: Uint8Arra
     text(summary, `Status: ${signer.status}   Signed: ${when(signer.signedAt)}`, 78, y, 9, helv);
     y -= 22;
   }
+  if (request.reviewers?.length) {
+    text(summary, 'Reviewed by', 64, y, 12, helvBold);
+    y -= 20;
+    for (const rv of request.reviewers) {
+      text(summary, `${rv.name} <${rv.email}>`, 64, y, 10, helvBold);
+      y -= 14;
+      text(summary, `Status: ${rv.status}   Reviewed: ${when(rv.reviewedAt)}${rv.note ? `   Comment: ${rv.note.length > 70 ? `${rv.note.slice(0, 70)}...` : rv.note}` : ''}`, 78, y, 9, helv);
+      y -= 22;
+    }
+  }
   if (request.ccRecipients?.length) {
     text(summary, 'Received a copy', 64, y, 12, helvBold);
     y -= 18;

@@ -29,7 +29,7 @@ const START_ACTIONS = [
   { label: 'New Document', shortLabel: 'New Document', description: 'Write or upload a document', href: '/documents/new', icon: FilePlus2 },
 ];
 
-const IN_FLIGHT = ['sent', 'viewed', 'partially_signed'];
+const IN_FLIGHT = ['sent', 'viewed', 'partially_signed', 'awaiting_review'];
 
 interface DraftRow {
   id: string;
@@ -70,6 +70,12 @@ export default function AgreementsHomePage() {
         .filter(r => r.signers.some(s => s.email === currentUser?.email && (s.status === 'pending' || s.status === 'viewed')))
         .map(r => r.id)
     );
+    // Signed documents waiting for the current user's review
+    const myReview = new Set(
+      inFlight
+        .filter(r => r.status === 'awaiting_review' && r.reviewers?.some(rv => rv.email === currentUser?.email && rv.status === 'pending'))
+        .map(r => r.id)
+    );
 
     const signaturesTotal = inFlight.reduce((sum, r) => sum + r.signers.length, 0);
     const signaturesDone = inFlight.reduce((sum, r) => sum + signedCount(r), 0);
@@ -77,6 +83,7 @@ export default function AgreementsHomePage() {
     return {
       daysLeft,
       myTurn,
+      myReview,
       inFlight,
       stats: {
         sent: sent.length,
@@ -108,7 +115,7 @@ export default function AgreementsHomePage() {
     return rows.sort((a, b) => new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime());
   }, [signatureRequests, documentItems]);
 
-  const { stats, inFlight, myTurn, recent, daysLeft } = data;
+  const { stats, inFlight, myTurn, myReview, recent, daysLeft } = data;
 
   return (
     <div className="min-h-full bg-paper pb-16">
@@ -264,6 +271,13 @@ export default function AgreementsHomePage() {
                             className="px-2.5 py-1 text-xs font-semibold rounded-md bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"
                           >
                             Sign
+                          </Link>
+                        ) : myReview.has(request.id) ? (
+                          <Link
+                            href={`/signatures/review/${request.id}`}
+                            className="px-2.5 py-1 text-xs font-semibold rounded-md bg-flash text-ink hover:bg-flash-deep hover:text-white transition-colors"
+                          >
+                            Review
                           </Link>
                         ) : (
                           <Link

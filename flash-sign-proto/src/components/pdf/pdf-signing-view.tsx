@@ -62,7 +62,7 @@ function NoAccess({ request }: { request: SignatureRequest }) {
   );
 }
 
-function Blocked({ icon: Icon, tone, title, text, request }: {
+export function Blocked({ icon: Icon, tone, title, text, request }: {
   icon: React.ElementType; tone: 'ok' | 'warn' | 'bad'; title: string; text: string; request: SignatureRequest;
 }) {
   const [downloading, setDownloading] = useState(false);
@@ -133,20 +133,34 @@ function SignerScreen({ request, signer, viaLink }: { request: SignatureRequest;
   const missing = myFields.filter(f => f.required && !values[f.id]);
 
   // ── States where signing is not possible ──
-  if (signer.status === 'signed') {
-    return request.status === 'completed' ? (
+  const reviewing = (request.reviewers ?? []).filter(rv => rv.status === 'pending').map(rv => rv.name);
+  if (signer.status === 'signed' && request.status === 'completed') {
+    return (
       <Blocked request={request} icon={CheckCircle2} tone="ok" title="Signed and completed"
-        text={request.selfSign ? 'Your document is signed. Download the signed PDF below.' : 'Everyone has signed. The signed PDF was emailed to all recipients (see Outbox).'} />
-    ) : (
+        text={request.selfSign ? 'Your document is signed. Download the signed PDF below.' : 'It is finished. The signed PDF was emailed to all recipients (see Outbox).'} />
+    );
+  }
+  if (signer.status === 'signed' && request.status === 'awaiting_review') {
+    return (
       <Blocked request={request} icon={Clock} tone="warn" title="You have signed"
-        text={`Waiting for: ${request.signers.filter(s => s.status !== 'signed').map(s => s.name).join(', ')}. Everyone gets the signed copy when the last person signs.`} />
+        text={`Everyone has signed. Waiting for ${reviewing.join(', ')} to review it. Everyone gets the signed copy once it is approved.`} />
+    );
+  }
+  if (signer.status === 'signed' && OPEN.includes(request.status)) {
+    return (
+      <Blocked request={request} icon={Clock} tone="warn" title="You have signed"
+        text={`Waiting for: ${request.signers.filter(s => s.status !== 'signed').map(s => s.name).join(', ')}. ${request.reviewers?.length ? 'Then it is reviewed, and everyone gets the signed copy once it is approved.' : 'Everyone gets the signed copy when the last person signs.'}`} />
     );
   }
   if (request.status === 'cancelled') {
     return <Blocked request={request} icon={Ban} tone="bad" title="This request was cancelled" text="The sender cancelled it, so it can no longer be signed." />;
   }
   if (request.status === 'declined' || signer.status === 'declined') {
-    return <Blocked request={request} icon={XCircle} tone="bad" title="This request was declined" text="A signer declined it, so it can no longer be signed." />;
+    const rejectedBy = request.reviewers?.find(rv => rv.status === 'rejected');
+    return (
+      <Blocked request={request} icon={XCircle} tone="bad" title="This request was declined"
+        text={rejectedBy ? `${rejectedBy.name} rejected it in review: "${rejectedBy.note}". It will not be completed.` : 'A signer declined it, so it can no longer be signed.'} />
+    );
   }
   if (expired || request.status === 'expired') {
     return <Blocked request={request} icon={AlertTriangle} tone="bad" title="This request has expired" text={`It expired on ${request.expiresAt}.`} />;

@@ -15,13 +15,15 @@ import {
   ScrollText,
   Send,
   Eye,
-  CheckCheck
+  CheckCheck,
+  ShieldCheck
 } from 'lucide-react';
 import {
   DocumentStatus,
   DocumentType,
   ContractStatus,
   ContractType,
+  ReviewerStatus,
   SignatureRequestStatus,
   SignatureSignerStatus
 } from '@/types/documents';
@@ -188,6 +190,13 @@ export function SignatureRequestStatusBadge({ status }: { status: SignatureReque
           Partially Signed
         </span>
       );
+    case 'awaiting_review':
+      return (
+        <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-violet-100 text-violet-800 border border-violet-200">
+          <ShieldCheck className="w-3.5 h-3.5 text-violet-600" />
+          Awaiting Review
+        </span>
+      );
     case 'declined':
       return (
         <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-rose-100 text-rose-800 border border-rose-200">
@@ -249,6 +258,36 @@ export function SignerStatusBadge({ status }: { status: SignatureSignerStatus })
       return (
         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
           <XCircle className="w-3 h-3 text-rose-600" /> Declined
+        </span>
+      );
+  }
+}
+
+// ── Reviewer Status Badge ───────────────────────────────────────────────────
+export function ReviewerStatusBadge({ status }: { status: ReviewerStatus }) {
+  switch (status) {
+    case 'approved':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+          <CheckCircle2 className="w-3 h-3 text-emerald-600" /> Approved
+        </span>
+      );
+    case 'pending':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+          <Clock className="w-3 h-3 text-amber-600" /> To Review
+        </span>
+      );
+    case 'waiting':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-slate-100 text-slate-600 border border-slate-200">
+          After Signing
+        </span>
+      );
+    case 'rejected':
+      return (
+        <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-semibold bg-rose-100 text-rose-800 border border-rose-200">
+          <XCircle className="w-3 h-3 text-rose-600" /> Rejected
         </span>
       );
   }

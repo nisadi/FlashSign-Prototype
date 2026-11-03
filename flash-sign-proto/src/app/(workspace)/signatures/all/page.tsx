@@ -3,7 +3,7 @@
 import React, { Suspense, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
 import { usePathname, useSearchParams } from 'next/navigation';
-import { Search, Send, PenTool, Trash2, X, ChevronLeft, ChevronRight, FileText, PenLine, CalendarDays } from 'lucide-react';
+import { Search, Send, PenTool, Trash2, X, ChevronLeft, ChevronRight, FileText, PenLine, CalendarDays, ShieldCheck } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import type { SignatureRequest } from '@/types';
 import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
@@ -20,7 +20,7 @@ const SCOPES = [
 ] as const;
 const STATUSES = [
   { id: 'all', label: 'Any status' },
-  { id: 'action', label: 'Need to sign' },
+  { id: 'action', label: 'Need to sign or review' },
   { id: 'waiting', label: 'Waiting for others' },
   { id: 'completed', label: 'Completed' },
   { id: 'draft', label: 'Draft' },
@@ -28,7 +28,7 @@ const STATUSES = [
 ] as const;
 const PAGE_SIZES = [25, 50, 100];
 const SIX_MONTHS_MS = 183 * 86400000;
-const OPEN = ['sent', 'viewed', 'partially_signed'];
+const OPEN = ['sent', 'viewed', 'partially_signed', 'awaiting_review'];
 
 export default function AllSignaturesPage() {
   return (
@@ -82,9 +82,13 @@ function Inbox() {
 
   const isMineToSign = (r: SignatureRequest) =>
     OPEN.includes(r.status) && r.signers.some(s => s.email.toLowerCase() === myEmail && (s.status === 'pending' || s.status === 'viewed'));
+  const isMineToReview = (r: SignatureRequest) =>
+    r.status === 'awaiting_review' && !!r.reviewers?.some(rv => rv.email.toLowerCase() === myEmail && rv.status === 'pending');
   const isSentByMe = (r: SignatureRequest) => r.senderId === me?.id;
   const isSentToMe = (r: SignatureRequest) =>
-    !isSentByMe(r) && (r.signers.some(s => s.email.toLowerCase() === myEmail) || !!r.ccRecipients?.some(c => c.email.toLowerCase() === myEmail));
+    !isSentByMe(r) && (r.signers.some(s => s.email.toLowerCase() === myEmail)
+      || !!r.reviewers?.some(rv => rv.email.toLowerCase() === myEmail)
+      || !!r.ccRecipients?.some(c => c.email.toLowerCase() === myEmail));
 
   const senders = useMemo(
     () => [...new Set(signatureRequests.map(r => r.senderName).filter((n): n is string => !!n))].sort(),
@@ -100,8 +104,8 @@ function Inbox() {
       .filter(r => scope === 'all' || (scope === 'sent' ? isSentByMe(r) : isSentToMe(r)))
       .filter(r => {
         switch (status) {
-          case 'action': return isMineToSign(r);
-          case 'waiting': return OPEN.includes(r.status) && !isMineToSign(r);
+          case 'action': return isMineToSign(r) || isMineToReview(r);
+          case 'waiting': return OPEN.includes(r.status) && !isMineToSign(r) && !isMineToReview(r);
           case 'completed': return r.status === 'completed';
           case 'draft': return r.status === 'draft';
           case 'closed': return ['declined', 'expired', 'cancelled'].includes(r.status);
@@ -112,7 +116,8 @@ function Inbox() {
       .filter(r => !recentOnly || now - new Date(lastChange(r)).getTime() <= SIX_MONTHS_MS)
       .filter(r => !term || [
         r.title, r.senderName ?? '', ...requestPdfs(r).map(p => p.name),
-        ...r.signers.flatMap(s => [s.name, s.email]), ...(r.ccRecipients ?? []).flatMap(c => [c.name, c.email]),
+        ...r.signers.flatMap(s => [s.name, s.email]), ...(r.reviewers ?? []).flatMap(rv => [rv.name, rv.email]),
+        ...(r.ccRecipients ?? []).flatMap(c => [c.name, c.email]),
       ].some(v => v.toLowerCase().includes(term)))
       .sort((a, b) => lastChange(b).localeCompare(lastChange(a)));
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -247,6 +252,9 @@ function Inbox() {
                   <div className="flex items-center gap-1.5 w-[170px] justify-end">
                     {isMineToSign(r) && (
                       <Link href={`/signatures/sign/${r.id}`}><Button size="xs" variant="primary" icon={PenTool}>Sign</Button></Link>
+                    )}
+                    {isMineToReview(r) && (
+                      <Link href={`/signatures/review/${r.id}`}><Button size="xs" variant="primary" icon={ShieldCheck}>Review</Button></Link>
                     )}
                     {r.status === 'draft' && r.draft ? (
                       <Link href={`/signatures/upload?draft=${r.id}`}><Button size="xs" icon={PenLine}>Continue</Button></Link>

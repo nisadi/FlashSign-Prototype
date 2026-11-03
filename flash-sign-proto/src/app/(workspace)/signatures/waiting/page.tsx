@@ -11,9 +11,11 @@ import {
   CheckCircle2,
   Calendar,
   AlertCircle,
-  XCircle
+  XCircle,
+  ShieldCheck
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import type { SignatureRequest } from '@/types';
 import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 
@@ -23,17 +25,22 @@ export default function WaitingForMySignaturePage() {
 
   const [searchQuery, setSearchQuery] = useState('');
 
+  // Signed documents the current user has been asked to review
+  const isMineToReview = (s: SignatureRequest) =>
+    s.status === 'awaiting_review' && !!s.reviewers?.some(rv => rv.email === currentUser?.email && rv.status === 'pending');
+
   const waitingRequests = useMemo(() => {
     return signatureRequests.filter(s =>
       s.status !== 'completed' &&
       s.status !== 'declined' &&
       s.status !== 'cancelled' &&
       s.status !== 'expired' &&
-      s.signers.some(signer =>
+      (s.signers.some(signer =>
         signer.email === currentUser?.email &&
         signer.status !== 'signed' && signer.status !== 'declined'
-      )
+      ) || isMineToReview(s))
     );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signatureRequests, currentUser]);
 
   const filteredRequests = useMemo(() => {
@@ -154,13 +161,23 @@ export default function WaitingForMySignaturePage() {
                       Review
                     </Link>
 
-                    <Link
-                      href={`/signatures/sign/${req.id}`}
-                      className="px-4 py-2 bg-flash hover:bg-flash-deep text-ink text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
-                    >
-                      <PenTool className="w-3.5 h-3.5" />
-                      Sign Now (Demo)
-                    </Link>
+                    {isMineToReview(req) ? (
+                      <Link
+                        href={`/signatures/review/${req.id}`}
+                        className="px-4 py-2 bg-flash hover:bg-flash-deep text-ink text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <ShieldCheck className="w-3.5 h-3.5" />
+                        Review Now (Demo)
+                      </Link>
+                    ) : (
+                      <Link
+                        href={`/signatures/sign/${req.id}`}
+                        className="px-4 py-2 bg-flash hover:bg-flash-deep text-ink text-xs font-bold rounded-lg transition-colors flex items-center gap-1.5 shadow-sm"
+                      >
+                        <PenTool className="w-3.5 h-3.5" />
+                        Sign Now (Demo)
+                      </Link>
+                    )}
                   </div>
                 </div>
               ))}

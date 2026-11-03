@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import {
-  ArrowLeft, Download, FileDown, BellRing, Ban, PenTool, FileText, Mail, History, Users, Share2, Trash2, FastForward,
+  ArrowLeft, Download, FileDown, BellRing, Ban, PenTool, FileText, Mail, History, Users, Share2, Trash2, FastForward, ShieldCheck,
 } from 'lucide-react';
 import { useRouter } from 'next/navigation';
 import { useApp, useCurrentUser } from '@/context/app-context';
@@ -11,12 +11,13 @@ import type { SignatureRequest } from '@/types';
 import { Button, Card } from '@/components/shared/ui';
 import { Modal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
-import { SignatureRequestStatusBadge, SignerStatusBadge } from '@/components/documents/document-badges';
+import { ReviewerStatusBadge, SignatureRequestStatusBadge, SignerStatusBadge } from '@/components/documents/document-badges';
+import { cn } from '@/lib/utils';
 import { DocPages } from './pdf-pages';
 import { ReadOnlyFields, downloadSignedPdf, downloadOriginalPdf, isOnFile, requestPdfs } from './fields';
 import { DemoEmailCard } from './demo-email-card';
 
-const OPEN = ['sent', 'viewed', 'partially_signed'];
+const OPEN = ['sent', 'viewed', 'partially_signed', 'awaiting_review'];
 
 /** Details of a request made from an uploaded or sample PDF */
 export function PdfRequestDetail({ request }: { request: SignatureRequest }) {
@@ -33,6 +34,9 @@ export function PdfRequestDetail({ request }: { request: SignatureRequest }) {
   const signers = [...request.signers].sort((a, b) => a.order - b.order);
   const signedCount = signers.filter(s => s.status === 'signed').length;
   const myTurn = signers.find(s => s.email.toLowerCase() === currentUser?.email.toLowerCase() && (s.status === 'pending' || s.status === 'viewed'));
+  const reviewers = request.reviewers ?? [];
+  const myReview = request.status === 'awaiting_review'
+    && reviewers.some(rv => rv.email.toLowerCase() === currentUser?.email.toLowerCase() && rv.status === 'pending');
   const colorOf = (id: string) => request.signers.find(s => s.id === id)?.color;
   const emails = [...(request.emails || [])].reverse();
   const events = [...(request.events || [])].reverse();
@@ -53,11 +57,17 @@ export function PdfRequestDetail({ request }: { request: SignatureRequest }) {
             {request.selfSign ? 'Signed by yourself' : `Sent by ${request.senderName || 'the sender'}`} · {new Date(request.createdAt).toLocaleString()}
             {' '}· {docs.length > 1 ? `${docs.length} documents, ` : ''}{docs.reduce((n, d) => n + d.pageCount, 0)} page{docs.reduce((n, d) => n + d.pageCount, 0) === 1 ? '' : 's'} · expires {request.expiresAt}
           </p>
-          <p className="text-xs font-semibold text-ink">{signedCount} of {signers.length} signed</p>
+          <p className="text-xs font-semibold text-ink">
+            {signedCount} of {signers.length} signed
+            {reviewers.length > 0 && ` · ${reviewers.filter(rv => rv.status === 'approved').length} of ${reviewers.length} review${reviewers.length === 1 ? '' : 's'} approved`}
+          </p>
         </div>
         <div className="flex flex-wrap gap-2">
           {myTurn && (
             <Link href={`/signatures/sign/${request.id}`}><Button variant="primary" icon={PenTool}>Sign now</Button></Link>
+          )}
+          {myReview && (
+            <Link href={`/signatures/review/${request.id}`}><Button variant="primary" icon={ShieldCheck}>Review now</Button></Link>
           )}
           {request.status === 'completed' && (
             <Button
@@ -79,7 +89,9 @@ export function PdfRequestDetail({ request }: { request: SignatureRequest }) {
               icon={BellRing}
               onClick={() => {
                 sendSignatureReminder(request.id);
-                notify('Reminder emailed to everyone who still needs to sign (see Outbox)');
+                notify(request.status === 'awaiting_review'
+                  ? 'Reminder emailed to everyone who still needs to review (see Outbox)'
+                  : 'Reminder emailed to everyone who still needs to sign (see Outbox)');
               }}
             >
               Remind
@@ -134,6 +146,27 @@ export function PdfRequestDetail({ request }: { request: SignatureRequest }) {
                 <SignerStatusBadge status={s.status} />
               </div>
             ))}
+            {reviewers.length > 0 && (
+              <div className="pt-2 border-t border-line space-y-2">
+                <p className="text-[11px] font-bold text-ink flex items-center gap-1"><ShieldCheck className="w-3 h-3" /> Reviews before it is finished</p>
+                {reviewers.map(rv => (
+                  <div key={rv.id} className="flex items-start gap-2 text-xs">
+                    <div className="min-w-0 flex-1">
+                      <p className="font-semibold text-ink truncate">{rv.name}</p>
+                      <p className="text-[11px] text-muted truncate">{rv.email}</p>
+                      {rv.reviewedAt && <p className="text-[10px] text-muted">{rv.status === 'approved' ? 'Approved' : 'Rejected'} {new Date(rv.reviewedAt).toLocaleString()}</p>}
+                      {rv.note && <p className={cn('text-[10px]', rv.status === 'rejected' ? 'text-danger' : 'text-muted')}>“{rv.note}”</p>}
+                      {request.status === 'awaiting_review' && rv.status === 'pending' && (
+                        <Link href={`/signatures/review/${request.id}?as=${rv.id}`} className="text-[11px] font-semibold text-flash-deep hover:underline">
+                          Open their review link (demo)
+                        </Link>
+                      )}
+                    </div>
+                    <ReviewerStatusBadge status={rv.status} />
+                  </div>
+                ))}
+              </div>
+            )}
             {request.ccRecipients && request.ccRecipients.length > 0 && (
               <div className="pt-2 border-t border-line space-y-1">
                 <p className="text-[11px] font-bold text-ink flex items-center gap-1"><Share2 className="w-3 h-3" /> Receives a copy</p>

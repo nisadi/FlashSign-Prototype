@@ -24,7 +24,7 @@ import {
 } from '@/data/mock-documents';
 import type {
   DocumentItem, DocumentFolder, DocumentTemplate, Contract,
-  SignatureRequest, SignatureSigner, SignatureField, AuditEvent,
+  SignatureRequest, SignatureSigner, SignatureReviewer, SignatureField, AuditEvent,
   DocumentComment, ContractReviewComment,
   SavedSignature, SigningDefaults, CompanySeal,
   PdfAttachment, CopyRecipient, DemoEmail, SigningOrder, ReminderFrequency, PdfRequestDraft,
@@ -65,6 +65,8 @@ export interface CreatePdfRequestInput {
   /** In signing order; for "sign it yourself" just the sender */
   signers: { id: string; name: string; email: string; color?: string }[];
   ccRecipients?: CopyRecipient[];
+  /** Review the signed document; with none, the request completes when everyone has signed */
+  reviewers?: { id: string; name: string; email: string }[];
   fields: SignatureField[];
   signingOrder: SigningOrder;
   message?: string;
@@ -187,7 +189,38 @@ export function canSeeSignatureRequest(r: SignatureRequest, user: { id: string; 
   const email = user.email.toLowerCase();
   return r.senderId === user.id
     || r.signers.some(s => s.email.toLowerCase() === email)
+    || !!r.reviewers?.some(rv => rv.email.toLowerCase() === email)
     || !!r.ccRecipients?.some(c => c.email.toLowerCase() === email);
+}
+
+function reviewInvite(req: { title: string; senderName?: string }, reviewer: SignatureReviewer): DemoEmail {
+  return demoEmail(
+    'review', reviewer,
+    `Please review "${req.title}" before it is finished`,
+    `Everyone has signed. ${req.senderName || 'The sender'} asked you to review the signed document. It is finished only after you approve it.`,
+    { reviewerId: reviewer.id }
+  );
+}
+
+/** The request is finished: the signed PDF goes to every signer, reviewer, copy recipient and the sender */
+function completedEmails(req: SignatureRequest, signers: SignatureSigner[], sender: User | undefined): DemoEmail[] {
+  const recipients = new Map<string, { name: string; email: string }>();
+  signers.forEach(sg => recipients.set(sg.email.toLowerCase(), sg));
+  (req.reviewers || []).forEach(rv => recipients.set(rv.email.toLowerCase(), rv));
+  (req.ccRecipients || []).forEach(cc => recipients.set(cc.email.toLowerCase(), cc));
+  if (sender) recipients.set(sender.email.toLowerCase(), sender);
+  const body = req.selfSign
+    ? 'You signed this document. Your signed copy is attached.'
+    : req.reviewers?.length
+      ? 'Everyone has signed and the review is approved. The signed copy is attached.'
+      : 'Everyone has signed this document. The signed copy is attached.';
+  return [...recipients.values()].map(to => demoEmail('completed', to, `Completed: "${req.title}"`, body, { withSignedPdf: true }));
+}
+
+/** A finished request marks the Documents it came from as signed */
+function markSourceDocsSigned(items: DocumentItem[], req: SignatureRequest, now: string): DocumentItem[] {
+  const ids = new Set((req.pdfs ?? []).map(p => p.documentId).filter(Boolean));
+  return ids.size ? items.map(d => (ids.has(d.id) ? { ...d, status: 'signed' as const, updatedAt: now } : d)) : items;
 }
 
 const REMINDER_DAYS: Record<ReminderFrequency, number | null> = {
@@ -204,7 +237,7 @@ function applySignatureSchedule(requests: SignatureRequest[], users: User[], now
   let changed = false;
   const at = new Date(now).toISOString();
   const next = requests.map(r => {
-    if (!r.pdf || r.deletedAt || !['sent', 'viewed', 'partially_signed'].includes(r.status)) return r;
+    if (!r.pdf || r.deletedAt || !['sent', 'viewed', 'partially_signed', 'awaiting_review'].includes(r.status)) return r;
 
     if (new Date(`${r.expiresAt}T23:59:59`).getTime() < now) {
       changed = true;
@@ -214,7 +247,9 @@ function applySignatureSchedule(requests: SignatureRequest[], users: User[], now
         status: 'expired' as const,
         emails: [...(r.emails || []), ...(sender ? [demoEmail(
           'expired', sender, `"${r.title}" expired`,
-          `It expired on ${r.expiresAt} before everyone signed. No one can sign it any more.`,
+          r.status === 'awaiting_review'
+            ? `It expired on ${r.expiresAt} before the review was finished. It can no longer be completed.`
+            : `It expired on ${r.expiresAt} before everyone signed. No one can sign it any more.`,
           { sentAt: at }
         )] : [])],
         events: [...(r.events || []), { ...requestEvent(r.id, 'Request Expired', 'Flash Sign', `Expired on ${r.expiresAt}; the sender was emailed.`, 'status'), timestamp: at }],
@@ -225,17 +260,26 @@ function applySignatureSchedule(requests: SignatureRequest[], users: User[], now
     const last = new Date(r.lastReminderAt || r.sentAt || r.createdAt).getTime();
     if (r.selfSign || everyDays === null || now - last < everyDays * 86400000) return r;
     const waiting = r.signers.filter(s => s.status === 'pending' || s.status === 'viewed');
-    if (waiting.length === 0) return r;
+    const reviewing = (r.reviewers || []).filter(rv => rv.status === 'pending');
+    if (waiting.length === 0 && reviewing.length === 0) return r;
     changed = true;
     return {
       ...r,
       lastReminderAt: at,
-      emails: [...(r.emails || []), ...waiting.map(sg => demoEmail(
-        'reminder', sg, `Reminder: please sign "${r.title}"`,
-        `${r.senderName || 'The sender'} is still waiting for your signature. (Automatic reminder)`,
-        { signerId: sg.id, sentAt: at }
-      ))],
-      events: [...(r.events || []), { ...requestEvent(r.id, 'Automatic Reminder Sent', 'Flash Sign', `Reminded ${waiting.map(s => s.name).join(', ')}.`, 'delivery'), timestamp: at }],
+      emails: [
+        ...(r.emails || []),
+        ...waiting.map(sg => demoEmail(
+          'reminder', sg, `Reminder: please sign "${r.title}"`,
+          `${r.senderName || 'The sender'} is still waiting for your signature. (Automatic reminder)`,
+          { signerId: sg.id, sentAt: at }
+        )),
+        ...reviewing.map(rv => demoEmail(
+          'reminder', rv, `Reminder: please review "${r.title}"`,
+          `${r.senderName || 'The sender'} is still waiting for your review. (Automatic reminder)`,
+          { reviewerId: rv.id, sentAt: at }
+        )),
+      ],
+      events: [...(r.events || []), { ...requestEvent(r.id, 'Automatic Reminder Sent', 'Flash Sign', `Reminded ${[...waiting, ...reviewing].map(p => p.name).join(', ')}.`, 'delivery'), timestamp: at }],
     };
   });
   return changed ? next : null;
@@ -549,6 +593,10 @@ interface AppActions {
    * is still open; the next signer is invited, and everyone gets the signed copy at the end.
    */
   completePdfSigning: (requestId: string, signerId: string, values: Record<string, string>, signatureValue: string) => void;
+  /** A reviewer approved the signed document; the request completes once every reviewer has */
+  approvePdfReview: (requestId: string, reviewerId: string, note?: string) => void;
+  /** A reviewer rejected the signed document: the request is closed as declined */
+  rejectPdfReview: (requestId: string, reviewerId: string, reason: string) => void;
   /** Create or update a draft (an uploaded-PDF request that is not sent yet); returns its id */
   saveSignatureDraft: (input: SaveDraftInput) => string;
   /** Move requests the signed-in user sent to the Trash */
@@ -2473,11 +2521,18 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         signatureRequests: s.signatureRequests.map(r => {
           if (r.id === id) {
             const cancelEmails = r.pdf && !r.selfSign
-              ? r.signers.filter(sg => sg.status !== 'signed').map(sg => demoEmail(
-                  'cancelled', sg,
-                  `"${r.title}" was cancelled`,
-                  `${user?.name || 'The sender'} cancelled this signature request. You no longer need to sign it.`
-                ))
+              ? [
+                  ...r.signers.filter(sg => sg.status !== 'signed').map(sg => demoEmail(
+                    'cancelled', sg,
+                    `"${r.title}" was cancelled`,
+                    `${user?.name || 'The sender'} cancelled this signature request. You no longer need to sign it.`
+                  )),
+                  ...(r.reviewers || []).filter(rv => rv.status === 'pending').map(rv => demoEmail(
+                    'cancelled', rv,
+                    `"${r.title}" was cancelled`,
+                    `${user?.name || 'The sender'} cancelled this request. You no longer need to review it.`
+                  )),
+                ]
               : [];
             return {
               ...r,
@@ -2526,14 +2581,22 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           if (r.id === requestId) {
             const targetSigner = signerId ? r.signers.find(x => x.id === signerId)?.name : 'All pending signers';
             const reminderEmails = r.pdf
-              ? r.signers
-                  .filter(sg => (signerId ? sg.id === signerId : true) && (sg.status === 'pending' || sg.status === 'viewed'))
-                  .map(sg => demoEmail(
-                    'reminder', sg,
-                    `Reminder: please sign "${r.title}"`,
-                    `${user?.name || 'The sender'} is waiting for your signature.`,
-                    { signerId: sg.id }
-                  ))
+              ? [
+                  ...r.signers
+                    .filter(sg => (signerId ? sg.id === signerId : true) && (sg.status === 'pending' || sg.status === 'viewed'))
+                    .map(sg => demoEmail(
+                      'reminder', sg,
+                      `Reminder: please sign "${r.title}"`,
+                      `${user?.name || 'The sender'} is waiting for your signature.`,
+                      { signerId: sg.id }
+                    )),
+                  ...(signerId ? [] : (r.reviewers || []).filter(rv => rv.status === 'pending')).map(rv => demoEmail(
+                    'reminder', rv,
+                    `Reminder: please review "${r.title}"`,
+                    `${user?.name || 'The sender'} is waiting for your review.`,
+                    { reviewerId: rv.id }
+                  )),
+                ]
               : [];
             return {
               ...r,
@@ -2760,6 +2823,10 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           pdfs: input.pdfs,
           selfSign: input.selfSign,
           ccRecipients: input.ccRecipients,
+          // Reviewers are asked once everyone has signed
+          reviewers: input.reviewers?.length
+            ? input.reviewers.map(rv => ({ ...rv, status: 'waiting' as const }))
+            : undefined,
           events: [
             requestEvent(
               id,
@@ -2767,7 +2834,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
               senderName,
               input.selfSign
                 ? `${docLabel} (${pages} pages) prepared with ${input.fields.length} fields to sign yourself.`
-                : `${docLabel} sent to ${signers.length} signer(s)${input.ccRecipients?.length ? ` and ${input.ccRecipients.length} copy/view recipient(s)` : ''}.`,
+                : `${docLabel} sent to ${signers.length} signer(s)`
+                  + `${input.reviewers?.length ? `, ${input.reviewers.length} reviewer(s)` : ''}`
+                  + `${input.ccRecipients?.length ? ` and ${input.ccRecipients.length} copy recipient(s)` : ''}.`,
               'creation'
             ),
           ],
@@ -2775,12 +2844,15 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         // Nothing is emailed when signing yourself; otherwise invite whoever can sign now
         req.emails = input.selfSign ? [] : [
           ...signers.filter(sg => sg.status === 'pending').map(sg => signingInvite(req, sg)),
+          ...(req.reviewers || []).map(rv => demoEmail(
+            'copy', rv,
+            `${senderName} added you as a reviewer of "${input.title}"`,
+            'You do not need to sign it. Once everyone has signed, you will be asked to review the signed document. It is finished only after you approve it.'
+          )),
           ...(input.ccRecipients || []).map(cc => demoEmail(
             'copy', cc,
             `${senderName} shared "${input.title}" with you`,
-            cc.role === 'view'
-              ? 'Please view this document. You do not need to sign it. The signed copy will be emailed to you when everyone has signed.'
-              : 'You will receive a copy of this document. You do not need to sign it. The signed copy will be emailed to you when everyone has signed.'
+            'You will receive a copy of this document. You do not need to sign it. The signed copy will be emailed to you when it is finished.'
           )),
         ];
         const log: AuditLog = {
@@ -2923,39 +2995,95 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         }
       }
 
-      const done = signers.every(sg => sg.status === 'signed');
+      const allSigned = signers.every(sg => sg.status === 'signed');
+      // With reviewers, the last signature hands the document to them instead of finishing it
+      const toReview = allSigned && !!req.reviewers?.length;
+      const done = allSigned && !toReview;
+      const reviewers = toReview ? req.reviewers!.map(rv => ({ ...rv, status: 'pending' as const })) : req.reviewers;
+      if (toReview) {
+        reviewers!.forEach(rv => emails.push(reviewInvite(req, rv)));
+        events.push(requestEvent(requestId, 'Waiting for Review', 'Flash Sign',
+          `All signers have signed. ${reviewers!.map(rv => rv.name).join(', ')} must approve it before it is finished.`, 'status'));
+      }
       if (done) {
-        const sender = s.users.find(u => u.id === req.senderId);
-        const recipients = new Map<string, { name: string; email: string }>();
-        signers.forEach(sg => recipients.set(sg.email.toLowerCase(), sg));
-        (req.ccRecipients || []).forEach(cc => recipients.set(cc.email.toLowerCase(), cc));
-        if (sender) recipients.set(sender.email.toLowerCase(), sender);
-        recipients.forEach(to => emails.push(demoEmail(
-          'completed', to,
-          `Completed: "${req.title}"`,
-          req.selfSign
-            ? 'You signed this document. Your signed copy is attached.'
-            : 'Everyone has signed this document. The signed copy is attached.',
-          { withSignedPdf: true }
-        )));
+        emails.push(...completedEmails(req, signers, s.users.find(u => u.id === req.senderId)));
         events.push(requestEvent(requestId, 'Workflow Completed', 'Flash Sign', 'All signers have signed. The signed PDF was sent to everyone.', 'status'));
       }
 
-      // A finished request marks the Documents it came from as signed
-      const signedDocs = done ? new Set((req.pdfs ?? []).map(p => p.documentId).filter(Boolean)) : new Set();
       return {
         ...s,
-        documentItems: signedDocs.size
-          ? s.documentItems.map(d => (signedDocs.has(d.id) ? { ...d, status: 'signed' as const, updatedAt: now } : d))
-          : s.documentItems,
+        documentItems: done ? markSourceDocsSigned(s.documentItems, req, now) : s.documentItems,
         signatureRequests: s.signatureRequests.map(r => r.id !== requestId ? r : {
           ...r,
           signers,
           fields,
-          status: done ? 'completed' : 'partially_signed',
+          reviewers,
+          status: done ? 'completed' : toReview ? 'awaiting_review' : 'partially_signed',
           completedAt: done ? now : undefined,
           emails: [...(r.emails || []), ...emails],
           events: [...(r.events || []), ...events],
+        }),
+      };
+    }),
+
+    approvePdfReview: (requestId, reviewerId, note) => update(s => {
+      const req = s.signatureRequests.find(r => r.id === requestId);
+      const reviewer = req?.reviewers?.find(rv => rv.id === reviewerId);
+      if (!req || !reviewer || req.status !== 'awaiting_review' || reviewer.status !== 'pending') return s;
+
+      const now = new Date().toISOString();
+      const reviewers = req.reviewers!.map(rv => rv.id === reviewerId
+        ? { ...rv, status: 'approved' as const, reviewedAt: now, note: note || undefined }
+        : rv);
+      const done = reviewers.every(rv => rv.status === 'approved');
+      const events: AuditEvent[] = [
+        requestEvent(requestId, 'Review Approved', reviewer.name, `${reviewer.name} approved the signed document${note ? `: "${note}"` : '.'}`, 'signing'),
+      ];
+      const emails: DemoEmail[] = [];
+      if (done) {
+        emails.push(...completedEmails({ ...req, reviewers }, req.signers, s.users.find(u => u.id === req.senderId)));
+        events.push(requestEvent(requestId, 'Workflow Completed', 'Flash Sign', 'All signers have signed and every reviewer approved. The signed PDF was sent to everyone.', 'status'));
+      }
+
+      return {
+        ...s,
+        documentItems: done ? markSourceDocsSigned(s.documentItems, req, now) : s.documentItems,
+        signatureRequests: s.signatureRequests.map(r => r.id !== requestId ? r : {
+          ...r,
+          reviewers,
+          status: done ? 'completed' : r.status,
+          completedAt: done ? now : undefined,
+          emails: [...(r.emails || []), ...emails],
+          events: [...(r.events || []), ...events],
+        }),
+      };
+    }),
+
+    rejectPdfReview: (requestId, reviewerId, reason) => update(s => {
+      const req = s.signatureRequests.find(r => r.id === requestId);
+      const reviewer = req?.reviewers?.find(rv => rv.id === reviewerId);
+      if (!req || !reviewer || req.status !== 'awaiting_review' || reviewer.status !== 'pending') return s;
+
+      const now = new Date().toISOString();
+      const sender = s.users.find(u => u.id === req.senderId);
+      // The sender and the signers learn why it will not be finished
+      const recipients = new Map<string, { name: string; email: string }>();
+      if (sender) recipients.set(sender.email.toLowerCase(), sender);
+      req.signers.forEach(sg => recipients.set(sg.email.toLowerCase(), sg));
+      const emails = [...recipients.values()].map(to => demoEmail(
+        'declined', to,
+        `${reviewer.name} rejected "${req.title}" in review`,
+        `Reason given: "${reason}". The request is closed and will not be completed.`
+      ));
+
+      return {
+        ...s,
+        signatureRequests: s.signatureRequests.map(r => r.id !== requestId ? r : {
+          ...r,
+          status: 'declined',
+          reviewers: r.reviewers!.map(rv => rv.id === reviewerId ? { ...rv, status: 'rejected' as const, reviewedAt: now, note: reason } : rv),
+          emails: [...(r.emails || []), ...emails],
+          events: [...(r.events || []), requestEvent(requestId, 'Review Rejected', reviewer.name, `${reviewer.name} rejected the signed document with reason: "${reason}".`, 'status')],
         }),
       };
     }),
