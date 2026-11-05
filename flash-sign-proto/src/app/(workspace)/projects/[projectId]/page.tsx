@@ -5,6 +5,8 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageProjects } from '@/lib/rbac';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { ProjectTimelineSummary } from '@/components/projects/project-timeline-summary';
 import { progressOfTasks } from '@/lib/subtasks';
@@ -46,6 +48,8 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
   } = useApp();
 
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const { currentRbacUser } = useDemoAuth();
+  const isManager = canManageProjects(currentRbacUser);
 
   useEffect(() => {
     if (projectId) {
@@ -381,38 +385,44 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
             <Card className="p-5">
               <h2 className="text-sm font-semibold text-ink mb-3">Project Actions</h2>
               <div className="grid grid-cols-2 gap-2 text-xs">
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={Copy}
-                  onClick={handleDuplicate}
-                  className="justify-start text-muted hover:text-ink"
-                >
-                  Duplicate
-                </Button>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={Archive}
-                  onClick={handleArchive}
-                  className="justify-start text-muted hover:text-ink"
-                >
-                  {project.isArchived ? 'Unarchive' : 'Archive'}
-                </Button>
+                {isManager && (
+                  <>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={Copy}
+                      onClick={handleDuplicate}
+                      className="justify-start text-muted hover:text-ink"
+                    >
+                      Duplicate
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      icon={Archive}
+                      onClick={handleArchive}
+                      className="justify-start text-muted hover:text-ink"
+                    >
+                      {project.isArchived ? 'Unarchive' : 'Archive'}
+                    </Button>
+                  </>
+                )}
                 <Link href={`/projects/${projectId}/settings`} className="col-span-2">
                   <Button variant="outline" size="sm" className="w-full justify-start text-muted hover:text-ink">
                     Project Settings
                   </Button>
                 </Link>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  icon={Trash2}
-                  onClick={() => setConfirmDelete(true)}
-                  className="col-span-2 justify-start text-danger hover:bg-danger/10 border-danger/20"
-                >
-                  Delete Project
-                </Button>
+                {isManager && (
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    icon={Trash2}
+                    onClick={() => setConfirmDelete(true)}
+                    className="col-span-2 justify-start text-danger hover:bg-danger/10 border-danger/20"
+                  >
+                    Delete Project
+                  </Button>
+                )}
               </div>
 
               {confirmDelete && (

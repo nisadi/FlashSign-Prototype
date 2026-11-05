@@ -7,6 +7,9 @@ import {
   Megaphone, Activity, ChevronRight, OctagonAlert, CircleCheckBig,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canViewTeamAnalytics } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { AvailabilityBadge, LeaveTypeBadge } from '@/components/collaboration/collaboration-badges';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { CreateTeamDialog } from '@/components/collaboration/create-team-dialog';
@@ -34,6 +37,20 @@ export default function TeamAnalyticsPage() {
   const {
     users, teams, tasks, meetings, timeOffRequests, activities, announcements, milestones,
   } = useApp();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canViewTeamAnalytics(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Team Analytics Restricted"
+          message="Team analytics and resource metrics are restricted to Team Managers and the Organization Owner."
+          requiredRole="Team Management Role"
+          backHref="/teams/members"
+        />
+      </div>
+    );
+  }
 
   // Dialog states
   const [createTeamOpen, setCreateTeamOpen] = useState(false);

@@ -5,6 +5,9 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageTeam } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import type { DemoRole, AvailabilityStatus } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { notify } from '@/components/shared/toaster';
@@ -46,6 +49,20 @@ const MEMBER_COLORS = [
 export default function AddMemberPage() {
   const router = useRouter();
   const { teams, projects, users, addMember } = useApp();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canManageTeam(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Member Creation Restricted"
+          message="Your role does not have permission to invite or add new organization members."
+          requiredRole="Team Management Role"
+          backHref="/teams/members"
+        />
+      </div>
+    );
+  }
 
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');

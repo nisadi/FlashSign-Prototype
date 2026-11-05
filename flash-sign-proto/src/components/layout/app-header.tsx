@@ -9,6 +9,7 @@ import { useApp, useCurrentUser, useNotifications } from '@/context/app-context'
 import { useDemoAuth } from '@/context/demo-auth-context';
 import { QuickCreateDialog } from '@/components/shared/quick-create-dialog';
 import { SearchCommand } from '@/components/shared/search-command';
+import { DashboardSwitcher } from '@/components/layout/dashboard-switcher';
 
 // Pages whose title differs from their URL segment (applied when the page is the current one)
 const PAGE_TITLES: Record<string, string> = {
@@ -66,7 +67,7 @@ export function AppHeader() {
 
   const currentUser = useCurrentUser();
   const { org, markAllNotificationsRead, toggleSidebar } = useApp();
-  const { logout, selectedWorkspace } = useDemoAuth();
+  const { logout, selectedWorkspace, currentRbacUser, demoAccounts, switchDemoAccount } = useDemoAuth();
   const notifications = useNotifications();
   const unreadCount = notifications.filter(n => !n.isRead).length;
 
@@ -91,6 +92,11 @@ export function AppHeader() {
         {/* Breadcrumbs */}
         <div className="flex-1 min-w-0">
           <Breadcrumbs />
+        </div>
+
+        {/* Dual Dashboard Switcher (only appears when role has access to both) */}
+        <div className="hidden md:flex shrink-0">
+          <DashboardSwitcher variant="header" />
         </div>
 
         {/* Global Search Bar (opens search command) */}
@@ -192,13 +198,64 @@ export function AppHeader() {
             </button>
 
             {userMenuOpen && (
-              <div className="absolute right-0 top-12 w-64 bg-paper-elevated rounded-xl shadow-2xl border border-line z-50 overflow-hidden animate-fade-up">
+              <div className="absolute right-0 top-12 w-72 bg-paper-elevated rounded-xl shadow-2xl border border-line z-50 overflow-hidden animate-fade-up">
                 <div className="p-3 border-b border-line bg-paper">
-                  <p className="font-bold text-xs text-ink truncate">{currentUser.name}</p>
+                  <div className="flex items-center justify-between gap-1">
+                    <p className="font-bold text-xs text-ink truncate">{currentUser.name}</p>
+                    <span className="text-[10px] px-2 py-0.5 rounded-full font-semibold bg-emerald-100 text-emerald-800 shrink-0">
+                      {currentRbacUser?.roleName || 'Owner'}
+                    </span>
+                  </div>
                   <p className="text-[11px] text-muted truncate mt-0.5">{currentUser.email}</p>
                   <div className="mt-2 flex items-center gap-1.5 text-[10px] text-ink-soft bg-mist/60 px-2 py-1 rounded-md font-medium">
                     <Building2 className="w-3 h-3 text-flash-deep shrink-0" />
                     <span className="truncate">{selectedWorkspace?.name || org.name}</span>
+                  </div>
+                </div>
+
+                {/* Quick Persona Switcher for Evaluation */}
+                <div className="p-2 border-b border-line bg-mist/30">
+                  <p className="text-[10px] uppercase tracking-wider font-bold text-muted px-1.5 mb-1">
+                    Switch Demo Persona
+                  </p>
+                  <div className="space-y-1 max-h-44 overflow-y-auto">
+                    {demoAccounts.map((account) => {
+                      const isCurrent = currentRbacUser?.id === account.id;
+                      return (
+                        <button
+                          key={account.id}
+                          type="button"
+                          onClick={() => {
+                            switchDemoAccount(account.id);
+                            setUserMenuOpen(false);
+                            if (account.isSuperAdmin) {
+                              router.push('/super-admin');
+                            } else if (account.dashboardAccess.defaultDashboard === 'my-status') {
+                              router.push('/projects/home');
+                            } else {
+                              router.push('/dashboard');
+                            }
+                          }}
+                          className={cn(
+                            'w-full flex items-center justify-between px-2 py-1.5 rounded-lg text-left text-xs transition-colors',
+                            isCurrent
+                              ? 'bg-flash/20 text-flash-deep font-bold border border-flash/30'
+                              : 'hover:bg-mist text-ink hover:text-ink-soft'
+                          )}
+                        >
+                          <div className="flex items-center gap-2 truncate">
+                            <span
+                              className="w-2 h-2 rounded-full shrink-0"
+                              style={{ backgroundColor: account.avatarColor }}
+                            />
+                            <span className="truncate text-[11px]">
+                              {account.name} ({account.roleName})
+                            </span>
+                          </div>
+                          {isCurrent && <Check className="w-3 h-3 text-flash-deep shrink-0" />}
+                        </button>
+                      );
+                    })}
                   </div>
                 </div>
 

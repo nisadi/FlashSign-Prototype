@@ -7,6 +7,9 @@ import {
   Building2, Users, ArrowLeft, Check, AlertCircle, Plus,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageTeam } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { notify } from '@/components/shared/toaster';
 
 const TEAM_COLORS = [
@@ -25,6 +28,20 @@ const DEPARTMENTS = [
 export default function CreateTeamPage() {
   const router = useRouter();
   const { users, projects, addTeam, teams } = useApp();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canManageTeam(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Team Creation Restricted"
+          message="Your role does not have permission to create teams."
+          requiredRole="Team Management Role"
+          backHref="/teams/members"
+        />
+      </div>
+    );
+  }
 
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');

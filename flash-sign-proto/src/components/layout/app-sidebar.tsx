@@ -9,12 +9,19 @@ import {
   Compass, Plus, Building2, House,
   UserCheck, Megaphone, CalendarDays, Bell,
   FileSignature, ScrollText, Inbox, Sliders,
-  ChevronsUpDown,
+  ChevronsUpDown, Shield, ShieldAlert, ShieldCheck, MailPlus, Sparkles,
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { useApp, useCurrentUser, useRoleConfig } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
 import { canAccess, ROLE_CONFIGS } from '@/lib/permissions';
+import {
+  canAccessDashboard,
+  canAccessMyTasks,
+  canViewTeamAnalytics,
+  canManageRoles,
+} from '@/lib/rbac';
+import { DashboardSwitcher } from '@/components/layout/dashboard-switcher';
 import { FEATURES } from '@/lib/features';
 import type { DemoRole } from '@/types';
 import { useState, useEffect } from 'react';
@@ -30,12 +37,9 @@ export function AppSidebar() {
   const pathname = usePathname();
   const { sidebarCollapsed, toggleSidebar, setDemoRole, resetDemoData, demoRole, projects, signatureRequests } = useApp();
   const currentUser = useCurrentUser();
-  const { selectedWorkspace } = useDemoAuth();
+  const { selectedWorkspace, currentRbacUser } = useDemoAuth();
   const roleConfig = useRoleConfig();
   const [roleSwitcherOpen, setRoleSwitcherOpen] = useState(false);
-  // Workspace selector is hidden (see the commented-out block in the JSX)
-  // const [workspaceSwitcherOpen, setWorkspaceSwitcherOpen] = useState(false);
-  // const [selectedWorkspace, setSelectedWorkspace] = useState(MOCK_WORKSPACES[0]);
 
   const actionRequiredSignatures = signatureRequests?.filter(r => r.status === 'sent' || r.status === 'viewed' || r.status === 'partially_signed' || r.status === 'awaiting_review').length || 0;
 
@@ -58,24 +62,70 @@ export function AppSidebar() {
     items: NavItem[];
   }
 
-  const sections: NavSection[] = [
+  // Dynamic Workspace Items based on RBAC permissions
+  const workspaceItems: NavItem[] = [];
+  if (canAccessDashboard(currentRbacUser, 'admin')) {
+    workspaceItems.push({ label: 'Admin Dashboard', href: '/dashboard', icon: LayoutDashboard });
+  }
+  if (canAccessDashboard(currentRbacUser, 'my-status')) {
+    workspaceItems.push({ label: 'My Status', href: '/projects/home', icon: Sparkles });
+  }
+  workspaceItems.push({ label: 'Projects', href: '/projects', icon: FolderKanban });
+  if (canAccessMyTasks(currentRbacUser)) {
+    workspaceItems.push({ label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare });
+  }
+  workspaceItems.push({
+    label: 'Planning',
+    href: '/planner/calendar',
+    icon: CalendarDays,
+    activeWhen: (path: string) => path.startsWith('/planner'),
+  });
+
+  // Dynamic Team Items based on RBAC permissions
+  const teamItems: NavItem[] = [];
+  if (canViewTeamAnalytics(currentRbacUser)) {
+    teamItems.push({
+      label: 'Analytics',
+      href: '/teams',
+      icon: BarChart3,
+      activeWhen: (path: string) =>
+        path === '/teams' ||
+        ['/teams/workload', '/teams/announcements', '/teams/activity', '/teams/timesheet'].some((p: string) => path.startsWith(p)),
+    });
+  }
+  teamItems.push({ label: 'Members', href: '/teams/members', icon: UserCheck });
+  if (canManageRoles(currentRbacUser)) {
+    teamItems.push({
+      label: 'Roles & Permissions',
+      href: '/teams/roles',
+      icon: ShieldCheck,
+      activeWhen: (path: string) => path.startsWith('/teams/roles'),
+    });
+  }
+
+  // Super Admin Navigation
+  const superAdminSections: NavSection[] = [
+    {
+      id: 'super-admin-core',
+      title: 'Platform Governance',
+      icon: ShieldAlert,
+      items: [
+        { label: 'Admin Dashboard', href: '/super-admin', icon: LayoutDashboard },
+        { label: 'Organizations', href: '/super-admin?tab=organizations', icon: Building2 },
+        { label: 'Invitations', href: '/super-admin?tab=invitations', icon: MailPlus },
+      ],
+    },
+  ];
+
+  // Standard Organization Navigation
+  const orgSections: NavSection[] = [
     {
       id: 'workspace',
       title: 'Workspace',
       icon: FolderKanban,
-      items: [
-        { label: 'Dashboard', href: '/projects/home', icon: LayoutDashboard },
-        { label: 'Projects', href: '/projects', icon: FolderKanban },
-        { label: 'My Tasks', href: '/projects/my-tasks', icon: CheckSquare },
-        // One page: the calendar, with Meetings and Availability tabs on top (planner/layout.tsx)
-        { label: 'Planning', href: '/planner/calendar', icon: CalendarDays, activeWhen: path => path.startsWith('/planner') },
-        // Notifications is hidden from the sidebar; the bell in the top bar opens them. Uncomment to restore.
-        // { label: 'Notifications', href: '/teams/notifications', icon: Bell },
-      ],
+      items: workspaceItems,
     },
     {
-      // Documents, contracts and e-signatures share one section; the pages
-      // behind each item carry their own top tabs (AgreementsTabs).
       id: 'agreements',
       title: 'Agreements',
       icon: FileSignature,
@@ -87,14 +137,13 @@ export function AppSidebar() {
           href: '/signatures/all',
           icon: Inbox,
           badge: actionRequiredSignatures > 0 ? actionRequiredSignatures : undefined,
-          activeWhen: path => path.startsWith('/signatures') && !path.startsWith('/signatures/settings'),
+          activeWhen: (path: string) => path.startsWith('/signatures') && !path.startsWith('/signatures/settings'),
         },
         {
           label: 'Documents',
           href: '/documents/all',
           icon: FileText,
-          // Contracts are a tab inside Documents
-          activeWhen: path =>
+          activeWhen: (path: string) =>
             (path.startsWith('/documents') && !path.startsWith('/documents/templates')) ||
             path.startsWith('/contracts'),
         },
@@ -107,39 +156,18 @@ export function AppSidebar() {
       id: 'collaboration',
       title: 'Teams',
       icon: Users,
-      items: [
-        // The workload, announcements, activity and timesheet pages open from Analytics, so they highlight it
-        {
-          label: 'Analytics',
-          href: '/teams',
-          icon: BarChart3,
-          activeWhen: path =>
-            path === '/teams' ||
-            ['/teams/workload', '/teams/announcements', '/teams/activity', '/teams/timesheet'].some(p => path.startsWith(p)),
-        },
-        ...(FEATURES.teams ? [{ label: 'Teams Directory', href: '/teams/directory', icon: Building2 }] : []),
-        { label: 'Members', href: '/teams/members', icon: UserCheck },
-        // Workload is hidden from the sidebar; it's reached from Analytics. Uncomment to restore.
-        // { label: 'Workload', href: '/teams/workload', icon: BarChart3 },
-        // Team Activity is hidden from the sidebar; it's reached from Analytics ("View Feed"). Uncomment to restore.
-        // { label: 'Team Activity', href: '/teams/activity', icon: Activity },
-        // Announcements is hidden from the sidebar; it's reached from Analytics. Uncomment to restore.
-        // { label: 'Announcements', href: '/teams/announcements', icon: Megaphone },
-      ],
+      items: teamItems,
     },
     {
-      // One page: agent connection (MCP) setup and status. The old sub-pages were never built;
-      // SRS analysis returns later (docs/AI_AGENT_PM_INTEGRATION.md, Part B).
       id: 'ai-agents',
       title: 'AI Agent Hub',
       icon: Bot,
       direct: true,
       items: [
-        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot, activeWhen: path => path.startsWith('/ai-agents') },
+        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot, activeWhen: (path: string) => path.startsWith('/ai-agents') },
       ],
     },
     {
-      // App-wide settings; signing defaults stay under Agreements > Settings
       id: 'settings',
       title: 'Settings',
       icon: Settings,
@@ -149,11 +177,13 @@ export function AppSidebar() {
           label: 'Settings',
           href: '/settings/profile',
           icon: Settings,
-          activeWhen: path => path.startsWith('/settings'),
+          activeWhen: (path: string) => path.startsWith('/settings'),
         },
       ],
     },
   ];
+
+  const sections: NavSection[] = currentRbacUser?.isSuperAdmin ? superAdminSections : orgSections;
 
   const isActive = (item: NavItem) => {
     if (item.activeWhen) return item.activeWhen(pathname);
@@ -171,6 +201,7 @@ export function AppSidebar() {
       agreements: false,
       collaboration: false,
       'ai-agents': false,
+      'super-admin-core': true,
     };
     if (['/agreements', '/documents', '/contracts', '/signatures'].some(p => pathname.startsWith(p))) initial.agreements = true;
     else if (pathname.startsWith('/ai-agents')) initial['ai-agents'] = true;
@@ -285,23 +316,36 @@ export function AppSidebar() {
               </div>
             )}
           </div>
-        {/* Active Organization Banner */}
+        {/* Active Organization / Super Admin Banner */}
         {!sidebarCollapsed && (
           <div className="px-3.5 py-2.5 border-b border-ink-soft/30 bg-white/[0.03] flex items-center justify-between">
             <div className="flex items-center gap-2 min-w-0">
               <div className="w-5 h-5 rounded bg-flash/20 text-flash flex items-center justify-center text-[10px] font-bold shrink-0">
-                <Building2 className="w-3.5 h-3.5 text-flash" />
+                {currentRbacUser?.isSuperAdmin ? (
+                  <ShieldAlert className="w-3.5 h-3.5 text-flash" />
+                ) : (
+                  <Building2 className="w-3.5 h-3.5 text-flash" />
+                )}
               </div>
               <div className="min-w-0">
                 <p className="text-xs font-semibold text-white truncate leading-tight">
-                  {selectedWorkspace?.name || 'Flash Technologies'}
+                  {currentRbacUser?.isSuperAdmin
+                    ? 'Super Admin Portal'
+                    : selectedWorkspace?.name || 'Flash Technologies'}
                 </p>
                 <p className="text-[10px] text-white/40 truncate font-mono">
-                  {selectedWorkspace?.slug || 'flash-technologies'}
+                  {currentRbacUser?.isSuperAdmin
+                    ? 'Platform Control Center'
+                    : selectedWorkspace?.slug || 'flash-technologies'}
                 </p>
               </div>
             </div>
           </div>
+        )}
+
+        {/* Sidebar Dashboard Switcher (only for dual dashboard users) */}
+        {!sidebarCollapsed && !currentRbacUser?.isSuperAdmin && (
+          <DashboardSwitcher variant="sidebar" />
         )}
 
         {/* Demo Role Switcher: hidden for the stakeholder demo (the app runs as CEO, see FEATURES.roleSwitcher

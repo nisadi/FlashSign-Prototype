@@ -21,6 +21,17 @@ import {
   STORAGE_KEYS,
 } from '@/lib/storage';
 import { slugify } from '@/lib/utils';
+import {
+  type CustomRole,
+  type DemoUserAccount,
+  type SuperAdminOrg,
+  type SuperAdminOrgInvitation,
+  INITIAL_ROLES,
+  DEMO_ACCOUNTS,
+  INITIAL_SUPER_ADMIN_ORGS,
+  INITIAL_SUPER_ADMIN_INVITATIONS,
+  RBAC_STORAGE_KEYS,
+} from '@/lib/rbac';
 
 const DEFAULT_PREFERENCES: DemoPreferences = {
   theme: 'light',
@@ -47,7 +58,28 @@ export interface DemoAuthContextType {
   authMessage: string | null;
   invitations: DemoInvitation[];
 
-  // Authentication & Onboarding
+  // ── RBAC & Role Management ────────────────────────────────────────────────
+  currentRbacUser: DemoUserAccount | null;
+  roles: CustomRole[];
+  demoAccounts: DemoUserAccount[];
+  switchDemoAccount: (idOrEmail: string) => DemoUserAccount | undefined;
+  createRole: (roleData: Omit<CustomRole, 'id' | 'createdAt'>) => CustomRole;
+  updateRole: (roleId: string, roleData: Partial<CustomRole>) => CustomRole | undefined;
+  deleteRole: (roleId: string) => { success: boolean; error?: string };
+  updateMemberRoleAndProjects: (userId: string, roleId: string, assignedProjectIds: string[]) => void;
+
+  // ── Super Admin Management ────────────────────────────────────────────────
+  superAdminOrgs: SuperAdminOrg[];
+  superAdminOrgInvitations: SuperAdminOrgInvitation[];
+  createSuperAdminOrg: (data: Omit<SuperAdminOrg, 'id' | 'createdAt' | 'memberCount' | 'projectCount'>) => SuperAdminOrg;
+  updateSuperAdminOrg: (orgId: string, data: Partial<SuperAdminOrg>) => void;
+  updateSuperAdminOrgStatus: (orgId: string, status: 'active' | 'pending' | 'inactive') => void;
+  deleteSuperAdminOrg: (orgId: string) => void;
+  inviteSuperAdminOrg: (data: { organizationName: string; ownerEmail: string; plan: string; message?: string }) => SuperAdminOrgInvitation;
+  resendSuperAdminOrgInvite: (inviteId: string) => void;
+  revokeSuperAdminOrgInvite: (inviteId: string) => void;
+
+  // ── Authentication & Onboarding ───────────────────────────────────────────
   signUp: (data: {
     fullName: string;
     email: string;
@@ -68,12 +100,12 @@ export interface DemoAuthContextType {
     email: string,
     password?: string,
     rememberMe?: boolean
-  ) => { success: boolean; error?: string; requiresOrgSetup?: boolean; user?: DemoUser };
+  ) => { success: boolean; error?: string; requiresOrgSetup?: boolean; user?: DemoUser; rbacUser?: DemoUserAccount };
 
   logout: () => void;
   clearAuthMessage: () => void;
 
-  // Invitations: the owner invites people; they join through the link without creating an organization
+  // ── Invitations ───────────────────────────────────────────────────────────
   sendInvitation: (data: {
     email: string;
     fullName?: string;
@@ -81,6 +113,8 @@ export interface DemoAuthContextType {
     jobTitle?: string;
     department?: string;
     message?: string;
+    roleId?: string;
+    assignedProjectIds?: string[];
   }) => { success: boolean; invitation?: DemoInvitation; error?: string };
   resendInvitation: (id: string) => DemoInvitation | undefined;
   revokeInvitation: (id: string) => void;
@@ -121,14 +155,57 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
   const [invitations, setInvitations] = useState<DemoInvitation[]>(INITIAL_DEMO_INVITATIONS);
   const [isHydrated, setIsHydrated] = useState(false);
 
+  // RBAC State
+  const [roles, setRoles] = useState<CustomRole[]>(INITIAL_ROLES);
+  const [demoAccounts, setDemoAccounts] = useState<DemoUserAccount[]>(DEMO_ACCOUNTS);
+  const [currentRbacUser, setCurrentRbacUserState] = useState<DemoUserAccount | null>(DEMO_ACCOUNTS[1]); // Default: Owner
+
+  // Super Admin Organizations and Invitations
+  const [superAdminOrgs, setSuperAdminOrgs] = useState<SuperAdminOrg[]>(INITIAL_SUPER_ADMIN_ORGS);
+  const [superAdminOrgInvitations, setSuperAdminOrgInvitations] = useState<SuperAdminOrgInvitation[]>(INITIAL_SUPER_ADMIN_INVITATIONS);
+
   // Safely hydrate from localStorage on mount (client-side only)
   useEffect(() => {
     try {
+      // Hydrate custom roles
+      const storedRoles = safeStorageGet<CustomRole[] | null>(RBAC_STORAGE_KEYS.CUSTOM_ROLES, null);
+      if (storedRoles && storedRoles.length > 0) {
+        setRoles(storedRoles);
+      }
+
+      // Hydrate demo accounts
+      const storedDemoAccounts = safeStorageGet<DemoUserAccount[] | null>(RBAC_STORAGE_KEYS.DEMO_ACCOUNTS, null);
+      let activeAccounts = DEMO_ACCOUNTS;
+      if (storedDemoAccounts && storedDemoAccounts.length > 0) {
+        activeAccounts = storedDemoAccounts;
+        setDemoAccounts(storedDemoAccounts);
+      }
+
+      // Hydrate super admin orgs
+      const storedSuperAdminOrgs = safeStorageGet<SuperAdminOrg[] | null>(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, null);
+      if (storedSuperAdminOrgs && storedSuperAdminOrgs.length > 0) {
+        setSuperAdminOrgs(storedSuperAdminOrgs);
+      }
+
+      // Hydrate super admin org invites
+      const storedSuperAdminInvites = safeStorageGet<SuperAdminOrgInvitation[] | null>(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, null);
+      if (storedSuperAdminInvites && storedSuperAdminInvites.length > 0) {
+        setSuperAdminOrgInvitations(storedSuperAdminInvites);
+      }
+
+      // Hydrate RBAC current user
+      const storedRbacUser = safeStorageGet<DemoUserAccount | null>(RBAC_STORAGE_KEYS.CURRENT_USER, null);
+      if (storedRbacUser) {
+        const found = activeAccounts.find(a => a.id === storedRbacUser.id) || storedRbacUser;
+        setCurrentRbacUserState(found);
+      } else {
+        setCurrentRbacUserState(DEMO_ACCOUNTS[1]); // Default to Owner
+      }
+
       // 1. Hydrate users list or seed with demo preset users
       const storedUsers = safeStorageGet<DemoUser[] | null>(STORAGE_KEYS.USERS, null);
       let currentUsersList = DEMO_PRESET_USERS;
       if (storedUsers && storedUsers.length > 0) {
-        // Merge preset users in case updates were made to preset users
         const map = new Map<string, DemoUser>();
         DEMO_PRESET_USERS.forEach((u) => map.set(u.id, u));
         storedUsers.forEach((u) => map.set(u.id, u));
@@ -166,12 +243,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       const storedUser = safeStorageGet<DemoUser | null>(STORAGE_KEYS.USER, null);
 
       if (sessionActive && storedUser) {
-        // Find latest updated version of this user if in users list
         const activeUser = currentUsersList.find((u) => u.id === storedUser.id) || storedUser;
         setCurrentUser(activeUser);
         setIsAuthenticated(true);
 
-        // Find associated workspace
         const associatedWs =
           currentWorkspacesList.find((w) => w.id === activeUser.organizationId) ||
           currentWorkspacesList[0];
@@ -196,6 +271,304 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, []);
 
+  // ── Switch Demo Account ───────────────────────────────────────────────────
+  const switchDemoAccount = useCallback(
+    (idOrEmail: string) => {
+      const target = idOrEmail.toLowerCase().trim();
+      let account = demoAccounts.find(
+        (a) => a.id.toLowerCase() === target || a.email.toLowerCase() === target
+      );
+
+      // Fallback for demo@flashsign.com -> Owner
+      if (!account && target === 'demo@flashsign.com') {
+        account = demoAccounts.find((a) => a.id === 'demo-owner');
+      }
+
+      if (!account) return undefined;
+
+      setCurrentRbacUserState(account);
+      safeStorageSet(RBAC_STORAGE_KEYS.CURRENT_USER, account);
+
+      // Map to DemoUser
+      const mappedRole: DemoRole = account.isSuperAdmin
+        ? 'org_admin'
+        : account.isOwner
+        ? 'executive'
+        : account.roleId === 'role-pm'
+        ? 'project_manager'
+        : account.roleId === 'role-team-lead'
+        ? 'engineering_lead'
+        : account.roleId === 'role-dev'
+        ? 'developer'
+        : account.roleId === 'role-qa'
+        ? 'qa'
+        : 'developer';
+
+      const demoUser: DemoUser = {
+        id: account.id,
+        fullName: account.name,
+        email: account.email,
+        jobTitle: account.jobTitle,
+        department: account.department,
+        role: mappedRole,
+        organizationId: account.organizationId || 'ws-flash',
+        avatarColor: account.avatarColor,
+        avatarInitials: account.avatarInitials,
+        registrationCompleted: true,
+        organizationSetupCompleted: true,
+      };
+
+      setCurrentUser(demoUser);
+      setIsAuthenticated(true);
+      safeStorageSet(STORAGE_KEYS.USER, demoUser);
+      safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
+
+      return account;
+    },
+    [demoAccounts]
+  );
+
+  // ── Role Management ───────────────────────────────────────────────────────
+  const createRole = useCallback(
+    (roleData: Omit<CustomRole, 'id' | 'createdAt'>) => {
+      const newRole: CustomRole = {
+        ...roleData,
+        id: `role-${Date.now().toString(36)}`,
+        isSystem: false,
+        createdAt: new Date().toISOString(),
+      };
+
+      const nextRoles = [...roles, newRole];
+      setRoles(nextRoles);
+      safeStorageSet(RBAC_STORAGE_KEYS.CUSTOM_ROLES, nextRoles);
+      return newRole;
+    },
+    [roles]
+  );
+
+  const updateRole = useCallback(
+    (roleId: string, roleData: Partial<CustomRole>) => {
+      const idx = roles.findIndex((r) => r.id === roleId);
+      if (idx === -1) return undefined;
+
+      const updatedRole: CustomRole = { ...roles[idx], ...roleData };
+      const nextRoles = [...roles];
+      nextRoles[idx] = updatedRole;
+      setRoles(nextRoles);
+      safeStorageSet(RBAC_STORAGE_KEYS.CUSTOM_ROLES, nextRoles);
+
+      // Immediately propagate updated permissions to all demo users assigned to this role
+      setDemoAccounts((prevAccounts) => {
+        const updatedAccounts = prevAccounts.map((account) => {
+          if (account.roleId === roleId) {
+            return {
+              ...account,
+              roleName: updatedRole.name,
+              dashboardAccess: updatedRole.dashboardAccess,
+              projectAccess: updatedRole.projectAccess,
+              myTasksAccess: updatedRole.myTasksAccess,
+              teamAccess: updatedRole.teamAccess,
+            };
+          }
+          return account;
+        });
+
+        safeStorageSet(RBAC_STORAGE_KEYS.DEMO_ACCOUNTS, updatedAccounts);
+
+        // Update active RBAC user if matching
+        setCurrentRbacUserState((activeUser) => {
+          if (activeUser && activeUser.roleId === roleId) {
+            const nextActive: DemoUserAccount = {
+              ...activeUser,
+              roleName: updatedRole.name,
+              dashboardAccess: updatedRole.dashboardAccess,
+              projectAccess: updatedRole.projectAccess,
+              myTasksAccess: updatedRole.myTasksAccess,
+              teamAccess: updatedRole.teamAccess,
+            };
+            safeStorageSet(RBAC_STORAGE_KEYS.CURRENT_USER, nextActive);
+            return nextActive;
+          }
+          return activeUser;
+        });
+
+        return updatedAccounts;
+      });
+
+      return updatedRole;
+    },
+    [roles]
+  );
+
+  const deleteRole = useCallback(
+    (roleId: string) => {
+      const targetRole = roles.find((r) => r.id === roleId);
+      if (!targetRole) return { success: false, error: 'Role not found.' };
+      if (targetRole.isSystem) {
+        return { success: false, error: 'System standard roles cannot be deleted.' };
+      }
+
+      // Check if any demo account uses this role
+      const inUse = demoAccounts.some((a) => a.roleId === roleId);
+      if (inUse) {
+        return {
+          success: false,
+          error: 'This role is currently assigned to one or more active members. Reassign members before deleting.',
+        };
+      }
+
+      const nextRoles = roles.filter((r) => r.id !== roleId);
+      setRoles(nextRoles);
+      safeStorageSet(RBAC_STORAGE_KEYS.CUSTOM_ROLES, nextRoles);
+      return { success: true };
+    },
+    [roles, demoAccounts]
+  );
+
+  const updateMemberRoleAndProjects = useCallback(
+    (userId: string, roleId: string, assignedProjectIds: string[]) => {
+      const targetRole = roles.find((r) => r.id === roleId);
+      if (!targetRole) return;
+
+      setDemoAccounts((prevAccounts) => {
+        const nextAccounts = prevAccounts.map((account) => {
+          if (account.id === userId) {
+            return {
+              ...account,
+              roleId,
+              roleName: targetRole.name,
+              dashboardAccess: targetRole.dashboardAccess,
+              projectAccess: targetRole.projectAccess,
+              myTasksAccess: targetRole.myTasksAccess,
+              teamAccess: targetRole.teamAccess,
+              assignedProjectIds,
+            };
+          }
+          return account;
+        });
+        safeStorageSet(RBAC_STORAGE_KEYS.DEMO_ACCOUNTS, nextAccounts);
+
+        setCurrentRbacUserState((active) => {
+          if (active && active.id === userId) {
+            const nextActive: DemoUserAccount = {
+              ...active,
+              roleId,
+              roleName: targetRole.name,
+              dashboardAccess: targetRole.dashboardAccess,
+              projectAccess: targetRole.projectAccess,
+              myTasksAccess: targetRole.myTasksAccess,
+              teamAccess: targetRole.teamAccess,
+              assignedProjectIds,
+            };
+            safeStorageSet(RBAC_STORAGE_KEYS.CURRENT_USER, nextActive);
+            return nextActive;
+          }
+          return active;
+        });
+
+        return nextAccounts;
+      });
+    },
+    [roles]
+  );
+
+  // ── Super Admin Management ────────────────────────────────────────────────
+  const createSuperAdminOrg = useCallback(
+    (data: Omit<SuperAdminOrg, 'id' | 'createdAt' | 'memberCount' | 'projectCount'>) => {
+      const newOrg: SuperAdminOrg = {
+        ...data,
+        id: `org-${Date.now().toString(36)}`,
+        status: data.status || 'active',
+        memberCount: 1,
+        projectCount: 0,
+        createdAt: new Date().toISOString(),
+      };
+      const next = [newOrg, ...superAdminOrgs];
+      setSuperAdminOrgs(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, next);
+      return newOrg;
+    },
+    [superAdminOrgs]
+  );
+
+  const updateSuperAdminOrg = useCallback(
+    (orgId: string, data: Partial<SuperAdminOrg>) => {
+      const next = superAdminOrgs.map((o) => (o.id === orgId ? { ...o, ...data } : o));
+      setSuperAdminOrgs(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, next);
+    },
+    [superAdminOrgs]
+  );
+
+  const updateSuperAdminOrgStatus = useCallback(
+    (orgId: string, status: 'active' | 'pending' | 'inactive') => {
+      const next = superAdminOrgs.map((o) => (o.id === orgId ? { ...o, status } : o));
+      setSuperAdminOrgs(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, next);
+    },
+    [superAdminOrgs]
+  );
+
+  const deleteSuperAdminOrg = useCallback(
+    (orgId: string) => {
+      const next = superAdminOrgs.filter((o) => o.id !== orgId);
+      setSuperAdminOrgs(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, next);
+    },
+    [superAdminOrgs]
+  );
+
+  const inviteSuperAdminOrg = useCallback(
+    (data: { organizationName: string; ownerEmail: string; plan: string; message?: string }) => {
+      const now = Date.now();
+      const newInvite: SuperAdminOrgInvitation = {
+        id: `inv-org-${now.toString(36)}`,
+        organizationName: data.organizationName,
+        ownerEmail: data.ownerEmail,
+        plan: data.plan,
+        message: data.message,
+        status: 'pending',
+        sentAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+      };
+      const next = [newInvite, ...superAdminOrgInvitations];
+      setSuperAdminOrgInvitations(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, next);
+      return newInvite;
+    },
+    [superAdminOrgInvitations]
+  );
+
+  const resendSuperAdminOrgInvite = useCallback(
+    (inviteId: string) => {
+      const now = Date.now();
+      const next = superAdminOrgInvitations.map((i) =>
+        i.id === inviteId
+          ? {
+              ...i,
+              status: 'pending' as const,
+              sentAt: new Date(now).toISOString(),
+              expiresAt: new Date(now + 7 * 24 * 60 * 60 * 1000).toISOString(),
+            }
+          : i
+      );
+      setSuperAdminOrgInvitations(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, next);
+    },
+    [superAdminOrgInvitations]
+  );
+
+  const revokeSuperAdminOrgInvite = useCallback(
+    (inviteId: string) => {
+      const next = superAdminOrgInvitations.map((i) =>
+        i.id === inviteId ? { ...i, status: 'expired' as const } : i
+      );
+      setSuperAdminOrgInvitations(next);
+      safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, next);
+    },
+    [superAdminOrgInvitations]
+  );
+
   const setPendingSignupUser = useCallback((user: DemoUser | null) => {
     setPendingSignupUserState(user);
     if (user) {
@@ -215,82 +588,64 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     safeStorageSet(STORAGE_KEYS.INVITATIONS, next);
   }, []);
 
-  /** A live (pending, not expired) invitation for this email, if any */
   const openInvitationFor = useCallback(
     (email: string) =>
-      invitations.find(
-        (i) => i.status === 'pending' && !isInviteExpired(i) && i.email.toLowerCase() === email.trim().toLowerCase()
-      ),
+      invitations.find((i) => i.email.toLowerCase() === email.toLowerCase() && !isInviteExpired(i)),
     [invitations]
   );
 
-  // ── Step 1: Sign Up (New User) ─────────────────────────────────────────────
+  // ── SignUp (Owner creating initial account) ───────────────────────────────
   const signUp = useCallback(
     (data: { fullName: string; email: string; password: string; jobTitle?: string }) => {
       const normalizedEmail = data.email.trim().toLowerCase();
+      const existingUser = users.find((u) => u.email.toLowerCase() === normalizedEmail);
 
-      const invitation = openInvitationFor(normalizedEmail);
-      if (invitation) {
-        return {
-          success: false,
-          error: `You've been invited to join ${invitation.organizationName}. Open the invitation link in your email to create your account.`,
-        };
-      }
-
-      // Check if user already exists and has completed setup
-      const existingUser = users.find((u) => u.email.trim().toLowerCase() === normalizedEmail);
-      if (existingUser && existingUser.organizationSetupCompleted) {
+      if (existingUser) {
         return {
           success: false,
           error: 'An account with this email already exists. Please log in instead.',
         };
       }
 
+      const generatedId = `user-${Date.now().toString(36)}`;
       const initials =
         data.fullName
           .split(' ')
-          .filter(Boolean)
           .map((n) => n[0])
           .slice(0, 2)
           .join('')
-          .toUpperCase() || 'FS';
+          .toUpperCase() || 'DU';
 
       const newUser: DemoUser = {
-        id: existingUser ? existingUser.id : `user-${Date.now()}`,
+        id: generatedId,
         fullName: data.fullName.trim(),
-        email: data.email.trim(),
+        email: normalizedEmail,
         password: data.password,
         jobTitle: data.jobTitle?.trim() || 'Founder & CEO',
         department: 'Executive',
         timezone: 'America/New_York (UTC-5)',
-        role: 'org_admin',
-        avatarColor: '#00c2a8',
-        avatarInitials: initials,
+        role: 'executive',
         organizationId: null,
         registrationCompleted: true,
         organizationSetupCompleted: false,
+        avatarColor: '#00c2a8',
+        avatarInitials: initials,
         createdAt: new Date().toISOString(),
       };
 
-      // Update pending registration in memory and storage
-      setPendingSignupUserState(newUser);
-      safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, newUser);
-
-      // Save user to mock users registry
-      const updatedUsers = users.some((u) => u.id === newUser.id)
-        ? users.map((u) => (u.id === newUser.id ? newUser : u))
-        : [...users, newUser];
-
+      const updatedUsers = [...users, newUser];
       setUsers(updatedUsers);
       safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
 
-      // DO NOT mark authenticated yet. User must complete org setup then log in.
+      setPendingSignupUserState(newUser);
+      safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, newUser);
+
       return { success: true, user: newUser };
     },
-    [users, openInvitationFor]
+    [users]
   );
 
-  // ── Step 2: Create Organization (New User) ─────────────────────────────────
+  // ── Create Organization ───────────────────────────────────────────────────
   const createOrganization = useCallback(
     (data: {
       name: string;
@@ -300,47 +655,43 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       website?: string;
       description?: string;
     }) => {
-      const normalizedSlug = data.slug.trim().toLowerCase();
-
-      // Validate duplicate slug against existing organizations
-      const isDuplicate = workspaces.some(
-        (w) => w.slug.trim().toLowerCase() === normalizedSlug
-      );
-      if (isDuplicate) {
-        return {
-          success: false,
-          error: `Workspace slug "${normalizedSlug}" is already in use. Please enter a different workspace URL.`,
-        };
-      }
-
-      // User must be pending signup or currently active
       const user = pendingSignupUser || currentUser;
       if (!user) {
         return {
           success: false,
-          error: 'No active registration session found. Please fill out the sign up form first.',
+          error: 'User session not found. Please complete the registration step first.',
         };
       }
 
-      const orgId = `ws-${Date.now().toString(36)}`;
+      const existingSlug = workspaces.find(
+        (w) => w.slug.toLowerCase() === data.slug.toLowerCase().trim()
+      );
+      if (existingSlug) {
+        return {
+          success: false,
+          error: 'This workspace URL slug is already taken. Please choose another one.',
+        };
+      }
+
+      const orgId = `ws-${slugify(data.slug) || Date.now().toString(36)}`;
       const initials =
         data.name
           .split(' ')
-          .filter(Boolean)
           .map((w) => w[0])
           .slice(0, 2)
           .join('')
-          .toUpperCase() || 'WS';
+          .toUpperCase() || 'FS';
 
       const newOrg: DemoWorkspace = {
         id: orgId,
         name: data.name.trim(),
-        slug: normalizedSlug,
+        slug: data.slug.trim().toLowerCase(),
         industry: data.industry,
         size: data.size,
         companySize: data.size,
-        website: data.website?.trim() || '',
-        description: data.description?.trim() || 'Organization workspace on Flash Sign.',
+        type: data.industry,
+        website: data.website?.trim() || `https://${data.slug}.flashsign.com`,
+        description: data.description?.trim() || 'Flash Sign digital execution and agreement workspace.',
         ownerId: user.id,
         memberCount: 1,
         activeProjectCount: 1,
@@ -349,49 +700,58 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: new Date().toISOString(),
       };
 
-      // Associate user with newly created organization as owner
       const updatedUser: DemoUser = {
         ...user,
         organizationId: orgId,
         organizationSetupCompleted: true,
-        role: 'org_admin',
+        role: 'executive',
       };
 
-      // Update workspaces
       const updatedWorkspaces = [newOrg, ...workspaces.filter((w) => w.id !== orgId)];
       setWorkspaces(updatedWorkspaces);
       setSelectedWorkspace(newOrg);
       safeStorageSet(STORAGE_KEYS.WORKSPACES, updatedWorkspaces);
       safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, newOrg);
 
-      // Update users
       const updatedUsers = users.some((u) => u.id === updatedUser.id)
         ? users.map((u) => (u.id === updatedUser.id ? updatedUser : u))
         : [...users, updatedUser];
       setUsers(updatedUsers);
       safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
 
-      // Keep updated user in pending session so login screen can recognize them
       setPendingSignupUserState(updatedUser);
       safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, updatedUser);
 
-      // Flash success message for login screen
       const successMessage = `Organization "${newOrg.name}" created successfully! Please log in to access your workspace.`;
       setAuthMessageState(successMessage);
       safeStorageSet(STORAGE_KEYS.AUTH_SUCCESS_MSG, successMessage);
 
-      // Do NOT redirect automatically to dashboard. User must log in.
       return { success: true, organization: newOrg };
     },
     [workspaces, users, pendingSignupUser, currentUser]
   );
 
-  // ── Step 3: Login (Existing and Newly Registered Users) ─────────────────────
+  // ── Step 3: Login (Existing and Demo Users) ────────────────────────────────
   const login = useCallback(
     (email: string, password?: string, rememberMe: boolean = true) => {
       const normalizedEmail = email.trim().toLowerCase();
 
-      // Look up user in current users list
+      // Check if user is logging into one of the demo accounts
+      const matchedDemoAccount = demoAccounts.find(
+        (a) => a.email.toLowerCase() === normalizedEmail
+      ) || (normalizedEmail === 'demo@flashsign.com' ? demoAccounts.find(a => a.id === 'demo-owner') : undefined);
+
+      if (matchedDemoAccount) {
+        // Authenticate demo account
+        const account = switchDemoAccount(matchedDemoAccount.id);
+        return {
+          success: true,
+          user: currentUser || undefined,
+          rbacUser: account,
+        };
+      }
+
+      // Look up user in general users list
       const matchedUser = users.find(
         (u) => u.email.trim().toLowerCase() === normalizedEmail
       );
@@ -402,12 +762,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
           success: false,
           error: invitation
             ? `You haven't joined ${invitation.organizationName} yet. Open the invitation link in your email to create your account.`
-            : 'No account found with this email address. Please check your credentials or create an account.',
+            : 'No account found with this email address. Please check your credentials or select a demo account.',
         };
       }
 
-      // Password validation:
-      // Accepts the user's registered password, or the prototype universal demo passwords
       const isValidPassword =
         Boolean(password) &&
         ((matchedUser.password && password === matchedUser.password) ||
@@ -417,11 +775,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       if (!isValidPassword) {
         return {
           success: false,
-          error: 'Invalid password. Please check your password and try again (Demo password: Demo123!).',
+          error: 'Invalid password. (Demo password: Demo123!).',
         };
       }
 
-      // Check organization setup completion
       if (!matchedUser.organizationSetupCompleted) {
         setPendingSignupUserState(matchedUser);
         safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, matchedUser);
@@ -433,11 +790,9 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         };
       }
 
-      // Validated: Set active user and session
       setCurrentUser(matchedUser);
       setIsAuthenticated(true);
 
-      // Match organization
       const matchedOrg =
         workspaces.find((w) => w.id === matchedUser.organizationId) ||
         workspaces.find((w) => w.ownerId === matchedUser.id) ||
@@ -448,13 +803,11 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, matchedOrg);
       }
 
-      // Clear any pending message and pending signup user
       setAuthMessageState(null);
       safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
       setPendingSignupUserState(null);
       safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
 
-      // Persist session if rememberMe
       safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
       if (rememberMe) {
         safeStorageSet(STORAGE_KEYS.USER, matchedUser);
@@ -464,13 +817,13 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true, user: matchedUser };
     },
-    [users, workspaces, openInvitationFor]
+    [demoAccounts, switchDemoAccount, users, currentUser, openInvitationFor, workspaces]
   );
 
-  // ── Invitations ────────────────────────────────────────────────────────────
+  // ── Invitations ───────────────────────────────────────────────────────────
   const sendInvitation = useCallback<DemoAuthContextType['sendInvitation']>(
     (data) => {
-      if (!currentUser) return { success: false, error: 'Please log in to invite people.' };
+      if (!currentRbacUser && !currentUser) return { success: false, error: 'Please log in to invite people.' };
       const email = data.email.trim();
       const normalizedEmail = email.toLowerCase();
       const org = selectedWorkspace;
@@ -499,17 +852,17 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         message: data.message?.trim() || undefined,
         organizationId: org.id,
         organizationName: org.name,
-        invitedById: currentUser.id,
-        invitedByName: currentUser.fullName,
+        invitedById: currentRbacUser?.id || currentUser?.id || 'demo-owner',
+        invitedByName: currentRbacUser?.name || currentUser?.fullName || 'Organization Owner',
         sentAt: new Date(now).toISOString(),
         expiresAt: new Date(now + INVITE_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
         status: 'pending',
       };
-      // An expired invitation to the same email is replaced by the new one
+
       saveInvitations([invitation, ...invitations.filter((i) => i !== existing)]);
       return { success: true, invitation };
     },
-    [currentUser, selectedWorkspace, users, invitations, saveInvitations]
+    [currentRbacUser, currentUser, selectedWorkspace, users, invitations, saveInvitations]
   );
 
   const resendInvitation = useCallback(
@@ -538,73 +891,60 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     [invitations, saveInvitations]
   );
 
-  // Invited person creates their account: no organization step, straight into the inviting organization
   const acceptInvitation = useCallback<DemoAuthContextType['acceptInvitation']>(
     (invite, data) => {
       const local = invitations.find((i) => i.id === invite.id);
       if (local?.status === 'revoked') {
-        return { success: false, error: 'This invitation was cancelled. Ask the workspace owner to invite you again.' };
+        return { success: false, error: 'This invitation was cancelled.' };
       }
       if (local?.status === 'accepted') {
-        return { success: false, error: 'This invitation has already been used. Log in with your email and password.' };
-      }
-      if (isInviteExpired(local ?? invite)) {
-        return { success: false, error: 'This invitation has expired. Ask the workspace owner to send a new one.' };
-      }
-      const normalizedEmail = invite.email.trim().toLowerCase();
-      if (users.some((u) => u.email.trim().toLowerCase() === normalizedEmail)) {
-        return { success: false, error: 'An account with this email already exists. Please log in instead.' };
+        return { success: false, error: 'This invitation has already been accepted.' };
       }
 
-      // The link may be opened in a browser that has never seen this organization
-      let org = workspaces.find((w) => w.id === invite.organizationId);
-      let nextWorkspaces = workspaces;
-      if (!org) {
-        org = {
-          id: invite.organizationId,
-          name: invite.organizationName,
-          slug: slugify(invite.organizationName),
-          ownerId: invite.invitedById,
-          memberCount: 1,
-          activeProjectCount: 0,
-          accentColor: '#00c2a8',
-          initials: invite.organizationName.split(' ').map((w) => w[0]).slice(0, 2).join('').toUpperCase(),
-        };
-        nextWorkspaces = [...workspaces, org];
-      }
-      nextWorkspaces = nextWorkspaces.map((w) => (w.id === org!.id ? { ...w, memberCount: w.memberCount + 1 } : w));
-      org = nextWorkspaces.find((w) => w.id === invite.organizationId)!;
+      const org = workspaces.find((w) => w.id === invite.organizationId) || selectedWorkspace;
+      const initials =
+        data.fullName
+          .split(' ')
+          .map((n) => n[0])
+          .slice(0, 2)
+          .join('')
+          .toUpperCase() || 'MB';
 
-      const fullName = data.fullName.trim();
       const newUser: DemoUser = {
-        id: `user-${Date.now()}`,
-        fullName,
-        email: invite.email,
+        id: `user-${Date.now().toString(36)}`,
+        fullName: data.fullName.trim(),
+        email: invite.email.toLowerCase(),
         password: data.password,
         jobTitle: data.jobTitle?.trim() || invite.jobTitle || 'Team Member',
-        department: invite.department || 'General',
+        department: invite.department || 'Engineering',
         timezone: 'America/New_York (UTC-5)',
         role: invite.role,
         organizationId: org.id,
         registrationCompleted: true,
         organizationSetupCompleted: true,
-        avatarColor: '#2a78d6',
-        avatarInitials: fullName.split(' ').filter(Boolean).map((n) => n[0]).slice(0, 2).join('').toUpperCase() || 'TM',
+        avatarColor: '#2563eb',
+        avatarInitials: initials,
         createdAt: new Date().toISOString(),
       };
 
-      const updatedUsers = [...users, newUser];
-      setUsers(updatedUsers);
-      safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
+      const nextUsers = [...users, newUser];
+      setUsers(nextUsers);
+      safeStorageSet(STORAGE_KEYS.USERS, nextUsers);
+
+      const nextWorkspaces = workspaces.map((w) =>
+        w.id === org.id ? { ...w, memberCount: (w.memberCount || 0) + 1 } : w
+      );
       setWorkspaces(nextWorkspaces);
       safeStorageSet(STORAGE_KEYS.WORKSPACES, nextWorkspaces);
+
       if (local) {
         saveInvitations(
-          invitations.map((i) => (i.id === local.id ? { ...i, status: 'accepted' as const, acceptedAt: new Date().toISOString() } : i))
+          invitations.map((i) =>
+            i.id === local.id ? { ...i, status: 'accepted' as const, acceptedAt: new Date().toISOString() } : i
+          )
         );
       }
 
-      // Signed straight in to the organization that invited them
       setCurrentUser(newUser);
       setIsAuthenticated(true);
       setSelectedWorkspace(org);
@@ -615,23 +955,23 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       safeStorageSet(STORAGE_KEYS.USER, newUser);
       return { success: true };
     },
-    [invitations, users, workspaces, saveInvitations]
+    [invitations, users, workspaces, selectedWorkspace, saveInvitations]
   );
 
   // ── Logout ─────────────────────────────────────────────────────────────────
   const logout = useCallback(() => {
     setIsAuthenticated(false);
     setCurrentUser(null);
+    setCurrentRbacUserState(null);
     setPendingSignupUserState(null);
     setAuthMessageState(null);
     safeStorageRemove(STORAGE_KEYS.SESSION_ACTIVE);
     safeStorageRemove(STORAGE_KEYS.USER);
+    safeStorageRemove(RBAC_STORAGE_KEYS.CURRENT_USER);
     safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
     safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
-    // Preserves registered users and organizations in localStorage
   }, []);
 
-  // ── Legacy Register (Backwards compatibility) ──────────────────────────────
   const register = useCallback(
     (fullName: string, email: string, companyName?: string) => {
       signUp({
@@ -748,6 +1088,13 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     setAuthMessageState(null);
     setInvitations(INITIAL_DEMO_INVITATIONS);
 
+    // Reset RBAC
+    setRoles(INITIAL_ROLES);
+    setDemoAccounts(DEMO_ACCOUNTS);
+    setCurrentRbacUserState(DEMO_ACCOUNTS[1]);
+    setSuperAdminOrgs(INITIAL_SUPER_ADMIN_ORGS);
+    setSuperAdminOrgInvitations(INITIAL_SUPER_ADMIN_INVITATIONS);
+
     safeStorageSet(STORAGE_KEYS.USERS, DEMO_PRESET_USERS);
     safeStorageRemove(STORAGE_KEYS.INVITATIONS);
     safeStorageSet(STORAGE_KEYS.WORKSPACES, INITIAL_DEMO_WORKSPACES);
@@ -757,6 +1104,12 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
     safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
     safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
+
+    safeStorageSet(RBAC_STORAGE_KEYS.CUSTOM_ROLES, INITIAL_ROLES);
+    safeStorageSet(RBAC_STORAGE_KEYS.DEMO_ACCOUNTS, DEMO_ACCOUNTS);
+    safeStorageSet(RBAC_STORAGE_KEYS.CURRENT_USER, DEMO_ACCOUNTS[1]);
+    safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, INITIAL_SUPER_ADMIN_ORGS);
+    safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, INITIAL_SUPER_ADMIN_INVITATIONS);
   }, []);
 
   return (
@@ -775,6 +1128,28 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         pendingSignupUser,
         authMessage,
         invitations,
+
+        // RBAC
+        currentRbacUser,
+        roles,
+        demoAccounts,
+        switchDemoAccount,
+        createRole,
+        updateRole,
+        deleteRole,
+        updateMemberRoleAndProjects,
+
+        // Super Admin
+        superAdminOrgs,
+        superAdminOrgInvitations,
+        createSuperAdminOrg,
+        updateSuperAdminOrg,
+        updateSuperAdminOrgStatus,
+        deleteSuperAdminOrg,
+        inviteSuperAdminOrg,
+        resendSuperAdminOrgInvite,
+        revokeSuperAdminOrgInvite,
+
         signUp,
         createOrganization,
         login,

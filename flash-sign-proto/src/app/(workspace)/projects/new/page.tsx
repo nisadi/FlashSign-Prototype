@@ -4,6 +4,9 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageProjects } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { notify } from '@/components/shared/toaster';
 import type { ProjectStatus, ProjectPriority, ProjectHealth } from '@/types';
 import { ArrowLeft, ArrowRight, FolderKanban, Sparkles, Check, Users, Calendar, Flag, Shield, Layers, Rows3 } from 'lucide-react';
@@ -58,6 +61,20 @@ export default function CreateProjectPage() {
   const router = useRouter();
   const { users, addProject, addActivity, addMilestone, addEpic, addStory } = useApp();
   const currentUser = useCurrentUser();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canManageProjects(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Project Creation Restricted"
+          message="Your role does not have permission to create new projects. Management Access is required."
+          requiredRole="Project Management Access"
+          backHref="/projects"
+        />
+      </div>
+    );
+  }
 
   // Form State
   const [name, setName] = useState('');

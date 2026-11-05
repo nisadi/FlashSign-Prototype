@@ -4,6 +4,9 @@ import { use, useState, useEffect, useMemo } from 'react';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canViewProjectReports } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { Card } from '@/components/shared/ui';
 import { TaskTimeReport } from '@/components/reports/task-time-report';
@@ -41,7 +44,22 @@ export default function ProjectReportsPage({
 }) {
   const { projectId } = use(params);
   const { projects, tasks, sprints, milestones, taskStatusChanges } = useApp();
+  const { currentRbacUser } = useDemoAuth();
   const now = useNow();
+
+  if (currentRbacUser && !canViewProjectReports(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Project Reports Restricted"
+          message="Project delivery and velocity reports are restricted to project managers and administrators."
+          requiredRole="Project Management Access"
+          backHref={`/projects/${projectId}`}
+        />
+      </div>
+    );
+  }
+
   const [mounted, setMounted] = useState(false);
   const [statusFilter, setStatusFilter] = useState('all');
   const [sprintFilter, setSprintFilter] = useState('all');

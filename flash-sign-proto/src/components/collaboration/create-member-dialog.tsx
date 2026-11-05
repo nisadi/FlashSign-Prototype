@@ -3,6 +3,7 @@
 import React, { useState } from 'react';
 import { X, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
 import type { User, DemoRole, AvailabilityStatus } from '@/types';
 import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
@@ -56,12 +57,14 @@ export function CreateMemberDialog({
   onSuccess,
 }: CreateMemberDialogProps) {
   const { teams, projects, addMember, updateMember, users } = useApp();
+  const { roles, updateMemberRoleAndProjects } = useDemoAuth();
 
   const [name, setName] = useState(memberToEdit?.name || '');
   const [email, setEmail] = useState(memberToEdit?.email || '');
   const [title, setTitle] = useState(memberToEdit?.title || 'Senior Engineer');
   const [department, setDepartment] = useState(memberToEdit?.department || 'Engineering');
   const [role, setRole] = useState<DemoRole>(memberToEdit?.role || 'developer');
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('role-dev');
   const [color, setColor] = useState(memberToEdit?.color || MEMBER_COLORS[0]);
   const [timeZone, setTimeZone] = useState(memberToEdit?.timeZone || TIMEZONES[0]);
   const [workingHours, setWorkingHours] = useState(memberToEdit?.workingHours || '09:00 - 17:00 EST');
@@ -141,6 +144,7 @@ export function CreateMemberDialog({
         projectIds: selectedProjectIds,
         skills,
       });
+      updateMemberRoleAndProjects(memberToEdit.id, selectedRoleId, selectedProjectIds);
       setSuccessMsg('Member profile updated!');
       notify(`Changes to ${trimmedName} saved`);
       setTimeout(() => {
@@ -286,15 +290,26 @@ export function CreateMemberDialog({
           {/* Role & Avatar Color */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block font-semibold text-ink mb-1">System Role</label>
+              <label className="block font-semibold text-ink mb-1">Customized Role</label>
               <select
-                value={role}
-                onChange={e => setRole(e.target.value as DemoRole)}
+                value={selectedRoleId}
+                onChange={e => {
+                  const newId = e.target.value;
+                  setSelectedRoleId(newId);
+                  const found = roles.find(r => r.id === newId);
+                  if (found) {
+                    if (found.id === 'role-dev') setRole('developer');
+                    else if (found.id === 'role-qa') setRole('qa_tester');
+                    else if (found.id === 'role-pm') setRole('project_manager');
+                    else if (found.id === 'role-team-lead') setRole('engineering_lead');
+                    else setRole('developer');
+                  }
+                }}
                 className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
               >
-                {ROLES.map(r => (
+                {roles.map(r => (
                   <option key={r.id} value={r.id}>
-                    {r.label}
+                    {r.name} ({r.projectAccess === 'management' ? 'All Projects' : 'Assigned Only'})
                   </option>
                 ))}
               </select>

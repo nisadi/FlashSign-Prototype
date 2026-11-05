@@ -3,6 +3,9 @@
 import React from 'react';
 import { Power, Bot, Timer, Database, Users, Lock } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canAccessAIOrganizationSettings } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { canManageAgents } from '@/lib/permissions';
 import { AGENT_FAMILIES, maskedToken, tokenStatus } from '@/lib/agent-connection';
 import { cn, formatRelative } from '@/lib/utils';
@@ -14,14 +17,16 @@ const IDLE_OPTIONS = [30, 60, 120, 240];
 
 export default function AgentOrganisationPage() {
   const { agentSettings, updateAgentSettings, agentTokens, revokeAgentToken, users, projects, demoRole } = useApp();
+  const { currentRbacUser } = useDemoAuth();
 
-  if (!canManageAgents(demoRole)) {
+  if (!canAccessAIOrganizationSettings(currentRbacUser)) {
     return (
-      <SettingsPage title="Organisation" description="AI agent rules for the whole organisation.">
-        <p className="flex items-center gap-2 p-4 rounded-xl border border-line bg-paper-elevated text-sm text-muted">
-          <Lock className="w-4 h-4" /> Only Owners and Admins can change these settings.
-        </p>
-      </SettingsPage>
+      <AccessDenied
+        title="Owner Authority Required"
+        message="AI Agent Hub Organization configurations, API access tokens, and enterprise agent policies are strictly reserved for the Organization Owner."
+        requiredRole="Organization Owner"
+        backHref="/ai-agents/how-it-works"
+      />
     );
   }
 

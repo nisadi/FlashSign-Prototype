@@ -1,6 +1,9 @@
 'use client';
 
 import { useApp, useCurrentUser, useRoleConfig } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canAccessDashboard } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { StatCard, ProgressBar, PageHeader, Card, EmptyState } from '@/components/shared/ui';
 import { TaskStatusBadge, HealthBadge, DocStatusBadge, ProjectStatusBadge } from '@/components/shared/badges';
 import { AvatarGroup } from '@/components/shared/avatar';
@@ -35,6 +38,20 @@ export default function DashboardPage() {
   const { projects, tasks, documents, approvals, agentRuns, users, milestones } = useApp();
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canAccessDashboard(currentRbacUser, 'admin')) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Admin Dashboard Restricted"
+          message="Your role is configured for My Status only and cannot access the Admin Dashboard."
+          requiredRole="Admin Dashboard Access"
+          backHref="/projects/home"
+        />
+      </div>
+    );
+  }
 
   const activeProjects = projects.filter(p => p.status === 'active');
   const openTasks = tasks.filter(t => t.status !== 'done');

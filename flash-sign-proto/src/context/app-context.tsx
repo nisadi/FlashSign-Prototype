@@ -822,35 +822,73 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [hydrated]);
 
-  const { currentUser: authUser, selectedWorkspace: authOrg, isAuthenticated } = useDemoAuth();
+  const { currentUser: authUser, selectedWorkspace: authOrg, isAuthenticated, currentRbacUser } = useDemoAuth();
 
   useEffect(() => {
-    if (!authUser || !isAuthenticated) return;
+    if (!isAuthenticated) return;
 
     setState((prev) => {
+      let mappedRole: DemoRole = 'ceo';
+      let userId = authUser?.id || currentRbacUser?.id || 'demo-owner';
+      let userName = currentRbacUser?.name || authUser?.fullName || 'Aria Chen';
+      let userEmail = currentRbacUser?.email || authUser?.email || 'owner@flashsign.com';
+      let userInitials = currentRbacUser?.avatarInitials || authUser?.avatarInitials || 'AC';
+      let userColor = currentRbacUser?.avatarColor || authUser?.avatarColor || '#009882';
+      let userTitle = currentRbacUser?.jobTitle || authUser?.jobTitle || 'Executive';
+      let userDept = currentRbacUser?.department || authUser?.department || 'Executive Leadership';
+
+      if (currentRbacUser) {
+        userId = currentRbacUser.id;
+        userName = currentRbacUser.name;
+        userEmail = currentRbacUser.email;
+        userInitials = currentRbacUser.avatarInitials;
+        userColor = currentRbacUser.avatarColor;
+        userTitle = currentRbacUser.jobTitle || 'Team Member';
+        userDept = currentRbacUser.department || 'Operations';
+
+        if (currentRbacUser.isSuperAdmin) {
+          mappedRole = 'platform_admin';
+        } else if (currentRbacUser.isOwner) {
+          mappedRole = 'ceo';
+        } else if (currentRbacUser.roleId === 'role-pm') {
+          mappedRole = 'project_manager';
+        } else if (currentRbacUser.roleId === 'role-team-lead') {
+          mappedRole = 'engineering_lead';
+        } else if (currentRbacUser.roleId === 'role-dev') {
+          mappedRole = 'developer';
+        } else if (currentRbacUser.roleId === 'role-qa') {
+          mappedRole = 'qa_tester';
+        } else if (currentRbacUser.projectAccess === 'management') {
+          mappedRole = 'project_manager';
+        } else {
+          mappedRole = 'developer';
+        }
+      } else if (authUser) {
+        mappedRole =
+          authUser.role === 'executive'
+            ? 'ceo'
+            : authUser.role === 'qa'
+            ? 'qa_tester'
+            : (authUser.role as unknown as DemoRole);
+      }
+
       const existingUserIdx = prev.users.findIndex(
-        (u) => u.id === authUser.id || u.email.toLowerCase() === authUser.email.toLowerCase()
+        (u) => u.id === userId || u.email.toLowerCase() === userEmail.toLowerCase()
       );
 
-      const mappedRole: DemoRole =
-        authUser.role === 'executive'
-          ? 'ceo'
-          : authUser.role === 'qa'
-          ? 'qa_tester'
-          : (authUser.role as unknown as DemoRole);
-
       const mappedUser: User = {
-        id: authUser.id,
-        name: authUser.fullName,
-        email: authUser.email,
-        initials: authUser.avatarInitials || authUser.fullName.slice(0, 2).toUpperCase(),
+        id: userId,
+        name: userName,
+        email: userEmail,
+        initials: userInitials,
         role: mappedRole,
-        title: authUser.jobTitle || 'Team Member',
-        department: authUser.department || 'Executive',
-        color: authUser.avatarColor || '#00c2a8',
+        title: userTitle,
+        department: userDept,
+        color: userColor,
         isActive: true,
-        timeZone: authUser.timezone || 'America/New_York (EST)',
-        createdAt: authUser.createdAt || new Date().toISOString(),
+        projectIds: currentRbacUser?.assignedProjectIds || ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
+        timeZone: authUser?.timezone || 'America/New_York (EST)',
+        createdAt: authUser?.createdAt || new Date().toISOString(),
       };
 
       let nextUsers = [...prev.users];
@@ -868,13 +906,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       return {
         ...prev,
-        currentUserId: authUser.id,
+        currentUserId: userId,
         demoRole: mappedRole,
         users: nextUsers,
         org: nextOrg,
       };
     });
-  }, [authUser, authOrg, isAuthenticated]);
+  }, [authUser, authOrg, isAuthenticated, currentRbacUser]);
 
   const update = useCallback((updater: (prev: AppState) => AppState) => {
     setState(updater);

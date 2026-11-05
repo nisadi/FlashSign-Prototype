@@ -3,6 +3,9 @@
 import { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canAccessMyTasks, canAccessDashboard } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { Card, StatCard, Button, EmptyState } from '@/components/shared/ui';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
@@ -27,6 +30,21 @@ import { placementOf, projectBoards } from '@/lib/board-columns';
 export default function MyTasksPage() {
   const { tasks, projects, updateTask, openTaskDrawer, currentUserId, users } = useApp();
   const currentUser = users.find((u) => u.id === currentUserId) || users[0];
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canAccessMyTasks(currentRbacUser)) {
+    const fallback = canAccessDashboard(currentRbacUser, 'admin') ? '/dashboard' : '/projects/home';
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="My Tasks Restricted"
+          message="Your role is not configured with access to My Tasks."
+          requiredRole="My Tasks Enabled"
+          backHref={fallback}
+        />
+      </div>
+    );
+  }
 
   const [viewMode, setViewMode] = useState<'list' | 'board'>('list');
   const [activeTab, setActiveTab] = useState<'all' | 'today' | 'upcoming' | 'overdue' | 'completed'>(

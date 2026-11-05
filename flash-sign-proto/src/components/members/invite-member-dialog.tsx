@@ -15,11 +15,13 @@ const inputClass =
 
 /** Owner sends an invitation; the preview shows the email the person will get. */
 export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const { users } = useApp();
-  const { sendInvitation, currentUser, selectedWorkspace } = useDemoAuth();
+  const { users, projects } = useApp();
+  const { sendInvitation, currentUser, selectedWorkspace, roles } = useDemoAuth();
 
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
+  const [selectedRoleId, setSelectedRoleId] = useState<string>('role-dev');
+  const [assignedProjectIds, setAssignedProjectIds] = useState<string[]>(['p1']);
   const [role, setRole] = useState<DemoRole>('developer');
   const [jobTitle, setJobTitle] = useState('');
   const [department, setDepartment] = useState('');
@@ -27,6 +29,8 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<DemoInvitation | null>(null);
   const [copied, setCopied] = useState(false);
+
+  const selectedCustomRole = roles.find(r => r.id === selectedRoleId) || roles[0];
 
   const departments = Array.from(new Set(users.map(u => u.department).filter(Boolean))) as string[];
   const inviter = currentUser?.fullName ?? 'Your workspace owner';
@@ -61,7 +65,16 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
       setError(`${member.name} is already a member.`);
       return;
     }
-    const result = sendInvitation({ email: trimmed, fullName, role, jobTitle, department, message });
+    const result = sendInvitation({
+      email: trimmed,
+      fullName,
+      role,
+      jobTitle,
+      department,
+      message,
+      roleId: selectedRoleId,
+      assignedProjectIds,
+    });
     if (!result.success || !result.invitation) {
       setError(result.error ?? 'Could not send the invitation.');
       return;
@@ -155,9 +168,25 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block space-y-1">
-                  <span className="font-semibold text-ink">Role</span>
-                  <select value={role} onChange={e => setRole(e.target.value as DemoRole)} className={inputClass}>
-                    {INVITABLE_ROLES.map(r => <option key={r.id} value={r.id}>{r.title}</option>)}
+                  <span className="font-semibold text-ink">Customized Role</span>
+                  <select
+                    value={selectedRoleId}
+                    onChange={e => {
+                      const newRoleId = e.target.value;
+                      setSelectedRoleId(newRoleId);
+                      const cr = roles.find(r => r.id === newRoleId);
+                      if (cr?.id === 'role-dev') setRole('developer');
+                      else if (cr?.id === 'role-qa') setRole('qa');
+                      else if (cr?.id === 'role-pm') setRole('project_manager');
+                      else setRole('developer');
+                    }}
+                    className={inputClass}
+                  >
+                    {roles.map(r => (
+                      <option key={r.id} value={r.id}>
+                        {r.name} ({r.projectAccess === 'management' ? 'All Projects' : 'User Access'})
+                      </option>
+                    ))}
                   </select>
                 </label>
                 <label className="block space-y-1">
@@ -168,6 +197,31 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
                   </datalist>
                 </label>
               </div>
+
+              {/* Project assignments for User Access */}
+              {selectedCustomRole?.projectAccess === 'user' && (
+                <div className="p-3 rounded-lg bg-mist/60 border border-line space-y-1.5 animate-fade-in">
+                  <span className="font-semibold text-ink text-[11px] block">
+                    Assign Projects (User Access scope):
+                  </span>
+                  <div className="grid grid-cols-2 gap-1.5 max-h-28 overflow-y-auto pr-1">
+                    {projects.map(p => (
+                      <label key={p.id} className="flex items-center gap-1.5 text-[11px] text-ink cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={assignedProjectIds.includes(p.id)}
+                          onChange={e => {
+                            if (e.target.checked) setAssignedProjectIds(prev => [...prev, p.id]);
+                            else setAssignedProjectIds(prev => prev.filter(id => id !== p.id));
+                          }}
+                          className="rounded text-flash-deep focus:ring-flash"
+                        />
+                        <span className="truncate">{p.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
               <label className="block space-y-1">
                 <span className="font-semibold text-ink">Job title <span className="text-muted font-normal">(optional)</span></span>
                 <input value={jobTitle} onChange={e => setJobTitle(e.target.value)} placeholder="e.g. Frontend Developer" className={inputClass} />

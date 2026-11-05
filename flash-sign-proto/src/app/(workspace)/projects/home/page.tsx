@@ -3,6 +3,9 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canAccessDashboard } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import { formatDate, formatRelative } from '@/lib/utils';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
@@ -16,6 +19,21 @@ import {
 export default function ProjectManagementHomePage() {
   const { projects, tasks, auditLogs, openTaskDrawer } = useApp();
   const currentUser = useCurrentUser();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (currentRbacUser && !canAccessDashboard(currentRbacUser, 'my-status')) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="My Status Restricted"
+          message="Your role does not have permission to access the My Status dashboard view."
+          requiredRole="My Status Dashboard Access"
+          backHref="/dashboard"
+        />
+      </div>
+    );
+  }
+
   const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
   // Metrics

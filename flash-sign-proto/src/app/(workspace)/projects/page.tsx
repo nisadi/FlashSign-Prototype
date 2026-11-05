@@ -3,6 +3,8 @@
 import { useState } from 'react';
 import Link from 'next/link';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageProjects, canAccessProject } from '@/lib/rbac';
 import { PageHeader, Button, EmptyState, ProgressBar } from '@/components/shared/ui';
 import { ProjectStatusBadge, HealthBadge, PriorityBadge } from '@/components/shared/badges';
 import { AvatarGroup } from '@/components/shared/avatar';
@@ -18,6 +20,7 @@ type ViewMode = 'card' | 'table';
 
 export default function ProjectsPage() {
   const { projects, users, tasks, demoRole, toggleFavoriteProject } = useApp();
+  const { currentRbacUser } = useDemoAuth();
   const [view, setView] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<string>('all');
@@ -26,10 +29,16 @@ export default function ProjectsPage() {
   const [favoritesOnly, setFavoritesOnly] = useState<boolean>(false);
   const [sortBy, setSortBy] = useState<'name' | 'progress' | 'dueDate' | 'priority'>('name');
 
-  // Extract unique groups
-  const groups = Array.from(new Set(projects.map(p => p.group).filter(Boolean))) as string[];
+  const canManage = canManageProjects(currentRbacUser);
+  const canCreate = canManage;
 
-  const filtered = projects.filter(p => {
+  // Filter projects by RBAC access (management vs assigned user)
+  const accessibleProjects = projects.filter((p) => canAccessProject(currentRbacUser, p.id));
+
+  // Extract unique groups from accessible projects
+  const groups = Array.from(new Set(accessibleProjects.map(p => p.group).filter(Boolean))) as string[];
+
+  const filtered = accessibleProjects.filter(p => {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.key.toLowerCase().includes(search.toLowerCase()) ||
       p.description.toLowerCase().includes(search.toLowerCase());
@@ -49,13 +58,15 @@ export default function ProjectsPage() {
     return 0;
   });
 
-  const canCreate = canCreateProject(demoRole);
-
   return (
     <div className="p-6 sm:p-8 max-w-7xl mx-auto space-y-6 animate-fade-up">
       <PageHeader
-        title="All Projects"
-        description={`${projects.length} collaborative delivery spaces across your organization`}
+        title={canManage ? 'All Projects' : 'My Assigned Projects'}
+        description={
+          canManage
+            ? `${projects.length} collaborative delivery spaces across your organization`
+            : `${accessibleProjects.length} delivery spaces assigned to your account`
+        }
         actions={
           canCreate ? (
             <Link href="/projects/new">

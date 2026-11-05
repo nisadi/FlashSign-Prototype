@@ -11,6 +11,7 @@ import {
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
 import { canManageUsers } from '@/lib/permissions';
+import { canManageTeam } from '@/lib/rbac';
 import { cn } from '@/lib/utils';
 import { InviteMemberDialog } from '@/components/members/invite-member-dialog';
 import { InvitationsList } from '@/components/members/invitations-list';
@@ -35,8 +36,9 @@ function MembersDirectory() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { users, teams, projects, tasks, deleteMember, demoRole } = useApp();
-  const { invitations, selectedWorkspace } = useDemoAuth();
-  const canInvite = canManageUsers(demoRole);
+  const { invitations, selectedWorkspace, currentRbacUser } = useDemoAuth();
+  const canManage = canManageTeam(currentRbacUser);
+  const canInvite = canManage;
 
   // Members = people who have joined; Invited = invitations not accepted yet (?tab=invited)
   const tab: MembersTab = searchParams.get('tab') === 'invited' ? 'invited' : 'members';
@@ -303,25 +305,27 @@ function MembersDirectory() {
                         </div>
                       </div>
 
-                      <div className="flex items-center gap-1">
-                        <button
-                          onClick={() => {
-                            setMemberToEdit(member);
-                            setCreateMemberOpen(true);
-                          }}
-                          className="p-1 rounded text-muted hover:text-ink hover:bg-mist transition-colors"
-                          title="Edit Member"
-                        >
-                          <Edit3 className="w-3.5 h-3.5" />
-                        </button>
-                        <button
-                          onClick={() => setDeleteConfirmMember(member)}
-                          className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-                          title="Remove Member"
-                        >
-                          <Trash2 className="w-3.5 h-3.5" />
-                        </button>
-                      </div>
+                      {canManage && (
+                        <div className="flex items-center gap-1">
+                          <button
+                            onClick={() => {
+                              setMemberToEdit(member);
+                              setCreateMemberOpen(true);
+                            }}
+                            className="p-1 rounded text-muted hover:text-ink hover:bg-mist transition-colors"
+                            title="Edit Member"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+                          <button
+                            onClick={() => setDeleteConfirmMember(member)}
+                            className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                            title="Remove Member"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      )}
                     </div>
 
                     {/* Email & Availability */}
@@ -447,23 +451,29 @@ function MembersDirectory() {
                         <td className="py-3 px-4 font-bold text-ink">{memberTasks.length} tasks</td>
                         <td className="py-3 px-4 text-muted font-mono text-[11px]">{member.timeZone || 'EST'}</td>
                         <td className="py-3 px-4 text-right">
-                          <div className="flex items-center justify-end gap-1">
-                            <button
-                              onClick={() => {
-                                setMemberToEdit(member);
-                                setCreateMemberOpen(true);
-                              }}
-                              className="p-1 rounded text-muted hover:text-ink hover:bg-mist transition-colors"
-                            >
-                              <Edit3 className="w-3.5 h-3.5" />
-                            </button>
-                            <button
-                              onClick={() => setDeleteConfirmMember(member)}
-                              className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-                            >
-                              <Trash2 className="w-3.5 h-3.5" />
-                            </button>
-                          </div>
+                          {canManage ? (
+                            <div className="flex items-center justify-end gap-1">
+                              <button
+                                onClick={() => {
+                                  setMemberToEdit(member);
+                                  setCreateMemberOpen(true);
+                                }}
+                                className="p-1 rounded text-muted hover:text-ink hover:bg-mist transition-colors"
+                                title="Edit Member"
+                              >
+                                <Edit3 className="w-3.5 h-3.5" />
+                              </button>
+                              <button
+                                onClick={() => setDeleteConfirmMember(member)}
+                                className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                                title="Remove Member"
+                              >
+                                <Trash2 className="w-3.5 h-3.5" />
+                              </button>
+                            </div>
+                          ) : (
+                            <span className="text-[11px] text-muted italic">Read-only</span>
+                          )}
                         </td>
                       </tr>
                     );

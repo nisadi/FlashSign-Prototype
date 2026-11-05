@@ -2,6 +2,8 @@
 
 import Link from 'next/link';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canViewProjectReports } from '@/lib/rbac';
 import { ProjectStatusBadge, HealthBadge } from '@/components/shared/badges';
 import { NewMenu } from '@/components/projects/new-menu';
 import {
@@ -39,9 +41,12 @@ interface ProjectHeaderNavProps {
 
 export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps) {
   const { projects, tasks, sprints, milestones, toggleFavoriteProject } = useApp();
+  const { currentRbacUser } = useDemoAuth();
   const project = projects.find((p) => p.id === projectId) || (projectId === 'p-mvhmnblw' ? projects.find(p => p.id === 'p1') : undefined) || projects[0];
 
   if (!project) return null;
+
+  const showReports = canViewProjectReports(currentRbacUser);
 
   const effectiveId = (projectId === 'p-mvhmnblw' && !tasks.some(t => t.projectId === 'p-mvhmnblw')) ? 'p1' : projectId;
   const projectTasks = tasks.filter((t) => t.projectId === projectId || t.projectId === effectiveId);
@@ -135,7 +140,7 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
 
         {/* Tab row */}
         <div className="flex items-center gap-1 overflow-x-auto no-scrollbar -mb-px">
-          {tabs.map((tab) => {
+          {tabs.filter(tab => tab.id !== 'reports' || showReports).map((tab) => {
             const Icon = tab.icon;
             const isActive = activeTab === tab.id;
             return (

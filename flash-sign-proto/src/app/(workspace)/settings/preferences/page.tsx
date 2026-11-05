@@ -5,6 +5,9 @@ import {
   Clock, Calendar, Check, RotateCcw,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canAccessPreferences } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 import type { CollaborationSettings } from '@/types';
 
 const TIMEZONES = [
@@ -19,6 +22,18 @@ const TIMEZONES = [
 
 export default function PreferencesSettingsPage() {
   const { collaborationSettings, updateCollaborationSettings, resetDemoData } = useApp();
+  const { currentRbacUser } = useDemoAuth();
+
+  if (!canAccessPreferences(currentRbacUser)) {
+    return (
+      <AccessDenied
+        title="Owner Authority Required"
+        message="Workspace preferences, calendar planning defaults, and scheduling policies are strictly accessible to the Organization Owner."
+        requiredRole="Organization Owner"
+        backHref="/settings/profile"
+      />
+    );
+  }
 
   const [settings, setSettings] = useState<CollaborationSettings>(collaborationSettings);
   const [saved, setSaved] = useState(false);

@@ -5,6 +5,8 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { useApp } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageProjects, canAccessProjectDangerZone } from '@/lib/rbac';
 import { ProjectHeaderNav } from '@/components/projects/project-header-nav';
 import { ProjectBoardsSettings } from '@/components/projects/project-boards-settings';
 import { ProjectStructureSettings } from '@/components/projects/project-structure-settings';
@@ -48,6 +50,10 @@ export default function ProjectSettingsPage({
   const { projectId } = use(params);
   const router = useRouter();
   const { projects, users, tasks, demoRole, currentUserId, updateProject, deleteProject, archiveProject } = useApp();
+  const { currentRbacUser } = useDemoAuth();
+
+  const isManager = canManageProjects(currentRbacUser);
+  const showDangerZone = canAccessProjectDangerZone(currentRbacUser);
 
   // Why the baseline is being changed (asked only when the baseline dates change)
   const [baselineReason, setBaselineReason] = useState('');
@@ -151,6 +157,14 @@ export default function ProjectSettingsPage({
         {/* General Settings Form */}
         <form onSubmit={handleSaveGeneral} className="space-y-6">
           <Card className="p-6 space-y-5">
+            {!isManager && (
+              <div className="p-3 mb-2 rounded-xl bg-amber-500/10 border border-amber-500/20 text-xs text-amber-800 flex items-center gap-2.5">
+                <AlertTriangle className="w-4 h-4 shrink-0 text-amber-600" />
+                <span>
+                  <strong>View Only Mode:</strong> Your role has <em>User Access</em> to this project. Project configuration is read-only and Danger Zone operations are restricted to Project Managers.
+                </span>
+              </div>
+            )}
             <h2 className="text-sm font-bold text-ink border-b border-line pb-2">
               General Information
             </h2>
@@ -308,104 +322,108 @@ export default function ProjectSettingsPage({
               )}
             </div>
 
-            <div className="flex justify-end pt-2">
-              <Button type="submit" variant="primary" size="sm" icon={Save}>
-                Save Project Details
-              </Button>
-            </div>
+            {isManager && (
+              <div className="flex justify-end pt-2">
+                <Button type="submit" variant="primary" size="sm" icon={Save}>
+                  Save Project Details
+                </Button>
+              </div>
+            )}
           </Card>
         </form>
 
-        <ProjectStructureSettings project={project} canEdit={canCreateProject(demoRole)} />
+        <ProjectStructureSettings project={project} canEdit={isManager} />
 
         <ProjectBoardsSettings
           project={project}
           tasks={tasks.filter((t) => t.projectId === project.id)}
-          canEdit={canCreateProject(demoRole)}
+          canEdit={isManager}
         />
 
         {/* Danger Zone: Archive & Delete */}
-        <Card className="p-6 border-danger/30 space-y-4">
-          <div className="flex items-center gap-2 text-danger">
-            <ShieldAlert className="w-5 h-5" />
-            <h2 className="text-sm font-bold">Danger Zone</h2>
-          </div>
-          <p className="text-xs text-muted leading-relaxed">
-            Actions in this section modify project state across all dashboard views. All actions remain
-            local to your browser prototype.
-          </p>
-
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-line">
-            <div>
-              <h3 className="text-xs font-bold text-ink">Archive this Project</h3>
-              <p className="text-[11px] text-muted">
-                Archived projects become read-only and are hidden from default project lists.
-              </p>
+        {showDangerZone && (
+          <Card className="p-6 border-danger/30 space-y-4">
+            <div className="flex items-center gap-2 text-danger">
+              <ShieldAlert className="w-5 h-5" />
+              <h2 className="text-sm font-bold">Danger Zone</h2>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              icon={Archive}
-              onClick={handleArchive}
-              className="shrink-0 text-muted hover:text-ink"
-            >
-              {project.isArchived ? 'Unarchive Project' : 'Archive Project'}
-            </Button>
-          </div>
+            <p className="text-xs text-muted leading-relaxed">
+              Actions in this section modify project state across all dashboard views. All actions remain
+              local to your browser prototype.
+            </p>
 
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-line">
-            <div>
-              <h3 className="text-xs font-bold text-danger">Delete this Project</h3>
-              <p className="text-[11px] text-muted">
-                Permanently removes this project, its sprint iterations, and associated mock tasks.
-              </p>
-            </div>
-            <Button
-              variant="danger"
-              size="sm"
-              icon={Trash2}
-              onClick={() => setConfirmDelete(true)}
-              className="shrink-0"
-            >
-              Delete Project…
-            </Button>
-          </div>
-
-          {confirmDelete && (
-            <div className="p-4 bg-danger/10 border border-danger/30 rounded-xl space-y-3 animate-fade-in">
-              <p className="text-xs font-bold text-danger">
-                Type the project key <span className="font-mono underline">{project.key}</span> to confirm deletion:
-              </p>
-              <input
-                type="text"
-                value={deleteInputText}
-                onChange={(e) => setDeleteInputText(e.target.value)}
-                placeholder={project.key}
-                className="w-full px-3 py-2 text-xs bg-paper border border-danger/40 rounded-xl outline-none focus:border-danger font-mono text-ink"
-              />
-              <div className="flex items-center justify-end gap-2">
-                <Button
-                  variant="secondary"
-                  size="sm"
-                  onClick={() => {
-                    setConfirmDelete(false);
-                    setDeleteInputText('');
-                  }}
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="danger"
-                  size="sm"
-                  disabled={deleteInputText !== project.key}
-                  onClick={handleDelete}
-                >
-                  Confirm Delete
-                </Button>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-line">
+              <div>
+                <h3 className="text-xs font-bold text-ink">Archive this Project</h3>
+                <p className="text-[11px] text-muted">
+                  Archived projects become read-only and are hidden from default project lists.
+                </p>
               </div>
+              <Button
+                variant="outline"
+                size="sm"
+                icon={Archive}
+                onClick={handleArchive}
+                className="shrink-0 text-muted hover:text-ink"
+              >
+                {project.isArchived ? 'Unarchive Project' : 'Archive Project'}
+              </Button>
             </div>
-          )}
-        </Card>
+
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pt-3 border-t border-line">
+              <div>
+                <h3 className="text-xs font-bold text-danger">Delete this Project</h3>
+                <p className="text-[11px] text-muted">
+                  Permanently removes this project, its sprint iterations, and associated mock tasks.
+                </p>
+              </div>
+              <Button
+                variant="danger"
+                size="sm"
+                icon={Trash2}
+                onClick={() => setConfirmDelete(true)}
+                className="shrink-0"
+              >
+                Delete Project…
+              </Button>
+            </div>
+
+            {confirmDelete && (
+              <div className="p-4 bg-danger/10 border border-danger/30 rounded-xl space-y-3 animate-fade-in">
+                <p className="text-xs font-bold text-danger">
+                  Type the project key <span className="font-mono underline">{project.key}</span> to confirm deletion:
+                </p>
+                <input
+                  type="text"
+                  value={deleteInputText}
+                  onChange={(e) => setDeleteInputText(e.target.value)}
+                  placeholder={project.key}
+                  className="w-full px-3 py-2 text-xs bg-paper border border-danger/40 rounded-xl outline-none focus:border-danger font-mono text-ink"
+                />
+                <div className="flex items-center justify-end gap-2">
+                  <Button
+                    variant="secondary"
+                    size="sm"
+                    onClick={() => {
+                      setConfirmDelete(false);
+                      setDeleteInputText('');
+                    }}
+                  >
+                    Cancel
+                  </Button>
+                  <Button
+                    variant="danger"
+                    size="sm"
+                    disabled={deleteInputText !== project.key}
+                    onClick={handleDelete}
+                  >
+                    Confirm Delete
+                  </Button>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
       </div>
     </div>
   );
