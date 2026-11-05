@@ -1,0 +1,335 @@
+// FlashSign database schema: PostgreSQL + Prisma 7
+//
+// Built slice by slice. This file currently holds:
+//   Slice 1 (the spine): organisations, users, membership and roles, sign-in sessions,
+//   invitations, email-verification / password-reset codes, user preferences.
+//
+// Conventions used in every slice:
+//   - Primary keys are UUIDs (`@default(uuid()) @db.Uuid`).
+//   - Model and field names are camelCase in TypeScript and snake_case in the database (@map / @@map).
+//   - Tables that belong to one organisation carry `orgId`. Tables about a person (users,
+//     sessions, codes, preferences) don't, because one person can belong to several organisations.
+//   - `createdAt` / `updatedAt` on every table; `deletedAt` only where something can go to Trash
+//     or be removed while its history is kept.
+//   - Times are stored with time zone (`timestamptz`).
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+// The connection URL lives in prisma.config.ts (Prisma 7), read from the DATABASE_URL env variable.
+datasource db {
+  provider = "postgresql"
+}
+
+// ─── Enums ──────────────────────────────────────────────────────────────────
+
+/// What a person can do in an organisation. The same 12 roles as `DemoRole` in src/types/index.ts.
+/// (The demo login used `executive` and `qa`; they become `ceo` and `qa_tester`.)
+enum Role {
+  ceo
+  project_manager
+  product_owner
+  engineering_lead
+  developer
+  qa_tester
+  org_admin
+  document_manager
+  client
+  auditor
+  platform_admin
+  integration_service
+
+  @@map("role")
+}
+
+enum OrgPlan {
+  starter
+  pro
+  enterprise
+
+  @@map("org_plan")
+}
+
+/// active: can sign in and work · suspended: temporarily blocked · removed: left the organisation (history kept)
+enum MemberStatus {
+  active
+  suspended
+  removed
+
+  @@map("member_status")
+}
+
+enum Availability {
+  available
+  busy
+  focus_time
+  out_of_office
+
+  @@map("availability")
+}
+
+/// "expired" is not stored: an invitation is expired when it is `pending` and `expiresAt` has passed.
+enum InvitationStatus {
+  pending
+  accepted
+  revoked
+
+  @@map("invitation_status")
+}
+
+enum VerificationPurpose {
+  email_verification
+  password_reset
+
+  @@map("verification_purpose")
+}
+
+enum Theme {
+  light
+  dark
+
+  @@map("theme")
+}
+
+enum CalendarView {
+  month
+  week
+  day
+  agenda
+
+  @@map("calendar_view")
+}
+
+enum PlanningView {
+  calendar
+  timeline
+  list
+
+  @@map("planning_view")
+}
+
+enum WeekStartDay {
+  sunday
+  monday
+
+  @@map("week_start_day")
+}
+
+// ─── Slice 1: organisations and people ──────────────────────────────────────
+
+/// A company workspace (the app's `Organization` and the demo login's `DemoWorkspace`, merged).
+/// Member and project counts are not stored; they are counted from the related tables.
+model Organization {
+  id          String  @id @default(uuid()) @db.Uuid
+  name        String
+  /// Used in URLs; unique across all organisations
+  slug        String  @unique
+  description String?
+  type        String?
+  industry    String?
+  companySize String? @map("company_size")
+  website     String?
+  accentColor String? @map("accent_color")
+  /// Becomes a link to `stored_files` in the files slice
+  logoUrl     String? @map("logo_url")
+  plan        OrgPlan @default(starter)
+
+  // Organisation-wide working calendar (today in `CollaborationSettings`)
+  timezone               String       @default("UTC")
+  workingHoursStart      String       @default("09:00") @map("working_hours_start")
+  workingHoursEnd        String       @default("17:00") @map("working_hours_end")
+  weekStartDay           WeekStartDay @default(monday) @map("week_start_day")
+  workloadThresholdHours Int          @default(40) @map("workload_threshold_hours")
+
+  /// The person who created the organisation
+  ownerId String @map("owner_id") @db.Uuid
+  owner   User   @relation("OrganizationOwner", fields: [ownerId], references: [id], onDelete: Restrict)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  members        OrgMember[]
+  invitations    Invitation[]
+  activeSessions Session[]
+
+  @@index([ownerId])
+  @@map("organizations")
+}
+
+/// A person who can sign in. One row per email address, whichever organisations they belong to.
+/// Their role, job title and team details live in `OrgMember`, because they can differ per organisation.
+model User {
+  id           String  @id @default(uuid()) @db.Uuid
+  /// Always stored lower-case, so "Sarah@Acme.com" and "sarah@acme.com" are the same account
+  email        String  @unique
+  /// bcrypt hash; the password itself is never stored (passwords: at least 8 characters, at most 72 bytes)
+  passwordHash String  @map("password_hash")
+  name         String
+  avatarColor  String? @map("avatar_color")
+  /// Becomes a link to `stored_files` in the files slice
+  avatarUrl    String? @map("avatar_url")
+  timezone     String?
+  phone        String?
+  company      String?
+  address      String?
+  bio          String?
+
+  /// Empty until the person enters the code sent to their email
+  emailVerifiedAt DateTime? @map("email_verified_at") @db.Timestamptz(6)
+  lastLoginAt     DateTime? @map("last_login_at") @db.Timestamptz(6)
+
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @updatedAt @map("updated_at") @db.Timestamptz(6)
+  /// Set when the account is closed; personal details are then anonymised but history stays readable
+  deletedAt DateTime? @map("deleted_at") @db.Timestamptz(6)
+
+  ownedOrganizations  Organization[]     @relation("OrganizationOwner")
+  memberships         OrgMember[]
+  sessions            Session[]
+  verificationCodes   VerificationCode[]
+  invitationsSent     Invitation[]       @relation("InvitationSender")
+  invitationsAccepted Invitation[]       @relation("InvitationAcceptor")
+  preferences         UserPreferences?
+
+  @@map("users")
+}
+
+/// Links a person to an organisation, with their role there. This is what the app's role checks read.
+model OrgMember {
+  id     String @id @default(uuid()) @db.Uuid
+  orgId  String @map("org_id") @db.Uuid
+  userId String @map("user_id") @db.Uuid
+
+  role       Role
+  status     MemberStatus @default(active)
+  title      String?
+  department String?
+
+  // Team and workload details (Settings > Profile, Team pages)
+  workingHours   String?      @map("working_hours")
+  weeklyCapacity Int?         @map("weekly_capacity")
+  skills         String[]     @default([])
+  availability   Availability @default(available)
+
+  joinedAt  DateTime @default(now()) @map("joined_at") @db.Timestamptz(6)
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  /// A person is a member of an organisation at most once
+  @@unique([orgId, userId])
+  @@index([userId])
+  @@map("org_members")
+}
+
+/// One signed-in browser. The browser keeps a random token in an HttpOnly cookie; only its hash is stored here.
+model Session {
+  id          String  @id @default(uuid()) @db.Uuid
+  userId      String  @map("user_id") @db.Uuid
+  /// The organisation the person is working in right now; empty until they create or join one
+  activeOrgId String? @map("active_org_id") @db.Uuid
+
+  /// SHA-256 of the cookie token
+  tokenHash  String    @unique @map("token_hash")
+  /// "Remember me" sessions last 30 days; others end sooner
+  rememberMe Boolean   @default(false) @map("remember_me")
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  lastSeenAt DateTime  @default(now()) @map("last_seen_at") @db.Timestamptz(6)
+  /// Set on sign-out, password reset or when an admin removes the person
+  revokedAt  DateTime? @map("revoked_at") @db.Timestamptz(6)
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user      User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrg Organization? @relation(fields: [activeOrgId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("sessions")
+}
+
+/// An invitation to join an organisation. Only the owner signs up directly; everyone else joins through one of these.
+/// Valid for 7 days. The emailed link carries a random token; only its hash is stored.
+model Invitation {
+  id         String  @id @default(uuid()) @db.Uuid
+  orgId      String  @map("org_id") @db.Uuid
+  /// Lower-case, like `User.email`
+  email      String
+  name       String?
+  role       Role
+  title      String?
+  department String?
+  message    String?
+
+  tokenHash String           @unique @map("token_hash")
+  status    InvitationStatus @default(pending)
+  expiresAt DateTime         @map("expires_at") @db.Timestamptz(6)
+
+  invitedById  String    @map("invited_by_id") @db.Uuid
+  acceptedById String?   @map("accepted_by_id") @db.Uuid
+  acceptedAt   DateTime? @map("accepted_at") @db.Timestamptz(6)
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  /// Also the "sent" time
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [orgId], references: [id], onDelete: Cascade)
+  invitedBy    User         @relation("InvitationSender", fields: [invitedById], references: [id], onDelete: Restrict)
+  acceptedBy   User?        @relation("InvitationAcceptor", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  @@index([orgId, status])
+  @@index([email])
+  @@map("invitations")
+}
+
+/// A 6-digit code emailed to confirm an email address or reset a password.
+/// Rules (FR-AUTH-002 / 006): valid 10 minutes, at most 5 wrong tries, a new code at most every 60 seconds.
+model VerificationCode {
+  id      String              @id @default(uuid()) @db.Uuid
+  userId  String              @map("user_id") @db.Uuid
+  purpose VerificationPurpose
+
+  /// Hash of the code; the code itself is only in the email
+  codeHash   String    @map("code_hash")
+  attempts   Int       @default(0)
+  expiresAt  DateTime  @map("expires_at") @db.Timestamptz(6)
+  /// Set when the code is used successfully, so it can't be used twice
+  consumedAt DateTime? @map("consumed_at") @db.Timestamptz(6)
+
+  /// Also used for the 60-second resend limit
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@map("verification_codes")
+}
+
+/// Personal settings (Settings > Notifications, onboarding preferences, calendar and planning views).
+model UserPreferences {
+  userId String @id @map("user_id") @db.Uuid
+
+  theme               Theme        @default(light)
+  defaultCalendarView CalendarView @default(month) @map("default_calendar_view")
+  defaultPlanningView PlanningView @default(calendar) @map("default_planning_view")
+
+  inAppNotifications   Boolean @default(true) @map("in_app_notifications")
+  emailNotifications   Boolean @default(true) @map("email_notifications")
+  desktopNotifications Boolean @default(true) @map("desktop_notifications")
+  weeklyDigest         Boolean @default(false) @map("weekly_digest")
+  /// Per-event choices, e.g. { "task_assigned": true, "request_declined": false }; a missing key counts as on
+  notificationEvents   Json    @default("{}") @map("notification_events")
+
+  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_preferences")
+}
