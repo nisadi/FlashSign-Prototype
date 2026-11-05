@@ -1,0 +1,1267 @@
+FLASHSIGN DATABASE SCHEMA
+=========================
+
+Format:   table - column - type - key / allowed values / note
+          pk = primary key, fk = foreign key (-> the table it points to)
+          Lines starting with * are extra rules (unique combinations, checks, notes).
+          Text after a type lists the allowed values or explains the column.
+
+General rules:
+  - Every table has its own uuid primary key named <table>_id.
+  - Lists are their own tables (e.g. task_tag, meeting_participant), never comma-separated text.
+  - Nothing is stored twice and nothing is stored that can be counted or calculated
+    (member counts, project progress, task count per phase, seal usage count, phase and contract
+    "expiring / missed" states, file size and page count come from stored_file).
+    The few deliberate exceptions are marked "kept on purpose" with the reason.
+  - Allowed values are checked by the app (varchar + check list), not database enums,
+    so a new value needs no schema change.
+  - Files are not stored in the database: they live in object storage and stored_file holds
+    their details. Other tables point to stored_file. No Base64 / data URLs in any column.
+  - Passwords, tokens and codes are stored only as hashes.
+  - Emails are stored lower-case. Times are stored in UTC (timestamp); a date with no time
+    (start_date, due_date) is a calendar day in the organisation's time zone.
+  - created_at / updated_at on tables whose rows are edited; deleted_at where something can go to
+    the Trash (soft delete).
+
+How an organisation comes to exist (the onboarding flow):
+  1. A super admin (platform_admin) opens the Super Admin dashboard and creates an owner_grant
+     for a person's email: the permission to create an organisation, with its plan and seat limit.
+     The person gets an email with a one-time link (owner_grant.token_hash).
+  2. The person opens the link, signs up or signs in (users, verification_code) and the grant is
+     tied to their account (owner_grant.user_id). Without a grant nobody can create an organisation.
+  3. The owner creates the organisation (organization.owner_user_id, organization.owner_grant_id).
+     The system copies the platform's default roles (role_template + role_template_permission)
+     into the new organisation's own role + role_permission rows, adds the protected Owner role,
+     and makes the owner the first org_member with that role.
+  4. The owner defines roles and permissions: edits the copied roles, adds new ones, archives
+     ones they don't need (role, role_permission). Permissions are a fixed list owned by the
+     platform (permission), because the code checks them.
+  5. The owner (or anyone with member.invite) invites people (invitation with a role_id from this
+     organisation). Accepting creates or links the account and an org_member with that role.
+
+Multi-tenancy - shared database, shared schema:
+  - All organisations (tenants) live in one database, one schema and the same tables.
+    Rows are kept apart by organization_id.
+  - Every tenant table has organization_id (not null, fk -> organization), right after its
+    primary key - child tables too (task_tag, signer, board_column ...), even though they could
+    reach it through their parent. This is a deliberate exception to "nothing stored twice":
+    every query, index and security policy can filter by tenant without joins.
+  - Global tables have no organization_id and are marked "* global table": the platform tables
+    (platform_admin, owner_grant, permission, role_template, role_template_permission,
+    notification_event, platform_activity_log) and the person's own tables (users, session,
+    verification_code, user_preference, user_notification_setting, saved_signature).
+  - No cross-tenant links: every tenant table also has unique (organization_id, <table>_id), and
+    every foreign key from one tenant table to another includes organization_id, e.g.
+      task (organization_id, project_id) -> project (organization_id, project_id)
+    Foreign keys to global tables (users, permission ...) stay plain; the app checks that a
+    referenced person is an active org_member of that organisation.
+  - Row-level security (PostgreSQL RLS) on every tenant table:
+      organization_id = current_setting('app.organization_id')::uuid
+    The API runs SET LOCAL app.organization_id at the start of each transaction, taken from
+    session.active_organization_id (or from the agent_access_token / signing_token used).
+    The app's database role does not own the tables and cannot bypass RLS.
+  - Platform admins work through the global tables and organisation metadata (name, plan,
+    status). They get no automatic access to a tenant's content: that needs a
+    support_access_grant approved by the organisation, and every use is logged.
+  - Background jobs (reminders, expiry, idle time-outs, email sending) use a separate database
+    role that bypasses RLS; everything they change is written to activity_log.
+  - Public signing links: a signer without an account is resolved from signing_token by one
+    narrow security-definer function that returns only the token's organization_id; the rest of
+    the request then runs under that organisation like any other.
+  - Unique rules on anything other than uuids are per organisation, e.g.
+    unique (organization_id, project_key). Only organization.slug, users.email,
+    stored_file.storage_key, permission.permission_key, role_template.role_key and the
+    token_hash columns are unique across all organisations.
+  - Every index on a tenant table starts with organization_id.
+  - Object storage keys start with the tenant: org/<organization_id>/... ; personal files
+    (avatars, saved signatures) use user/<user_id>/... and have an empty stored_file.organization_id.
+  - Removing an organisation: soft delete (organization.deleted_at), then after the retention
+    period delete every row with its organization_id and its org/<id>/ prefix in object storage,
+    except signed agreements under retention or legal hold.
+
+Feature flags: teams and contracts are hidden in the app today (organization_feature) but their
+tables are included.
+
+
+platform_admin - platform_admin_id  - uuid      - pk
+                 user_id            - uuid      - fk -> users; unique
+                 level              - varchar   - super_admin / support
+                 granted_by_user_id - uuid      - fk -> users; empty for the first super admin (seeded)
+                 created_at         - timestamp
+                 revoked_at         - timestamp
+                 * global table: platform staff who use the Super Admin dashboard
+
+owner_grant - owner_grant_id     - uuid      - pk
+              granted_by_user_id - uuid      - fk -> users (a platform_admin)
+              user_id            - uuid      - fk -> users; set when the person signs up or signs in with the link
+              email              - varchar   - who may create an organisation
+              name               - varchar
+              plan               - varchar   - starter / pro / enterprise (copied to the organisation it creates)
+              seat_limit         - integer   - empty = no limit
+              max_organizations  - integer   - how many organisations this grant may create (default 1)
+              note               - text
+              token_hash         - varchar   - unique
+              status             - varchar   - pending / accepted / revoked (expired = pending and past expires_at)
+              expires_at         - timestamp
+              accepted_at        - timestamp
+              revoked_at         - timestamp
+              created_at         - timestamp
+              updated_at         - timestamp
+              * global table: the Super Admin's permission for one person to create an organisation
+              * unique (email) where status = pending
+
+platform_activity_log - platform_activity_log_id - uuid      - pk
+                        actor_user_id            - uuid      - fk -> users; empty for system actions
+                        organization_id          - uuid      - fk -> organization; set when the action is about one organisation
+                        action                   - varchar   - e.g. owner_grant.created, organization.suspended, auth.login, auth.login_failed, support_access.used
+                        target_type              - varchar
+                        target_id                - uuid
+                        detail                   - text
+                        ip_address               - varchar
+                        user_agent               - varchar
+                        created_at               - timestamp
+                        * global table: platform admin actions and sign-in events (they happen outside any one organisation); append-only
+
+organization - organization_id          - uuid      - pk
+               owner_user_id            - uuid      - fk -> users
+               owner_grant_id           - uuid      - fk -> owner_grant (the grant it was created with)
+               logo_file_id             - uuid      - fk -> stored_file
+               name                     - varchar
+               slug                     - varchar   - unique
+               description              - text
+               type                     - varchar
+               industry                 - varchar
+               company_size             - varchar   - 1-10 / 11-50 / 51-200 / 201-1000 / 1000+
+               website                  - varchar
+               accent_color             - varchar
+               plan                     - varchar   - starter / pro / enterprise
+               seat_limit               - integer   - empty = no limit; set by the platform admin
+               status                   - varchar   - active / suspended / closed (set by the platform admin)
+               timezone                 - varchar   - IANA name, e.g. Asia/Colombo
+               working_hours_start      - time
+               working_hours_end        - time
+               week_start_day           - varchar   - sunday / monday
+               workload_threshold_hours - integer
+               suspended_at             - timestamp
+               created_at               - timestamp
+               updated_at               - timestamp
+               deleted_at               - timestamp
+               * the tenant itself: its organization_id is the tenant key every other table points to
+
+organization_feature - organization_feature_id - uuid      - pk
+                       organization_id         - uuid      - fk -> organization; tenant key
+                       feature_key             - varchar   - e.g. teams, contracts, ai_agents, srs_analysis
+                       is_enabled              - boolean
+                       updated_by_user_id      - uuid      - fk -> users
+                       updated_at              - timestamp
+                       * unique (organization_id, feature_key)
+
+support_access_grant - support_access_grant_id - uuid      - pk
+                       organization_id         - uuid      - fk -> organization; tenant key
+                       platform_admin_id       - uuid      - fk -> platform_admin
+                       approved_by_user_id     - uuid      - fk -> users (owner or someone with organization.manage)
+                       reason                  - text
+                       starts_at               - timestamp
+                       expires_at              - timestamp
+                       revoked_at              - timestamp
+                       created_at              - timestamp
+                       * the only way a platform admin may see this organisation's content; every use goes to activity_log
+
+users - user_id           - uuid      - pk
+        avatar_file_id    - uuid      - fk -> stored_file
+        email             - varchar   - unique; stored lower-case
+        password_hash     - varchar   - bcrypt hash, never the password
+        name              - varchar
+        phone             - varchar
+        address           - text
+        bio               - text
+        company           - varchar
+        timezone          - varchar   - IANA name; the person's own time zone
+        avatar_color      - varchar
+        is_active         - boolean   - account-wide; false = disabled by a platform admin (membership state is org_member.status)
+        email_verified_at - timestamp
+        last_login_at     - timestamp
+        anonymized_at     - timestamp - personal data scrubbed, audit rows kept
+        created_at        - timestamp
+        updated_at        - timestamp
+        * global table: a person has one login across organisations; org_member links them to each one
+
+session - session_id             - uuid      - pk
+          user_id                - uuid      - fk -> users
+          active_organization_id - uuid      - fk -> organization; the tenant this person is working in (sets app.organization_id); empty before they join or create one
+          token_hash             - varchar   - unique
+          remember_me            - boolean
+          expires_at             - timestamp
+          last_seen_at           - timestamp
+          revoked_at             - timestamp
+          ip_address             - varchar
+          user_agent             - varchar
+          created_at             - timestamp
+          * global table: belongs to the person; active_organization_id picks the tenant for each request
+
+verification_code - verification_code_id - uuid      - pk
+                    user_id              - uuid      - fk -> users
+                    purpose              - varchar   - email_verification / password_reset
+                    code_hash            - varchar
+                    attempts             - integer   - locked after 5
+                    expires_at           - timestamp
+                    consumed_at          - timestamp
+                    created_at           - timestamp - also drives the 60-second resend cooldown
+                    * global table: sign-up and password reset happen before any organisation is chosen
+
+user_preference - user_preference_id    - uuid      - pk
+                  user_id               - uuid      - fk -> users; unique
+                  theme                 - varchar   - light / dark
+                  default_calendar_view - varchar   - month / week / day / agenda
+                  default_planning_view - varchar   - calendar / timeline / list
+                  in_app_notifications  - boolean
+                  email_notifications   - boolean
+                  desktop_notifications - boolean
+                  weekly_digest         - boolean
+                  updated_at            - timestamp
+                  * global table: personal settings, the same in every organisation
+
+notification_event - notification_event_id - uuid    - pk
+                     event_key             - varchar - unique; task_assigned / mentioned / review_requested / task_blocked / deadline_reminder / approval_reminder / signature_requested / request_signed / request_declined / request_expiring / meeting_invite / meeting_conflict / time_off_decision / announcement
+                     name                  - varchar
+                     category              - varchar - task / signature / approval / meeting / time_off / announcement / system
+                     default_enabled       - boolean
+                     sort_order            - integer
+                     * global table: the fixed list of events a person can switch on or off
+
+user_notification_setting - user_notification_setting_id - uuid    - pk
+                            user_id                      - uuid    - fk -> users
+                            notification_event_id        - uuid    - fk -> notification_event
+                            is_enabled                   - boolean
+                            * global table: personal settings, the same in every organisation
+                            * unique (user_id, notification_event_id); no row = the event's default_enabled
+
+permission - permission_id  - uuid    - pk
+             permission_key - varchar - unique; e.g. project.create, agreement.send, member.invite
+             module         - varchar - organization / members / projects / tasks / time / planning / teams / documents / contracts / agreements / ai_agents / reports
+             name           - varchar
+             description    - text
+             scope          - varchar - organization / project (project = can be granted through a project role)
+             sort_order     - integer
+             * global table: the fixed list of permissions the code checks; seeded and changed only by the platform
+
+role_template - role_template_id - uuid    - pk
+                role_key         - varchar - unique; ceo, project_manager, product_owner, engineering_lead, developer, qa_tester, org_admin, document_manager, client, auditor
+                name             - varchar
+                description      - text
+                category         - varchar - leadership / delivery / quality / governance / external
+                scope            - varchar - organization / project
+                color            - varchar
+                default_path     - varchar - landing page, e.g. /dashboard, /my-tasks, /agreements
+                is_invitable     - boolean
+                sort_order       - integer
+                * global table: the platform's default roles, copied into every new organisation
+
+role_template_permission - role_template_permission_id - uuid - pk
+                           role_template_id            - uuid - fk -> role_template
+                           permission_id               - uuid - fk -> permission
+                           * global table
+                           * unique (role_template_id, permission_id)
+
+role - role_id            - uuid      - pk
+       organization_id    - uuid      - fk -> organization; tenant key
+       role_template_id   - uuid      - fk -> role_template; the default it was copied from, empty for a custom role
+       created_by_user_id - uuid      - fk -> users; empty for roles copied at organisation creation
+       role_key           - varchar   - e.g. project_manager, legal_reviewer
+       name               - varchar
+       description        - text
+       scope              - varchar   - organization / project
+       color              - varchar
+       default_path       - varchar
+       is_owner_role      - boolean   - the protected Owner role: has every permission, cannot be edited, archived or removed from the owner
+       is_invitable       - boolean
+       archived_at        - timestamp
+       created_at         - timestamp
+       updated_at         - timestamp
+       * unique (organization_id, role_key)
+       * one Owner role per organisation: unique (organization_id) where is_owner_role
+
+role_permission - role_permission_id - uuid    - pk
+                  organization_id    - uuid    - fk -> organization; tenant key
+                  role_id            - uuid    - fk -> role
+                  permission_id      - uuid    - fk -> permission
+                  effect             - varchar - allow / deny (a deny on any of a person's roles wins)
+                  * unique (role_id, permission_id)
+
+org_member - org_member_id       - uuid      - pk
+             organization_id     - uuid      - fk -> organization; tenant key
+             user_id             - uuid      - fk -> users
+             department_id       - uuid      - fk -> department
+             status              - varchar   - active / suspended / removed
+             title               - varchar   - job title; never grants access
+             working_hours_start - time
+             working_hours_end   - time
+             weekly_capacity     - integer   - hours
+             availability        - varchar   - available / busy / focus_time / out_of_office
+             joined_at           - timestamp
+             suspended_at        - timestamp
+             removed_at          - timestamp
+             created_at          - timestamp
+             updated_at          - timestamp
+             * unique (organization_id, user_id)
+
+org_member_role - org_member_role_id - uuid      - pk
+                  organization_id    - uuid      - fk -> organization; tenant key
+                  org_member_id      - uuid      - fk -> org_member
+                  role_id            - uuid      - fk -> role (scope = organization)
+                  granted_by_user_id - uuid      - fk -> users
+                  created_at         - timestamp
+                  * unique (org_member_id, role_id)
+                  * a person's permissions = all allows of their roles, minus any deny
+
+org_member_skill - org_member_skill_id - uuid    - pk
+                   organization_id     - uuid    - fk -> organization; tenant key
+                   org_member_id       - uuid    - fk -> org_member
+                   skill               - varchar
+                   * unique (org_member_id, skill)
+
+department - department_id   - uuid      - pk
+             organization_id - uuid      - fk -> organization; tenant key
+             name            - varchar
+             sort_order      - integer
+             created_at      - timestamp
+             * unique (organization_id, name)
+
+invitation - invitation_id       - uuid      - pk
+             organization_id     - uuid      - fk -> organization; tenant key
+             role_id             - uuid      - fk -> role (must be is_invitable and not archived)
+             department_id       - uuid      - fk -> department
+             invited_by_user_id  - uuid      - fk -> users
+             accepted_by_user_id - uuid      - fk -> users
+             email               - varchar
+             name                - varchar
+             title               - varchar
+             message             - text
+             token_hash          - varchar   - unique
+             status              - varchar   - pending / accepted / revoked (expired = pending and past expires_at)
+             sent_at             - timestamp - last time the email was sent (moves on resend)
+             expires_at          - timestamp
+             accepted_at         - timestamp
+             revoked_at          - timestamp
+             created_at          - timestamp
+             updated_at          - timestamp
+             * unique (organization_id, email) where status = pending
+
+team - team_id         - uuid      - pk
+       organization_id - uuid      - fk -> organization; tenant key
+       lead_user_id    - uuid      - fk -> users
+       department_id   - uuid      - fk -> department
+       name            - varchar
+       description     - text
+       category        - varchar
+       color           - varchar
+       icon            - varchar
+       status          - varchar   - active / archived
+       created_at      - timestamp
+       updated_at      - timestamp
+
+team_member - team_member_id  - uuid      - pk
+              organization_id - uuid      - fk -> organization; tenant key
+              team_id         - uuid      - fk -> team
+              user_id         - uuid      - fk -> users
+              created_at      - timestamp
+              * unique (team_id, user_id)
+
+team_goal - team_goal_id    - uuid    - pk
+            organization_id - uuid    - fk -> organization; tenant key
+            team_id         - uuid    - fk -> team
+            goal            - text
+            sort_order      - integer
+
+stored_file - stored_file_id      - uuid      - pk
+              organization_id     - uuid      - fk -> organization; tenant key; empty only for personal files (avatar, saved signature)
+              uploaded_by_user_id - uuid      - fk -> users
+              storage_key         - varchar   - unique; where the file sits in object storage
+              file_name           - varchar
+              mime_type           - varchar   - e.g. application/pdf, image/png, image/svg+xml
+              size_bytes          - bigint
+              page_count          - integer   - PDFs only
+              sha256              - varchar   - fingerprint to detect changes
+              scan_status         - varchar   - pending / clean / infected (not shown to others until clean)
+              scanned_at          - timestamp
+              created_at          - timestamp
+
+activity_log - activity_log_id - uuid      - pk
+               organization_id - uuid      - fk -> organization; tenant key
+               actor_user_id   - uuid      - fk -> users; empty for system actions
+               project_id      - uuid      - fk -> project; set when the action belongs to a project
+               category        - varchar   - project / task / time / planning / team / member / role / document / contract / agreement / agent / settings / security
+               action          - varchar   - e.g. task.moved, role.permission_changed, member.suspended
+               resource_type   - varchar   - e.g. project, task, document
+               resource_id     - uuid
+               detail          - text
+               ip_address      - varchar
+               user_agent      - varchar
+               prev_hash       - varchar   - hash of the organisation's previous row (tamper-evident chain)
+               hash            - varchar
+               created_at      - timestamp
+               * append-only: no update or delete grant
+
+notification - notification_id       - uuid      - pk
+               organization_id       - uuid      - fk -> organization; tenant key
+               user_id               - uuid      - fk -> users
+               notification_event_id - uuid      - fk -> notification_event
+               type                  - varchar   - task / document / signature / agent / approval / meeting / time_off / announcement / system
+               title                 - varchar
+               body                  - text
+               link                  - varchar
+               is_read               - boolean
+               created_at            - timestamp
+
+integration - integration_id       - uuid      - pk
+              organization_id      - uuid      - fk -> organization; tenant key
+              connected_by_user_id - uuid      - fk -> users
+              name                 - varchar
+              category             - varchar   - vcs / calendar / ai / storage / communication
+              status               - varchar   - connected / disconnected / error
+              description          - text
+              connected_at         - timestamp
+              created_at           - timestamp
+              updated_at           - timestamp
+
+project - project_id          - uuid      - pk
+          organization_id     - uuid      - fk -> organization; tenant key
+          owner_user_id       - uuid      - fk -> users
+          name                - varchar
+          project_key         - varchar   - e.g. FS; 2-6 upper-case letters
+          description         - text
+          template            - varchar   - scrum / kanban / esign / agent
+          visibility          - varchar   - workspace / members (members = only project_member rows can open it)
+          status              - varchar   - planning / active / on_hold / completed / cancelled
+          health_mode         - varchar   - auto / manual
+          health              - varchar   - on_track / at_risk / off_track / delayed; only stored in manual mode (auto is calculated)
+          priority            - varchar   - low / medium / high / critical
+          project_group       - varchar
+          accent_color        - varchar
+          start_date          - date
+          end_date            - date
+          original_start_date - date      - current baseline
+          original_end_date   - date      - current baseline
+          duration_unit       - varchar   - days / weeks / months
+          uses_phases         - boolean   - plan levels
+          uses_epics          - boolean
+          uses_stories        - boolean
+          uses_subtasks       - boolean
+          uses_backlog        - boolean
+          allow_move          - boolean
+          next_task_number    - integer   - counter for task keys; never goes back, so keys are never reused
+          archived_at         - timestamp - archived = this is set
+          created_at          - timestamp
+          updated_at          - timestamp
+          deleted_at          - timestamp
+          * unique (organization_id, project_key)
+
+project_member - project_member_id - uuid      - pk
+                 organization_id   - uuid      - fk -> organization; tenant key
+                 project_id        - uuid      - fk -> project
+                 user_id           - uuid      - fk -> users
+                 role_id           - uuid      - fk -> role (scope = project); empty = their organisation roles only
+                 created_at        - timestamp
+                 * unique (project_id, user_id)
+
+team_project - team_project_id - uuid - pk
+               organization_id - uuid - fk -> organization; tenant key
+               team_id         - uuid - fk -> team
+               project_id      - uuid - fk -> project
+               * unique (team_id, project_id)
+
+project_tag - project_tag_id  - uuid    - pk
+              organization_id - uuid    - fk -> organization; tenant key
+              project_id      - uuid    - fk -> project
+              tag             - varchar
+              * unique (project_id, tag)
+
+project_goal - project_goal_id - uuid    - pk
+               organization_id - uuid    - fk -> organization; tenant key
+               project_id      - uuid    - fk -> project
+               goal            - text
+               sort_order      - integer
+
+user_favorite_project - user_favorite_project_id - uuid      - pk
+                        organization_id          - uuid      - fk -> organization; tenant key
+                        user_id                  - uuid      - fk -> users
+                        project_id               - uuid      - fk -> project
+                        created_at               - timestamp
+                        * unique (user_id, project_id)
+
+user_recent_project - user_recent_project_id - uuid      - pk
+                      organization_id        - uuid      - fk -> organization; tenant key
+                      user_id                - uuid      - fk -> users
+                      project_id             - uuid      - fk -> project
+                      last_opened_at         - timestamp
+                      * unique (user_id, project_id)
+
+baseline_change - baseline_change_id - uuid      - pk
+                  organization_id    - uuid      - fk -> organization; tenant key
+                  project_id         - uuid      - fk -> project
+                  changed_by_user_id - uuid      - fk -> users
+                  reason             - text
+                  old_start_date     - date      - baseline before the change
+                  old_end_date       - date
+                  new_start_date     - date      - baseline after the change
+                  new_end_date       - date
+                  created_at         - timestamp
+
+board - board_id           - uuid      - pk
+        organization_id    - uuid      - fk -> organization; tenant key
+        project_id         - uuid      - fk -> project
+        name               - varchar
+        is_main            - boolean
+        mirrors_main_board - boolean   - true = has no columns of its own and uses the main board's
+        sort_order         - integer
+        created_at         - timestamp
+        * one main board per project: unique (project_id) where is_main
+
+board_column - board_column_id - uuid    - pk
+               organization_id - uuid    - fk -> organization; tenant key
+               board_id        - uuid    - fk -> board
+               name            - varchar
+               color           - varchar - hex value
+               status          - varchar - todo / in_progress / review / done / blocked (the stage this column counts as)
+               sort_order      - integer
+               * each board that does not mirror keeps at least one todo, in_progress, review and done column (checked by the app)
+
+phase - phase_id        - uuid      - pk
+        organization_id - uuid      - fk -> organization; tenant key
+        project_id      - uuid      - fk -> project
+        name            - varchar
+        description     - text
+        start_date      - date
+        end_date        - date
+        created_at      - timestamp
+        updated_at      - timestamp
+        * the SRS calls this a milestone; status (upcoming / at_risk / achieved / missed) is calculated from dates and tasks
+
+epic - epic_id         - uuid      - pk
+       organization_id - uuid      - fk -> organization; tenant key
+       project_id      - uuid      - fk -> project
+       phase_id        - uuid      - fk -> phase; empty when the project has no phases
+       name            - varchar
+       description     - text
+       color           - varchar
+       start_date      - date
+       end_date        - date
+       duration_unit   - varchar   - days / weeks / months
+       created_at      - timestamp
+       updated_at      - timestamp
+
+story - story_id            - uuid      - pk
+        organization_id     - uuid      - fk -> organization; tenant key
+        project_id          - uuid      - fk -> project
+        epic_id             - uuid      - fk -> epic
+        phase_id            - uuid      - fk -> phase; only when the project has no epics
+        title               - varchar
+        description         - text
+        acceptance_criteria - text
+        priority            - varchar   - low / medium / high / critical
+        start_date          - date
+        end_date            - date
+        duration_unit       - varchar   - days / weeks / months
+        created_at          - timestamp
+        updated_at          - timestamp
+
+sprint - sprint_id       - uuid      - pk
+         organization_id - uuid      - fk -> organization; tenant key
+         project_id      - uuid      - fk -> project
+         name            - varchar
+         goal            - text
+         status          - varchar   - planned / active / completed
+         start_date      - date      - planned
+         end_date        - date      - planned
+         capacity        - integer
+         capacity_unit   - varchar   - points / hours
+         started_at      - timestamp - actual
+         completed_at    - timestamp - actual
+         created_at      - timestamp
+         updated_at      - timestamp
+         * one active sprint per project: unique (project_id) where status = active
+
+sprint_task - sprint_task_id  - uuid      - pk
+              organization_id - uuid      - fk -> organization; tenant key
+              sprint_id       - uuid      - fk -> sprint
+              task_id         - uuid      - fk -> task
+              added_at        - timestamp
+              removed_at      - timestamp
+              outcome         - varchar   - completed / carried_over / removed
+              * scope history for burndown and committed scope; task.sprint_id is the current sprint
+
+task - task_id                - uuid      - pk
+       organization_id        - uuid      - fk -> organization; tenant key
+       project_id             - uuid      - fk -> project
+       board_id               - uuid      - fk -> board (the board the card is on)
+       board_column_id        - uuid      - fk -> board_column (on a mirroring board, a column of the main board)
+       parent_task_id         - uuid      - fk -> task (subtasks)
+       sprint_id              - uuid      - fk -> sprint; empty = not in a sprint
+       phase_id               - uuid      - fk -> phase
+       epic_id                - uuid      - fk -> epic
+       story_id               - uuid      - fk -> story
+       assignee_user_id       - uuid      - fk -> users
+       reporter_user_id       - uuid      - fk -> users
+       source_project_file_id - uuid      - fk -> project_file (SRS-generated tasks)
+       task_key               - varchar   - e.g. FS-42; subtasks FS-42-1
+       title                  - varchar
+       description            - text
+       type                   - varchar   - story / bug / task (a subtask is any task with parent_task_id)
+       status                 - varchar   - todo / in_progress / review / done / blocked
+       priority               - varchar   - low / medium / high / critical
+       rank                   - varchar   - order within its column and in the backlog (fractional rank)
+       estimated_duration     - integer   - calendar/work days for the timeline
+       duration_unit          - varchar   - days / weeks / months
+       effort_minutes         - integer   - planned work in minutes, compared with logged time
+       story_points           - integer
+       start_date             - date
+       due_date               - date
+       acceptance_criteria    - text
+       source_section         - varchar   - SRS section it came from
+       is_srs_generated       - boolean
+       next_subtask_number    - integer   - counter for subtask keys
+       created_at             - timestamp
+       updated_at             - timestamp
+       deleted_at             - timestamp
+       * unique (project_id, task_key)
+       * only one of phase_id / epic_id / story_id is filled: the lowest plan level the project uses; all three empty on subtasks (they follow their parent)
+       * backlog = a task with no phase / epic / story link (it still has a board and column)
+       * status kept on purpose: equals its column's stage when it has a column; subtasks have no column and keep their own status
+
+task_link - task_link_id       - uuid      - pk
+            organization_id    - uuid      - fk -> organization; tenant key
+            task_id            - uuid      - fk -> task
+            linked_task_id     - uuid      - fk -> task
+            link_type          - varchar   - blocks / relates_to / duplicates
+            created_by_user_id - uuid      - fk -> users
+            created_at         - timestamp
+            * unique (task_id, linked_task_id, link_type)
+
+task_tag - task_tag_id     - uuid    - pk
+           organization_id - uuid    - fk -> organization; tenant key
+           task_id         - uuid    - fk -> task
+           tag             - varchar
+           * unique (task_id, tag)
+
+task_comment - task_comment_id - uuid      - pk
+               organization_id - uuid      - fk -> organization; tenant key
+               task_id         - uuid      - fk -> task
+               author_user_id  - uuid      - fk -> users (for an agent: the person it works for)
+               body            - text
+               via             - varchar   - web / claude_code / codex / gemini_cli / antigravity
+               created_at      - timestamp
+               updated_at      - timestamp
+
+task_checklist_item - task_checklist_item_id - uuid    - pk
+                      organization_id        - uuid    - fk -> organization; tenant key
+                      task_id                - uuid    - fk -> task
+                      text                   - varchar
+                      is_completed           - boolean
+                      sort_order             - integer
+
+task_attachment - task_attachment_id - uuid      - pk
+                  organization_id    - uuid      - fk -> organization; tenant key
+                  task_id            - uuid      - fk -> task
+                  stored_file_id     - uuid      - fk -> stored_file
+                  created_at         - timestamp
+
+task_status_change - task_status_change_id - uuid      - pk
+                     organization_id       - uuid      - fk -> organization; tenant key
+                     task_id               - uuid      - fk -> task
+                     changed_by_user_id    - uuid      - fk -> users (for an agent: the person it works for)
+                     from_board_id         - uuid      - fk -> board; set with to_board_id only when the card moved board
+                     to_board_id           - uuid      - fk -> board
+                     from_board_column_id  - uuid      - fk -> board_column
+                     to_board_column_id    - uuid      - fk -> board_column
+                     from_status           - varchar   - todo / in_progress / review / done / blocked
+                     to_status             - varchar   - todo / in_progress / review / done / blocked
+                     via                   - varchar   - web / claude_code / codex / gemini_cli / antigravity
+                     changed_at            - timestamp
+
+work_session - work_session_id     - uuid      - pk
+               organization_id     - uuid      - fk -> organization; tenant key
+               task_id             - uuid      - fk -> task (not cascaded: time on deleted tasks is kept)
+               user_id             - uuid      - fk -> users (whose time it is)
+               logged_by_user_id   - uuid      - fk -> users; differs from user_id when a manager logs time for someone
+               board_id            - uuid      - fk -> board (a new session starts when the card changes board)
+               source              - varchar   - web / manual / claude_code / codex / gemini_cli / antigravity
+               started_at          - timestamp
+               ended_at            - timestamp - empty while running
+               last_activity_at    - timestamp
+               end_reason          - varchar   - paused / finished / switched_task / idle_timeout / day_cutoff
+               needs_review        - boolean   - auto-stopped, person should check
+               reviewed_by_user_id - uuid      - fk -> users
+               reviewed_at         - timestamp
+               note                - text
+               * one running session per person: unique (organization_id, user_id) where ended_at is empty
+               * no two sessions of one person overlap in time (exclusion constraint on user_id + time range)
+
+calendar_event - calendar_event_id - uuid      - pk
+                 organization_id   - uuid      - fk -> organization; tenant key
+                 organizer_user_id - uuid      - fk -> users
+                 team_id           - uuid      - fk -> team
+                 project_id        - uuid      - fk -> project
+                 title             - varchar
+                 description       - text
+                 category          - varchar   - team_event / planning_reminder / other
+                 start_at          - timestamp
+                 end_at            - timestamp
+                 all_day           - boolean
+                 location          - varchar
+                 meeting_link      - varchar
+                 created_at        - timestamp
+                 updated_at        - timestamp
+                 * the calendar also shows task due dates, phases, meetings and approved time off, read from their own tables (not copied here)
+
+calendar_event_attendee - calendar_event_attendee_id - uuid - pk
+                          organization_id            - uuid - fk -> organization; tenant key
+                          calendar_event_id          - uuid - fk -> calendar_event
+                          user_id                    - uuid - fk -> users
+                          * unique (calendar_event_id, user_id)
+
+meeting - meeting_id        - uuid      - pk
+          organization_id   - uuid      - fk -> organization; tenant key
+          organizer_user_id - uuid      - fk -> users
+          team_id           - uuid      - fk -> team
+          project_id        - uuid      - fk -> project
+          title             - varchar
+          description       - text
+          start_at          - timestamp
+          end_at            - timestamp
+          location          - varchar
+          meeting_link      - varchar
+          status            - varchar   - upcoming / completed / cancelled
+          created_at        - timestamp
+          updated_at        - timestamp
+
+meeting_participant - meeting_participant_id - uuid - pk
+                      organization_id        - uuid - fk -> organization; tenant key
+                      meeting_id             - uuid - fk -> meeting
+                      user_id                - uuid - fk -> users
+                      * unique (meeting_id, user_id)
+
+meeting_agenda_item - meeting_agenda_item_id - uuid    - pk
+                      organization_id        - uuid    - fk -> organization; tenant key
+                      meeting_id             - uuid    - fk -> meeting
+                      item                   - text
+                      sort_order             - integer
+
+time_off_request - time_off_request_id - uuid      - pk
+                   organization_id     - uuid      - fk -> organization; tenant key
+                   user_id             - uuid      - fk -> users
+                   decided_by_user_id  - uuid      - fk -> users
+                   leave_type          - varchar   - vacation / sick / personal / parental / unpaid / other
+                   start_date          - date
+                   end_date            - date
+                   duration_days       - decimal   - kept on purpose: the working-day count is fixed when the request is made
+                   is_partial_day      - boolean
+                   reason              - text      - the requester's reason
+                   notes               - text
+                   status              - varchar   - pending / approved / declined
+                   decision_note       - text      - the approver's reason on decline
+                   decided_at          - timestamp
+                   created_at          - timestamp
+                   updated_at          - timestamp
+
+announcement - announcement_id - uuid      - pk
+               organization_id - uuid      - fk -> organization; tenant key
+               author_user_id  - uuid      - fk -> users
+               title           - varchar
+               content         - text
+               priority        - varchar   - normal / important
+               is_pinned       - boolean
+               status          - varchar   - published / draft
+               published_at    - timestamp
+               created_at      - timestamp
+               updated_at      - timestamp
+
+announcement_department - announcement_department_id - uuid - pk
+                          organization_id            - uuid - fk -> organization; tenant key
+                          announcement_id            - uuid - fk -> announcement
+                          department_id              - uuid - fk -> department
+                          * unique (announcement_id, department_id); no rows = everyone
+
+announcement_read - announcement_read_id - uuid      - pk
+                    organization_id      - uuid      - fk -> organization; tenant key
+                    announcement_id      - uuid      - fk -> announcement
+                    user_id              - uuid      - fk -> users
+                    read_at              - timestamp
+                    * unique (announcement_id, user_id)
+
+document_folder - document_folder_id - uuid      - pk
+                  organization_id    - uuid      - fk -> organization; tenant key
+                  parent_folder_id   - uuid      - fk -> document_folder (nested folders)
+                  owner_user_id      - uuid      - fk -> users
+                  name               - varchar
+                  created_at         - timestamp
+                  updated_at         - timestamp
+
+document - document_id          - uuid      - pk
+           organization_id      - uuid      - fk -> organization; tenant key
+           document_folder_id   - uuid      - fk -> document_folder
+           owner_user_id        - uuid      - fk -> users
+           project_id           - uuid      - fk -> project
+           document_template_id - uuid      - fk -> document_template (the template it was made from)
+           pdf_file_id          - uuid      - fk -> stored_file; empty for text documents (a document with a PDF is read-only)
+           title                - varchar
+           description          - text
+           type                 - varchar   - pdf / docx / agreement / sow / msa / proposal / nda / spec / contract / amendment / other
+           status               - varchar   - draft / in_review / shared / pending / signed / approved / rejected / superseded / archived
+           share_scope          - varchar   - private / organization (people added in document_share always have access)
+           content              - text      - current text of an editor document
+           created_at           - timestamp
+           updated_at           - timestamp
+           deleted_at           - timestamp
+
+document_version - document_version_id - uuid      - pk
+                   organization_id     - uuid      - fk -> organization; tenant key
+                   document_id         - uuid      - fk -> document
+                   modified_by_user_id - uuid      - fk -> users
+                   stored_file_id      - uuid      - fk -> stored_file; for PDF versions
+                   version_number      - integer
+                   change_summary      - varchar
+                   content             - text
+                   content_sha256      - varchar   - fingerprint of a text version, fixed when sent for approval or signing
+                   created_at          - timestamp
+                   * unique (document_id, version_number)
+
+document_comment - document_comment_id - uuid      - pk
+                   organization_id     - uuid      - fk -> organization; tenant key
+                   document_id         - uuid      - fk -> document
+                   author_user_id      - uuid      - fk -> users
+                   resolved_by_user_id - uuid      - fk -> users
+                   text                - text
+                   status              - varchar   - open / resolved
+                   resolved_at         - timestamp
+                   created_at          - timestamp
+                   updated_at          - timestamp
+
+document_share - document_share_id - uuid      - pk
+                 organization_id   - uuid      - fk -> organization; tenant key
+                 document_id       - uuid      - fk -> document
+                 user_id           - uuid      - fk -> users
+                 access_type       - varchar   - viewer / editor / signer
+                 created_at        - timestamp
+                 * unique (document_id, user_id)
+
+user_favorite_document - user_favorite_document_id - uuid      - pk
+                         organization_id           - uuid      - fk -> organization; tenant key
+                         user_id                   - uuid      - fk -> users
+                         document_id               - uuid      - fk -> document
+                         created_at                - timestamp
+                         * unique (user_id, document_id)
+
+user_recent_document - user_recent_document_id - uuid      - pk
+                       organization_id         - uuid      - fk -> organization; tenant key
+                       user_id                 - uuid      - fk -> users
+                       document_id             - uuid      - fk -> document
+                       last_opened_at          - timestamp
+                       * unique (user_id, document_id)
+
+document_approval - document_approval_id - uuid      - pk
+                    organization_id      - uuid      - fk -> organization; tenant key
+                    document_id          - uuid      - fk -> document
+                    document_version_id  - uuid      - fk -> document_version (the version that was approved)
+                    requested_by_user_id - uuid      - fk -> users
+                    assigned_to_user_id  - uuid      - fk -> users
+                    status               - varchar   - pending / approved / rejected / changes_requested
+                    comment              - text
+                    created_at           - timestamp
+                    resolved_at          - timestamp
+
+document_template - document_template_id - uuid      - pk
+                    organization_id      - uuid      - fk -> organization; tenant key
+                    created_by_user_id   - uuid      - fk -> users
+                    title                - varchar
+                    description          - text
+                    category             - varchar   - contracts / legal / sales / project_management / human_resources / procurement / general
+                    type                 - varchar   - same list as document.type
+                    content              - text
+                    created_at           - timestamp
+                    updated_at           - timestamp
+
+document_template_placeholder - document_template_placeholder_id - uuid    - pk
+                                organization_id                  - uuid    - fk -> organization; tenant key
+                                document_template_id             - uuid    - fk -> document_template
+                                placeholder_key                  - varchar - e.g. client_name
+                                label                            - varchar
+                                sort_order                       - integer
+                                * unique (document_template_id, placeholder_key)
+
+user_favorite_template - user_favorite_template_id - uuid      - pk
+                         organization_id           - uuid      - fk -> organization; tenant key
+                         user_id                   - uuid      - fk -> users
+                         document_template_id      - uuid      - fk -> document_template
+                         created_at                - timestamp
+                         * unique (user_id, document_template_id)
+
+project_file - project_file_id - uuid      - pk
+               organization_id - uuid      - fk -> organization; tenant key
+               project_id      - uuid      - fk -> project
+               stored_file_id  - uuid      - fk -> stored_file (uploader, type and size come from here)
+               name            - varchar   - display name; can differ from the original file name
+               category        - varchar   - srs / test_report / doc / other
+               analysis_status - varchar   - not_analyzed / ready / needs_ocr / waiting_for_agent / analyzing / proposed / failed / tasks_created
+               extracted_text  - text      - plain text taken from the file for SRS analysis
+               word_count      - integer
+               analyzed_at     - timestamp
+               created_at      - timestamp
+
+contract - contract_id        - uuid      - pk
+           organization_id    - uuid      - fk -> organization; tenant key
+           owner_user_id      - uuid      - fk -> users
+           reviewer_user_id   - uuid      - fk -> users
+           project_id         - uuid      - fk -> project
+           document_id        - uuid      - fk -> document (the contract text; created with the contract)
+           title              - varchar
+           contract_type      - varchar   - msa / sow / nda / software_license / consulting / vendor / sla / change_request / employment / partnership / license / purchase / lease / proposal / other
+           counterparty       - varchar
+           effective_date     - date
+           expiry_date        - date
+           renewal_type       - varchar   - auto / manual / none
+           contract_value     - decimal
+           currency           - varchar   - ISO code, e.g. USD, LKR
+           payment_terms      - text
+           special_conditions - text
+           description        - text
+           status             - varchar   - draft / pending_review / awaiting_signature / active / completed / archived
+           created_at         - timestamp
+           updated_at         - timestamp
+           deleted_at         - timestamp
+           * "expiring" (within 30 days) and "expired" are calculated from expiry_date
+
+contract_review_comment - contract_review_comment_id - uuid      - pk
+                          organization_id            - uuid      - fk -> organization; tenant key
+                          contract_id                - uuid      - fk -> contract
+                          author_user_id             - uuid      - fk -> users
+                          text                       - text
+                          action_requested           - varchar   - changes / approved
+                          created_at                 - timestamp
+
+signature_request - signature_request_id - uuid      - pk
+                    organization_id      - uuid      - fk -> organization; tenant key
+                    sender_user_id       - uuid      - fk -> users
+                    project_id           - uuid      - fk -> project
+                    phase_id             - uuid      - fk -> phase (milestone this sign-off belongs to)
+                    contract_id          - uuid      - fk -> contract
+                    signed_file_id       - uuid      - fk -> stored_file (final flattened PDF; read-only, its sha256 is the final hash)
+                    certificate_file_id  - uuid      - fk -> stored_file (certificate of completion)
+                    cancelled_by_user_id - uuid      - fk -> users
+                    title                - varchar
+                    email_subject        - varchar   - pre-filled from signing_default.email_subject
+                    message              - text
+                    signing_order        - varchar   - sequential / parallel
+                    status               - varchar   - draft / sent / viewed / partially_signed / awaiting_review / completed / declined / expired / cancelled
+                    is_self_sign         - boolean   - "Sign it yourself"
+                    reminder_frequency   - varchar   - daily / every_2_days / every_3_days / weekly / never
+                    expire_days          - integer   - chosen in the wizard; expires_at is set from it when sent
+                    draft_step           - integer   - which wizard step a draft was left on
+                    expires_at           - timestamp - end of the day in the sender's time zone
+                    last_reminder_at     - timestamp
+                    sent_at              - timestamp
+                    completed_at         - timestamp
+                    cancelled_at         - timestamp
+                    retain_until         - date      - signed agreements cannot be purged before this (default 7 years)
+                    legal_hold           - boolean   - cannot be purged while true
+                    created_at           - timestamp
+                    updated_at           - timestamp
+                    deleted_at           - timestamp - in the Trash
+                    purged_at            - timestamp - "Delete forever": content removed, row, audit trail and signed PDF kept
+
+signature_request_file - signature_request_file_id - uuid    - pk
+                         organization_id           - uuid    - fk -> organization; tenant key
+                         signature_request_id      - uuid    - fk -> signature_request
+                         stored_file_id            - uuid    - fk -> stored_file
+                         document_id               - uuid    - fk -> document (library item this PDF came from)
+                         sort_order                - integer - first file = main PDF
+                         * unique (signature_request_id, sort_order)
+
+signer - signer_id            - uuid      - pk
+         organization_id      - uuid      - fk -> organization; tenant key
+         signature_request_id - uuid      - fk -> signature_request
+         user_id              - uuid      - fk -> users; set when the email belongs to an account
+         signature_file_id    - uuid      - fk -> stored_file (adopted signature image; typed signatures are rendered to an image)
+         initials_file_id     - uuid      - fk -> stored_file (adopted initials image)
+         name                 - varchar
+         email                - varchar
+         role_label           - varchar   - free text, e.g. Client
+         recipient_type       - varchar   - needs_to_sign (in_person_signer if DEC-10 is approved)
+         signing_position     - integer   - order when sequential
+         status               - varchar   - waiting / pending / viewed / signed / declined
+         is_required          - boolean
+         color                - varchar
+         signature_method     - varchar   - type / draw / upload
+         auth_method          - varchar   - email_link / account / email_otp
+         consent_text_version - varchar   - which consent wording they agreed to
+         consented_at         - timestamp
+         viewed_at            - timestamp
+         signed_at            - timestamp
+         signed_ip            - varchar
+         signed_user_agent    - varchar
+         declined_at          - timestamp
+         decline_reason       - text
+         * one email appears once across a request's signers and reviewers (checked by the app)
+
+copy_recipient - copy_recipient_id    - uuid    - pk
+                 organization_id      - uuid    - fk -> organization; tenant key
+                 signature_request_id - uuid    - fk -> signature_request
+                 name                 - varchar
+                 email                - varchar
+                 role                 - varchar - copy / view (view only on old requests)
+                 sort_order           - integer
+
+reviewer - reviewer_id          - uuid      - pk
+           organization_id      - uuid      - fk -> organization; tenant key
+           signature_request_id - uuid      - fk -> signature_request
+           user_id              - uuid      - fk -> users; set when the email belongs to an account
+           name                 - varchar
+           email                - varchar
+           review_order         - integer
+           status               - varchar   - waiting / pending / approved / rejected
+           note                 - text      - comment on approve, reason on reject
+           reviewed_at          - timestamp
+
+signature_field - signature_field_id        - uuid    - pk
+                  organization_id           - uuid    - fk -> organization; tenant key
+                  signature_request_file_id - uuid    - fk -> signature_request_file (the request is reached through it)
+                  signer_id                 - uuid    - fk -> signer
+                  value_file_id             - uuid    - fk -> stored_file; for signature / initials / seal images
+                  field_type                - varchar - signature / initials / seal / date / name / email / company / title / text / number / checkbox / dropdown / radio / approve / decline
+                  page_number               - integer
+                  position_x                - decimal - % of page width (0-100)
+                  position_y                - decimal - % of page height (0-100), from the top
+                  width                     - decimal - % of page width
+                  height                    - decimal - % of page height
+                  is_required               - boolean
+                  value                     - text    - typed values only, never image data
+
+signature_field_option - signature_field_option_id - uuid    - pk
+                         organization_id           - uuid    - fk -> organization; tenant key
+                         signature_field_id        - uuid    - fk -> signature_field
+                         label                     - varchar
+                         sort_order                - integer
+                         * unique (signature_field_id, sort_order)
+
+signing_token - signing_token_id - uuid      - pk
+                organization_id  - uuid      - fk -> organization; tenant key
+                signer_id        - uuid      - fk -> signer
+                reviewer_id      - uuid      - fk -> reviewer
+                token_hash       - varchar   - unique
+                revoked_at       - timestamp
+                created_at       - timestamp
+                * exactly one of signer_id / reviewer_id is filled
+                * valid until the request's expires_at (not copied here)
+
+signature_request_event - signature_request_event_id - uuid      - pk
+                          organization_id            - uuid      - fk -> organization; tenant key
+                          signature_request_id       - uuid      - fk -> signature_request
+                          actor_user_id              - uuid      - fk -> users
+                          signer_id                  - uuid      - fk -> signer
+                          reviewer_id                - uuid      - fk -> reviewer
+                          event_name                 - varchar   - e.g. Signature Request Sent, Document Signed, Review Approved
+                          category                   - varchar   - security / signing / delivery / status / creation
+                          description                - text
+                          actor_name                 - varchar   - kept on purpose: the name as it was at the time (evidence)
+                          actor_email                - varchar   - kept on purpose, as above
+                          ip_address                 - varchar
+                          user_agent                 - varchar
+                          prev_hash                  - varchar   - hash of the request's previous event (tamper-evident chain)
+                          hash                       - varchar
+                          created_at                 - timestamp
+                          * append-only: no update or delete grant
+
+signature_evidence - signature_evidence_id - uuid      - pk
+                     organization_id       - uuid      - fk -> organization; tenant key
+                     signature_request_id  - uuid      - fk -> signature_request
+                     stored_file_id        - uuid      - fk -> stored_file
+                     kind                  - varchar   - pades_signature / tsa_timestamp / signing_certificate
+                     detail                - text      - e.g. certificate serial, timestamp authority
+                     created_at            - timestamp
+
+outbound_email - outbound_email_id    - uuid      - pk
+                 organization_id      - uuid      - fk -> organization; tenant key; empty for platform emails (owner grant, verification code, password reset)
+                 signature_request_id - uuid      - fk -> signature_request
+                 signer_id            - uuid      - fk -> signer
+                 reviewer_id          - uuid      - fk -> reviewer
+                 copy_recipient_id    - uuid      - fk -> copy_recipient
+                 user_id              - uuid      - fk -> users; set when the recipient has an account
+                 kind                 - varchar   - invite / copy / review / reminder / expiry_warning / completed / declined / cancelled / expired / invitation / owner_grant / verification_code / password_reset / notification / digest
+                 to_name              - varchar
+                 to_email             - varchar
+                 subject              - varchar
+                 body                 - text
+                 with_signed_pdf      - boolean
+                 status               - varchar   - queued / sent / delivered / bounced / failed
+                 provider_message_id  - varchar
+                 error                - text
+                 sent_at              - timestamp
+                 delivered_at         - timestamp
+                 bounced_at           - timestamp
+                 created_at           - timestamp
+
+saved_signature - saved_signature_id - uuid      - pk
+                  user_id            - uuid      - fk -> users; unique (one per person)
+                  signature_file_id  - uuid      - fk -> stored_file
+                  initials_file_id   - uuid      - fk -> stored_file
+                  name               - varchar
+                  initials           - varchar
+                  source             - varchar   - type / draw / upload
+                  style              - varchar   - formal / script / bold / elegant (typed signatures)
+                  updated_at         - timestamp
+                  * global table: a person's own signature, reused in every organisation
+
+signing_default - signing_default_id  - uuid      - pk
+                  organization_id     - uuid      - fk -> organization; tenant key; unique
+                  expire_days         - integer   - 1-999, default 120
+                  reminder_frequency  - varchar   - daily / every_2_days / every_3_days / weekly / never
+                  signing_order       - varchar   - sequential / parallel
+                  email_subject       - varchar
+                  message             - text
+                  expiry_warning_days - integer
+                  updated_at          - timestamp
+
+signing_default_method - signing_default_method_id - uuid    - pk
+                         organization_id           - uuid    - fk -> organization; tenant key
+                         signing_default_id        - uuid    - fk -> signing_default
+                         method                    - varchar - type / draw / upload
+                         * unique (signing_default_id, method)
+
+company_seal - company_seal_id    - uuid      - pk
+               organization_id    - uuid      - fk -> organization; tenant key
+               created_by_user_id - uuid      - fk -> users
+               image_file_id      - uuid      - fk -> stored_file
+               name               - varchar
+               description        - text
+               is_active          - boolean   - seals are switched off, never deleted, once used
+               created_at         - timestamp
+               updated_at         - timestamp
+
+company_seal_allowed_role - company_seal_allowed_role_id - uuid - pk
+                            organization_id              - uuid - fk -> organization; tenant key
+                            company_seal_id              - uuid - fk -> company_seal
+                            role_id                      - uuid - fk -> role
+                            * unique (company_seal_id, role_id)
+
+company_seal_use - company_seal_use_id  - uuid      - pk
+                   organization_id      - uuid      - fk -> organization; tenant key
+                   company_seal_id      - uuid      - fk -> company_seal
+                   signature_request_id - uuid      - fk -> signature_request
+                   signer_id            - uuid      - fk -> signer
+                   signature_field_id   - uuid      - fk -> signature_field (where it was stamped)
+                   used_at              - timestamp
+
+agent_access_token - agent_access_token_id - uuid      - pk
+                     organization_id       - uuid      - fk -> organization; tenant key
+                     user_id               - uuid      - fk -> users
+                     revoked_by_user_id    - uuid      - fk -> users (the owner of the token or an admin)
+                     name                  - varchar
+                     token_hash            - varchar   - unique
+                     last_four             - varchar   - shown in the list
+                     expires_at            - timestamp - 30, 90 or 365 days
+                     revoked_at            - timestamp
+                     created_at            - timestamp
+                     * last used = the latest agent_token_usage.last_used_at
+
+agent_token_usage - agent_token_usage_id  - uuid      - pk
+                    organization_id       - uuid      - fk -> organization; tenant key
+                    agent_access_token_id - uuid      - fk -> agent_access_token
+                    agent_client          - varchar   - claude_code / codex / gemini_cli / antigravity
+                    last_used_at          - timestamp
+                    * unique (agent_access_token_id, agent_client)
+
+agent_event - agent_event_id        - uuid      - pk
+              organization_id       - uuid      - fk -> organization; tenant key
+              user_id               - uuid      - fk -> users
+              agent_access_token_id - uuid      - fk -> agent_access_token
+              task_id               - uuid      - fk -> task
+              project_file_id       - uuid      - fk -> project_file
+              agent                 - varchar   - claude_code / codex / gemini_cli / antigravity / system
+              action                - varchar   - listed_tasks / get_task / get_active_work / started / continued / paused / note / finished / time_logged / auto_stopped / list_pending_srs / get_srs_text / propose_srs_tasks / get_proposal_status / blocked
+              outcome               - varchar   - ok / refused / error
+              error_code            - varchar   - e.g. PROJECT_BLOCKED
+              detail                - text
+              created_at            - timestamp
+
+agent_setting - agent_setting_id           - uuid      - pk
+                organization_id            - uuid      - fk -> organization; tenant key; unique
+                is_enabled                 - boolean
+                idle_timeout_minutes       - integer
+                day_cutoff                 - time
+                allow_claim_unassigned     - boolean
+                allow_server_ai_on_blocked - boolean   - may server-side AI read blocked projects
+                allow_llm_processing       - boolean   - may SRS text be sent to an outside AI provider
+                updated_at                 - timestamp
+
+agent_setting_allowed_agent - agent_setting_allowed_agent_id - uuid    - pk
+                              organization_id                - uuid    - fk -> organization; tenant key
+                              agent_setting_id               - uuid    - fk -> agent_setting
+                              agent_client                   - varchar - claude_code / codex / gemini_cli / antigravity
+                              is_allowed                     - boolean
+                              * unique (agent_setting_id, agent_client)
+
+agent_blocked_project - agent_blocked_project_id - uuid - pk
+                        organization_id          - uuid - fk -> organization; tenant key
+                        agent_setting_id         - uuid - fk -> agent_setting
+                        project_id               - uuid - fk -> project
+                        * unique (agent_setting_id, project_id)
+
+agent_provider - agent_provider_id - uuid    - pk
+                 organization_id   - uuid    - fk -> organization; tenant key
+                 name              - varchar
+                 provider          - varchar - claude / codex / gemini
+                 model             - varchar
+                 is_configured     - boolean
+                 is_enabled        - boolean
+                 color             - varchar
+
+agent_provider_scope - agent_provider_scope_id - uuid    - pk
+                       organization_id         - uuid    - fk -> organization; tenant key
+                       agent_provider_id       - uuid    - fk -> agent_provider
+                       scope                   - varchar
+                       * unique (agent_provider_id, scope)
+
+srs_analysis_run - srs_analysis_run_id  - uuid      - pk
+                   organization_id      - uuid      - fk -> organization; tenant key
+                   project_file_id      - uuid      - fk -> project_file (the analysed SRS)
+                   requested_by_user_id - uuid      - fk -> users
+                   file_sha256          - varchar   - the file version that was analysed
+                   mode                 - varchar   - server / agent
+                   agent_client         - varchar   - claude_code / codex / gemini_cli / antigravity; when mode = agent
+                   provider             - varchar   - claude / codex / gemini
+                   model                - varchar
+                   status               - varchar   - queued / analyzing / proposed / failed / committed
+                   error                - text
+                   started_at           - timestamp
+                   finished_at          - timestamp
+                   * every run is kept; a new run never replaces an old one
+
+srs_task_candidate - srs_task_candidate_id        - uuid      - pk
+                     organization_id              - uuid      - fk -> organization; tenant key
+                     srs_analysis_run_id          - uuid      - fk -> srs_analysis_run
+                     created_task_id              - uuid      - fk -> task; set when accepted
+                     reviewed_by_user_id          - uuid      - fk -> users
+                     title                        - varchar
+                     original_title               - varchar   - what the AI proposed
+                     description                  - text
+                     original_description         - text
+                     acceptance_criteria          - text
+                     original_acceptance_criteria - text
+                     priority                     - varchar   - low / medium / high / critical
+                     original_priority            - varchar
+                     type                         - varchar   - story / bug / task
+                     original_type                - varchar
+                     story_points                 - integer
+                     original_story_points        - integer
+                     source_section               - varchar
+                     source_page                  - integer
+                     suggested_parent             - varchar   - the epic / story / phase the AI suggested
+                     decision                     - varchar   - proposed / accepted / edited / rejected
+                     rejection_reason             - text
+                     created_at                   - timestamp
+                     reviewed_at                  - timestamp
+
+srs_task_candidate_tag - srs_task_candidate_tag_id - uuid    - pk
+                         organization_id           - uuid    - fk -> organization; tenant key
+                         srs_task_candidate_id     - uuid    - fk -> srs_task_candidate
+                         tag                       - varchar
+                         * unique (srs_task_candidate_id, tag)
