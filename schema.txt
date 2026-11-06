@@ -24,20 +24,39 @@ General rules:
     the Trash (soft delete).
 
 How an organisation comes to exist (the onboarding flow):
-  1. A super admin (platform_admin) opens the Super Admin dashboard and creates an owner_grant
-     for a person's email: the permission to create an organisation, with its plan and seat limit.
-     The person gets an email with a one-time link (owner_grant.token_hash).
-  2. The person opens the link, signs up or signs in (users, verification_code) and the grant is
-     tied to their account (owner_grant.user_id). Without a grant nobody can create an organisation.
-  3. The owner creates the organisation (organization.owner_user_id, organization.owner_grant_id).
-     The system copies the platform's default roles (role_template + role_template_permission)
-     into the new organisation's own role + role_permission rows, adds the protected Owner role,
-     and makes the owner the first org_member with that role.
-  4. The owner defines roles and permissions: edits the copied roles, adds new ones, archives
-     ones they don't need (role, role_permission). Permissions are a fixed list owned by the
-     platform (permission), because the code checks them.
-  5. The owner (or anyone with member.invite) invites people (invitation with a role_id from this
-     organisation). Accepting creates or links the account and an org_member with that role.
+  1. A Super Admin (platform_admin) works in the Super Admin Dashboard. They either
+     - create an organisation directly (organization with name, slug, plan, industry, size and a
+       starting status), which also sends an organization_invitation to the Owner's email, or
+     - invite an organisation (organization_invitation with organisation name, Owner email, plan
+       and a note, valid 7 days); the organization row is created when the Owner accepts.
+     The Super Admin can resend or revoke invitations and edit, deactivate or delete organisations.
+  2. The Owner opens the invitation link, signs up or signs in (users, verification_code), and
+     becomes organization.owner_user_id. The organisation's status becomes active.
+  3. The system copies the platform's default roles (role_template) into the organisation's own
+     role rows (Organization Owner, Project Manager, Team Lead, Developer, QA Tester) and makes the
+     Owner the first org_member with the Organization Owner role.
+  4. The Owner (or a Team Management role) edits these roles and creates custom ones (role).
+  5. The Owner (or a Team Management role) invites members (invitation with a role_id and, for
+     Project User Access roles, the assigned projects in invitation_project). Accepting creates or
+     links the account, an org_member with that role, and project_member rows for the projects.
+
+Access model (what a person can open and do):
+  - Super Admin = has a platform_admin row. Sees only the Super Admin Dashboard, never an
+    organisation's workspace.
+  - Organization Owner = organization.owner_user_id. Always has full access, whatever the settings
+    of their role. Only the Owner can open Settings > Preferences and AI Agent Hub > Organisation.
+  - Everyone else: one role per member (org_member.role_id). A role has four settings:
+      admin_dashboard / my_status   which dashboards; the default is the Admin Dashboard if allowed,
+                                    otherwise My Status; with both, a switcher is shown
+      project_access                management = every project, create / edit / delete, Reports,
+                                    Settings and Danger Zone; user = only projects where the person
+                                    has a project_member row, Settings view-only, no Reports or
+                                    Danger Zone, no project creation
+      my_tasks_access               My Tasks shown and allowed or not
+      team_access                   management = Team Analytics, invite / edit / remove members,
+                                    Roles & Permissions; member = view members only
+  - Planner and Agreements are open to every organisation member (no setting).
+  - Every page, API call and action checks these; hiding a menu item is never the only check.
 
 Multi-tenancy - shared database, shared schema:
   - All organisations (tenants) live in one database, one schema and the same tables.
@@ -47,21 +66,21 @@ Multi-tenancy - shared database, shared schema:
     reach it through their parent. This is a deliberate exception to "nothing stored twice":
     every query, index and security policy can filter by tenant without joins.
   - Global tables have no organization_id and are marked "* global table": the platform tables
-    (platform_admin, owner_grant, permission, role_template, role_template_permission,
-    notification_event, platform_activity_log) and the person's own tables (users, session,
+    (platform_admin, organization_invitation, role_template, notification_event,
+    platform_activity_log) and the person's own tables (users, session,
     verification_code, user_preference, user_notification_setting, saved_signature).
   - No cross-tenant links: every tenant table also has unique (organization_id, <table>_id), and
     every foreign key from one tenant table to another includes organization_id, e.g.
       task (organization_id, project_id) -> project (organization_id, project_id)
-    Foreign keys to global tables (users, permission ...) stay plain; the app checks that a
+    Foreign keys to global tables (users, role_template ...) stay plain; the app checks that a
     referenced person is an active org_member of that organisation.
   - Row-level security (PostgreSQL RLS) on every tenant table:
       organization_id = current_setting('app.organization_id')::uuid
     The API runs SET LOCAL app.organization_id at the start of each transaction, taken from
     session.active_organization_id (or from the agent_access_token / signing_token used).
     The app's database role does not own the tables and cannot bypass RLS.
-  - Platform admins work through the global tables and organisation metadata (name, plan,
-    status). They get no automatic access to a tenant's content: that needs a
+  - Super Admins work through the global tables and organisation records (name, slug, plan,
+    industry, size, status, Owner). They get no automatic access to a tenant's content: that needs a
     support_access_grant approved by the organisation, and every use is logged.
   - Background jobs (reminders, expiry, idle time-outs, email sending) use a separate database
     role that bypasses RLS; everything they change is written to activity_log.
@@ -70,8 +89,8 @@ Multi-tenancy - shared database, shared schema:
     the request then runs under that organisation like any other.
   - Unique rules on anything other than uuids are per organisation, e.g.
     unique (organization_id, project_key). Only organization.slug, users.email,
-    stored_file.storage_key, permission.permission_key, role_template.role_key and the
-    token_hash columns are unique across all organisations.
+    stored_file.storage_key, role_template.role_key and the token_hash columns are unique across
+    all organisations.
   - Every index on a tenant table starts with organization_id.
   - Object storage keys start with the tenant: org/<organization_id>/... ; personal files
     (avatars, saved signatures) use user/<user_id>/... and have an empty stored_file.organization_id.
@@ -85,35 +104,35 @@ tables are included.
 
 platform_admin - platform_admin_id  - uuid      - pk
                  user_id            - uuid      - fk -> users; unique
-                 level              - varchar   - super_admin / support
-                 granted_by_user_id - uuid      - fk -> users; empty for the first super admin (seeded)
+                 granted_by_user_id - uuid      - fk -> users; empty for the first Super Admin (seeded)
                  created_at         - timestamp
                  revoked_at         - timestamp
-                 * global table: platform staff who use the Super Admin dashboard
+                 * global table: the Super Admins who use the Super Admin Dashboard (/super-admin)
 
-owner_grant - owner_grant_id     - uuid      - pk
-              granted_by_user_id - uuid      - fk -> users (a platform_admin)
-              user_id            - uuid      - fk -> users; set when the person signs up or signs in with the link
-              email              - varchar   - who may create an organisation
-              name               - varchar
-              plan               - varchar   - starter / pro / enterprise (copied to the organisation it creates)
-              seat_limit         - integer   - empty = no limit
-              max_organizations  - integer   - how many organisations this grant may create (default 1)
-              note               - text
-              token_hash         - varchar   - unique
-              status             - varchar   - pending / accepted / revoked (expired = pending and past expires_at)
-              expires_at         - timestamp
-              accepted_at        - timestamp
-              revoked_at         - timestamp
-              created_at         - timestamp
-              updated_at         - timestamp
-              * global table: the Super Admin's permission for one person to create an organisation
-              * unique (email) where status = pending
+organization_invitation - organization_invitation_id - uuid      - pk
+                          organization_id            - uuid      - fk -> organization; set when the Super Admin created the organisation first, or once the Owner accepts
+                          invited_by_user_id         - uuid      - fk -> users (a Super Admin)
+                          accepted_by_user_id        - uuid      - fk -> users (becomes organization.owner_user_id)
+                          organization_name          - varchar
+                          owner_name                 - varchar
+                          owner_email                - varchar
+                          plan                       - varchar   - starter / pro / enterprise
+                          message                    - text      - the Super Admin's onboarding note
+                          token_hash                 - varchar   - unique
+                          status                     - varchar   - pending / accepted / expired (revoking also sets expired; revoked_at tells the two apart)
+                          sent_at                    - timestamp - last time it was sent (moves on resend)
+                          expires_at                 - timestamp - sent_at + 7 days
+                          accepted_at                - timestamp
+                          revoked_at                 - timestamp
+                          created_at                 - timestamp
+                          updated_at                 - timestamp
+                          * global table: a Super Admin's invitation for an Owner to take over or create an organisation
+                          * unique (owner_email, organization_name) where status = pending
 
 platform_activity_log - platform_activity_log_id - uuid      - pk
                         actor_user_id            - uuid      - fk -> users; empty for system actions
                         organization_id          - uuid      - fk -> organization; set when the action is about one organisation
-                        action                   - varchar   - e.g. owner_grant.created, organization.suspended, auth.login, auth.login_failed, support_access.used
+                        action                   - varchar   - e.g. organization.created, organization.status_changed, organization.deleted, organization_invitation.sent, auth.login, auth.login_failed, support_access.used
                         target_type              - varchar
                         target_id                - uuid
                         detail                   - text
@@ -123,30 +142,29 @@ platform_activity_log - platform_activity_log_id - uuid      - pk
                         * global table: platform admin actions and sign-in events (they happen outside any one organisation); append-only
 
 organization - organization_id          - uuid      - pk
-               owner_user_id            - uuid      - fk -> users
-               owner_grant_id           - uuid      - fk -> owner_grant (the grant it was created with)
+               owner_user_id            - uuid      - fk -> users; the Organization Owner; empty until the Owner accepts the invitation
+               created_by_user_id       - uuid      - fk -> users (the Super Admin who created it, or the Owner on accepting)
                logo_file_id             - uuid      - fk -> stored_file
                name                     - varchar
                slug                     - varchar   - unique
                description              - text
                type                     - varchar
                industry                 - varchar
-               company_size             - varchar   - 1-10 / 11-50 / 51-200 / 201-1000 / 1000+
+               company_size             - varchar   - just_me / 2-10 / 11-50 / 51-200 / 201-500 / 500+
                website                  - varchar
                accent_color             - varchar
-               plan                     - varchar   - starter / pro / enterprise
-               seat_limit               - integer   - empty = no limit; set by the platform admin
-               status                   - varchar   - active / suspended / closed (set by the platform admin)
+               plan                     - varchar   - starter / pro / enterprise (set by the Super Admin)
+               status                   - varchar   - active / pending / inactive (set by the Super Admin; nobody can sign in to an inactive one)
                timezone                 - varchar   - IANA name, e.g. Asia/Colombo
                working_hours_start      - time
                working_hours_end        - time
                week_start_day           - varchar   - sunday / monday
                workload_threshold_hours - integer
-               suspended_at             - timestamp
                created_at               - timestamp
                updated_at               - timestamp
-               deleted_at               - timestamp
+               deleted_at               - timestamp - deleted by the Super Admin
                * the tenant itself: its organization_id is the tenant key every other table points to
+               * member and project counts on the Super Admin Dashboard are counted, not stored
 
 organization_feature - organization_feature_id - uuid      - pk
                        organization_id         - uuid      - fk -> organization; tenant key
@@ -159,7 +177,7 @@ organization_feature - organization_feature_id - uuid      - pk
 support_access_grant - support_access_grant_id - uuid      - pk
                        organization_id         - uuid      - fk -> organization; tenant key
                        platform_admin_id       - uuid      - fk -> platform_admin
-                       approved_by_user_id     - uuid      - fk -> users (owner or someone with organization.manage)
+                       approved_by_user_id     - uuid      - fk -> users (the Organization Owner)
                        reason                  - text
                        starts_at               - timestamp
                        expires_at              - timestamp
@@ -236,61 +254,44 @@ user_notification_setting - user_notification_setting_id - uuid    - pk
                             * global table: personal settings, the same in every organisation
                             * unique (user_id, notification_event_id); no row = the event's default_enabled
 
-permission - permission_id  - uuid    - pk
-             permission_key - varchar - unique; e.g. project.create, agreement.send, member.invite
-             module         - varchar - organization / members / projects / tasks / time / planning / teams / documents / contracts / agreements / ai_agents / reports
-             name           - varchar
-             description    - text
-             scope          - varchar - organization / project (project = can be granted through a project role)
-             sort_order     - integer
-             * global table: the fixed list of permissions the code checks; seeded and changed only by the platform
-
 role_template - role_template_id - uuid    - pk
-                role_key         - varchar - unique; ceo, project_manager, product_owner, engineering_lead, developer, qa_tester, org_admin, document_manager, client, auditor
-                name             - varchar
+                role_key         - varchar - unique; organization_owner / project_manager / team_lead / developer / qa_tester
+                name             - varchar - Organization Owner / Project Manager / Team Lead / Developer / QA Tester
                 description      - text
-                category         - varchar - leadership / delivery / quality / governance / external
-                scope            - varchar - organization / project
-                color            - varchar
-                default_path     - varchar - landing page, e.g. /dashboard, /my-tasks, /agreements
-                is_invitable     - boolean
+                is_system        - boolean - true for Organization Owner and Project Manager
+                admin_dashboard  - boolean
+                my_status        - boolean
+                project_access   - varchar - management / user
+                my_tasks_access  - boolean
+                team_access      - varchar - management / member
                 sort_order       - integer
                 * global table: the platform's default roles, copied into every new organisation
-
-role_template_permission - role_template_permission_id - uuid - pk
-                           role_template_id            - uuid - fk -> role_template
-                           permission_id               - uuid - fk -> permission
-                           * global table
-                           * unique (role_template_id, permission_id)
+                * defaults: Owner and Project Manager = both dashboards, management, My Tasks, management; Team Lead = both dashboards, user, My Tasks, member; Developer and QA Tester = My Status only, user, My Tasks, member
 
 role - role_id            - uuid      - pk
        organization_id    - uuid      - fk -> organization; tenant key
        role_template_id   - uuid      - fk -> role_template; the default it was copied from, empty for a custom role
        created_by_user_id - uuid      - fk -> users; empty for roles copied at organisation creation
-       role_key           - varchar   - e.g. project_manager, legal_reviewer
-       name               - varchar
+       name               - varchar   - e.g. Project Manager, Contractor
        description        - text
-       scope              - varchar   - organization / project
-       color              - varchar
-       default_path       - varchar
-       is_owner_role      - boolean   - the protected Owner role: has every permission, cannot be edited, archived or removed from the owner
-       is_invitable       - boolean
-       archived_at        - timestamp
+       is_system          - boolean   - system roles can be edited but not deleted
+       admin_dashboard    - boolean   - may open the Admin Dashboard (/dashboard)
+       my_status          - boolean   - may open My Status (/projects/home)
+       project_access     - varchar   - management / user
+       my_tasks_access    - boolean
+       team_access        - varchar   - management / member
        created_at         - timestamp
        updated_at         - timestamp
-       * unique (organization_id, role_key)
-       * one Owner role per organisation: unique (organization_id) where is_owner_role
-
-role_permission - role_permission_id - uuid    - pk
-                  organization_id    - uuid    - fk -> organization; tenant key
-                  role_id            - uuid    - fk -> role
-                  permission_id      - uuid    - fk -> permission
-                  effect             - varchar - allow / deny (a deny on any of a person's roles wins)
-                  * unique (role_id, permission_id)
+       * unique (organization_id, name)
+       * check: admin_dashboard or my_status (at least one dashboard)
+       * the default dashboard is the Admin Dashboard when admin_dashboard is true, otherwise My Status (calculated, not stored)
+       * cannot be deleted while is_system, or while any org_member or pending invitation uses it
+       * Planner and Agreements need no setting: every role has them
 
 org_member - org_member_id       - uuid      - pk
              organization_id     - uuid      - fk -> organization; tenant key
              user_id             - uuid      - fk -> users
+             role_id             - uuid      - fk -> role (one role per member)
              department_id       - uuid      - fk -> department
              status              - varchar   - active / suspended / removed
              title               - varchar   - job title; never grants access
@@ -304,15 +305,7 @@ org_member - org_member_id       - uuid      - pk
              created_at          - timestamp
              updated_at          - timestamp
              * unique (organization_id, user_id)
-
-org_member_role - org_member_role_id - uuid      - pk
-                  organization_id    - uuid      - fk -> organization; tenant key
-                  org_member_id      - uuid      - fk -> org_member
-                  role_id            - uuid      - fk -> role (scope = organization)
-                  granted_by_user_id - uuid      - fk -> users
-                  created_at         - timestamp
-                  * unique (org_member_id, role_id)
-                  * a person's permissions = all allows of their roles, minus any deny
+             * the Owner (organization.owner_user_id) keeps full access whatever their role's settings
 
 org_member_skill - org_member_skill_id - uuid    - pk
                    organization_id     - uuid    - fk -> organization; tenant key
@@ -329,7 +322,7 @@ department - department_id   - uuid      - pk
 
 invitation - invitation_id       - uuid      - pk
              organization_id     - uuid      - fk -> organization; tenant key
-             role_id             - uuid      - fk -> role (must be is_invitable and not archived)
+             role_id             - uuid      - fk -> role (one of this organisation's roles)
              department_id       - uuid      - fk -> department
              invited_by_user_id  - uuid      - fk -> users
              accepted_by_user_id - uuid      - fk -> users
@@ -346,6 +339,13 @@ invitation - invitation_id       - uuid      - pk
              created_at          - timestamp
              updated_at          - timestamp
              * unique (organization_id, email) where status = pending
+
+invitation_project - invitation_project_id - uuid - pk
+                     organization_id       - uuid - fk -> organization; tenant key
+                     invitation_id         - uuid - fk -> invitation
+                     project_id            - uuid - fk -> project
+                     * unique (invitation_id, project_id)
+                     * the projects an invitee with a Project User Access role gets; copied to project_member on acceptance
 
 team - team_id         - uuid      - pk
        organization_id - uuid      - fk -> organization; tenant key
@@ -431,7 +431,6 @@ project - project_id          - uuid      - pk
           project_key         - varchar   - e.g. FS; 2-6 upper-case letters
           description         - text
           template            - varchar   - scrum / kanban / esign / agent
-          visibility          - varchar   - workspace / members (members = only project_member rows can open it)
           status              - varchar   - planning / active / on_hold / completed / cancelled
           health_mode         - varchar   - auto / manual
           health              - varchar   - on_track / at_risk / off_track / delayed; only stored in manual mode (auto is calculated)
@@ -456,13 +455,14 @@ project - project_id          - uuid      - pk
           deleted_at          - timestamp
           * unique (organization_id, project_key)
 
-project_member - project_member_id - uuid      - pk
-                 organization_id   - uuid      - fk -> organization; tenant key
-                 project_id        - uuid      - fk -> project
-                 user_id           - uuid      - fk -> users
-                 role_id           - uuid      - fk -> role (scope = project); empty = their organisation roles only
-                 created_at        - timestamp
+project_member - project_member_id   - uuid      - pk
+                 organization_id     - uuid      - fk -> organization; tenant key
+                 project_id          - uuid      - fk -> project
+                 user_id             - uuid      - fk -> users
+                 assigned_by_user_id - uuid      - fk -> users
+                 created_at          - timestamp
                  * unique (project_id, user_id)
+                 * the assigned projects: a member whose role has project_access = user sees only projects where they have a row here; management roles see every project
 
 team_project - team_project_id - uuid - pk
                organization_id - uuid - fk -> organization; tenant key
@@ -1079,13 +1079,13 @@ signature_evidence - signature_evidence_id - uuid      - pk
                      created_at            - timestamp
 
 outbound_email - outbound_email_id    - uuid      - pk
-                 organization_id      - uuid      - fk -> organization; tenant key; empty for platform emails (owner grant, verification code, password reset)
+                 organization_id      - uuid      - fk -> organization; tenant key; empty for platform emails (organisation invitation, verification code, password reset)
                  signature_request_id - uuid      - fk -> signature_request
                  signer_id            - uuid      - fk -> signer
                  reviewer_id          - uuid      - fk -> reviewer
                  copy_recipient_id    - uuid      - fk -> copy_recipient
                  user_id              - uuid      - fk -> users; set when the recipient has an account
-                 kind                 - varchar   - invite / copy / review / reminder / expiry_warning / completed / declined / cancelled / expired / invitation / owner_grant / verification_code / password_reset / notification / digest
+                 kind                 - varchar   - invite / copy / review / reminder / expiry_warning / completed / declined / cancelled / expired / invitation / organization_invitation / verification_code / password_reset / notification / digest
                  to_name              - varchar
                  to_email             - varchar
                  subject              - varchar
@@ -1153,7 +1153,7 @@ company_seal_use - company_seal_use_id  - uuid      - pk
 agent_access_token - agent_access_token_id - uuid      - pk
                      organization_id       - uuid      - fk -> organization; tenant key
                      user_id               - uuid      - fk -> users
-                     revoked_by_user_id    - uuid      - fk -> users (the owner of the token or an admin)
+                     revoked_by_user_id    - uuid      - fk -> users (the token's owner, or the Organization Owner)
                      name                  - varchar
                      token_hash            - varchar   - unique
                      last_four             - varchar   - shown in the list

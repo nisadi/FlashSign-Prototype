@@ -7,71 +7,63 @@ This lists everything that changed in [`schema.txt`](schema.txt) and where each 
 
 The schema itself contains only tables and rules; reasons and follow-ups are here.
 
-`schema.txt` is now one continuous list of **103 tables** with no slices: 13 global (platform and per-person) and 90 tenant tables.
+`schema.txt` is now one continuous list of **100 tables** with no slices: 11 global (platform and per-person) and 89 tenant tables.
+
+**Update (5 Nov 2026, after frontend commit `6a1cc6b`):** the access model in §1 and §8 now follows the frontend as built (`flash-sign-proto/src/lib/rbac.ts`).
+- **Removed:** the earlier permission-key design (`permission`, `role_permission`, `role_template_permission`, `org_member_role`, `owner_grant`).
+- **Instead:** a role holds four settings, each member has one role, and the Super Admin sends `organization_invitation` rows.
+- **SRS edits:** in `New folder/SRS fix instructions - round 3 (access control).md`.
 
 ---
 
-## 1. New onboarding and access model
+## 1. Onboarding and access model
 
-Flow: **Super Admin dashboard → grants an owner permission → owner creates the organisation → owner defines roles and permissions → owner invites the team.**
+Flow (as built in the frontend): **Super Admin creates or invites an organisation → the Owner accepts and sets it up → the Owner (or a Team Management role) edits and creates roles → invites members with a role and assigned projects.**
 
 ### New tables
 
 | Table | What it does |
 |---|---|
-| `platform_admin` | Platform staff who use the Super Admin dashboard (`super_admin` / `support`). Global. |
-| `owner_grant` | The Super Admin's permission for one email to create an organisation, with plan, seat limit, `max_organizations`, expiry and a one-time link. Global. |
-| `platform_activity_log` | Platform admin actions and sign-in events (outside any one organisation). Global, append-only. |
-| `support_access_grant` | A platform admin can see a tenant's content only through a grant approved by that organisation (SRS Annex C §4, "support access requires an audited grant"). |
-| `organization_feature` | Per-organisation feature switches (teams, contracts, ai_agents …), replacing hard-coded `FEATURES` in `lib/features.ts`. |
-| `permission` | The fixed list of permission keys the code checks (seed list in §8). Global, platform-owned. |
-| `role_template`, `role_template_permission` | The platform's default roles and their permissions, copied into every new organisation. Global. |
-| `role_permission` | Which permissions each of an organisation's roles has; `allow` or `deny` (deny wins, ACL-09). |
-| `org_member_role` | A member can hold several roles (ACL-09). Replaces `org_member.role_id`. |
+| `platform_admin` | The Super Admins who use the Super Admin Dashboard (`/super-admin`). Global. |
+| `organization_invitation` | A Super Admin's invitation for an Owner, with organisation name, Owner name and email, plan, note, a 7-day link and status pending / accepted / expired. Linked to the organisation when the Super Admin created it first, or once the Owner accepts. Global. |
+| `platform_activity_log` | Super Admin actions and sign-in events (outside any one organisation). Global, append-only. |
+| `support_access_grant` | A Super Admin can see a tenant's content only through a grant the Owner approves (SRS Annex C §4). |
+| `organization_feature` | Per-organisation feature switches (teams, contracts …), replacing hard-coded `FEATURES` in `lib/features.ts`. |
+| `role_template` | The platform's five default roles with their settings, copied into every new organisation. Global. |
+| `invitation_project` | The projects a member invitation assigns (for Project User Access roles); copied to `project_member` on acceptance. |
 | `department` | Organisation's own departments; used by members, invitations, teams and announcement audiences. |
 
 ### Changed tables
 
 | Table | Change |
 |---|---|
-| `role` | **Now per organisation** (was a global fixed list). Added `role_key`, `name`, `description`, `scope` (organization / project), `color`, `default_path`, `is_owner_role`, `is_invitable`, `role_template_id`, `archived_at`. |
-| `organization` | Added `owner_grant_id`, `status` (active / suspended / closed), `seat_limit`, `suspended_at`, `deleted_at`, `company_size`. |
-| `org_member` | `role_id` removed (see `org_member_role`). `is_active` became `status` (active / suspended / removed) with `suspended_at` / `removed_at`. `department` became `department_id`. `working_hours` became `working_hours_start` / `working_hours_end`. |
-| `project_member` | Added `role_id`: an optional project-level role (SRS Annex C §3.1: "developer and QA are normally project roles"). |
-| `invitation` | `role_id` now points to the organisation's own roles. Added `department_id` and `sent_at`. Added a unique rule for one pending invite per email per organisation. |
-| `session` | `active_organization_id` may be empty: someone with a grant has signed in but not created an organisation yet. |
-| `users` | `is_active` now means account-wide (disabled by a platform admin). Membership state is `org_member.status`. |
-| `outbound_email` | `organization_id` may be empty for platform emails (owner grant, verification code, password reset). |
+| `role` | **Now per organisation.** Columns: `name`, `description`, `is_system`, `admin_dashboard`, `my_status`, `project_access` (management / user), `my_tasks_access`, `team_access` (management / member), `role_template_id`. The default dashboard is calculated (Admin Dashboard if allowed, else My Status). Unique name per organisation. |
+| `organization` | `owner_user_id` may be empty until the Owner accepts. Added `created_by_user_id`, `status` (active / pending / inactive, set by the Super Admin), `deleted_at`, `company_size` (the frontend's six sizes). |
+| `org_member` | Has one `role_id`. `is_active` became `status` (active / suspended / removed). `department` became `department_id`. `working_hours` became `working_hours_start` / `working_hours_end`. |
+| `project_member` | These rows are the **assigned projects** for Project User Access. Added `assigned_by_user_id`. |
+| `invitation` | `role_id` points to the organisation's own roles. Added `department_id`, `sent_at`, and a unique rule for one pending invite per email per organisation. |
+| `session` | `active_organization_id` may be empty (a Super Admin, or an Owner before setup). |
+| `users` | `is_active` now means account-wide. Super Admin = a `platform_admin` row; Owner = `organization.owner_user_id`. |
+| `outbound_email` | `organization_id` may be empty for platform emails (organisation invitation, verification code, password reset). |
 
-### What this changes in the SRS
+### How the frontend maps onto the schema
 
-| SRS item | Today | Needs to say |
-|---|---|---|
-| FR-AUTH-001 Registration | Anyone can sign up and create an organisation. | Sign-up only through an owner grant link or an invitation link. |
-| FR-AUTH-003 Onboarding wizard | Any new user runs the wizard; the owner gets `ceo`. | Only a person with an accepted `owner_grant` can run it. The owner gets the protected **Owner** role; default roles are copied from templates. |
-| FR-AUTH-004 Invitations | Role is a `DemoRole`. | Role is one of the organisation's own invitable roles. |
-| FR-AUTH-007 Navigation gating | Sidebar is filtered by role name (`ROLE_CONFIGS`). | Sidebar and actions are filtered by the permissions the server returns for the person (ACL-07). |
-| FR-AUTH-008 Persona switcher | 12 fixed personas. | Demo-only; not backed by the database. |
-| FR-SETT-002 Role administration | Change one `DemoRole`; toggle `isActive`. | Assign several roles; suspend or remove membership. A new screen, **Roles & permissions**, lets the owner create, edit and archive roles. |
-| §2.5 Roles | 12 fixed roles, including `platform_admin` and `integration_service`. | 10 default role templates plus custom roles. `platform_admin` becomes the `platform_admin` table. `integration_service` is dropped: agents act for a person through `agent_access_token`. |
-| *New requirements* | – | Super Admin dashboard (create, revoke and resend owner grants; suspend organisations; plan and seat limit; feature switches); support access grants. |
+| Frontend (`lib/rbac.ts`) | Schema |
+|---|---|
+| `isSuperAdmin` | a `platform_admin` row |
+| `isOwner` | `organization.owner_user_id` |
+| `roleId`, `roleName` | `org_member.role_id` → `role.name` |
+| `dashboardAccess.adminDashboard` / `.myStatus` | `role.admin_dashboard` / `role.my_status` |
+| `dashboardAccess.defaultDashboard` | calculated: `admin` if `admin_dashboard`, else `my-status` |
+| `projectAccess`, `myTasksAccess`, `teamAccess` | `role.project_access`, `role.my_tasks_access`, `role.team_access` |
+| `assignedProjectIds` | `project_member` rows |
+| `CustomRole.isSystem` | `role.is_system` |
+| `SuperAdminOrg` | `organization` (+ counts calculated, Owner from `owner_user_id` or the pending `organization_invitation`) |
+| `SuperAdminOrgInvitation` | `organization_invitation` |
+| `DemoInvitation` + chosen role and projects | `invitation` + `invitation_project` |
 
-### What this changes in the frontend
-
-- New Super Admin pages, and a grant-link landing page before `/signup`.
-- `/signup` without a grant or invitation must stop: it currently routes straight to `/onboarding/create-organization`.
-- `lib/permissions.ts` (`ROLE_CONFIGS` and the `can*` functions) is replaced by the permission list from the server.
-  - `canCreateTask`, `canApprove`, `canRunAgent`, `canSignDocument`, `canViewReports` and `canAccess` are defined but never called today, so those actions are not gated at all.
-- There are two role lists:
-  - `types/demo-auth.ts` uses `executive` and `qa` (10 roles);
-  - `types/index.ts` uses `ceo` and `qa_tester` (12 roles), translated in `context/app-context.tsx:835-840`.
-  - Both go; roles come from the database.
-- Role labels disagree across `settings/users/page.tsx`, `create-member-dialog.tsx`, `teams/members/new/page.tsx`, `permissions.ts` and `demo-auth.ts`. They should come from `role.name`.
-- `INVITABLE_ROLES` (`lib/invitations.ts:11`) becomes `role.is_invitable`.
-- Onboarding lets people pick their own role (`onboarding/profile/page.tsx:47`). This must go: roles are granted, never self-chosen (ACL-02).
-- `createOrganization` makes the owner `org_admin`. It should assign the Owner role.
-- The seal role picker (`company-seals.tsx:16,24`) and the seal filter on the signing page (`signatures/sign/[requestId]/page.tsx:92`) must read the organisation's roles.
-- Feature flags (`lib/features.ts`) are read from `organization_feature`.
+The SRS and frontend follow-ups for this model are in `New folder/SRS fix instructions - round 3 (access control).md`.
+- The frontend gaps (invitations not saving the role and projects; Super Admin organisations not linked to workspaces; etc.) are listed there as G-01 to G-08.
 
 ---
 
@@ -160,7 +152,11 @@ Flow: **Super Admin dashboard → grants an owner permission → owner creates t
 | `agent_access_token.last_used_at` | The latest `agent_token_usage.last_used_at`. |
 | `signature_request_event.category = request` | Not in FR-SIGN-012's list. |
 | `agent_run`, `agent_run_event`, `agent_run_check` | The SRS uses a pull model: FlashSign never runs agents (B.3 §4.1). The run screen isn't linked from anywhere. |
-| `role` as a global list; `org_member.role_id` | Replaced by per-organisation roles (§1). |
+| `role` as a global list of 12 personas | Replaced by per-organisation roles with four settings (§1). |
+| `permission`, `role_permission`, `role_template_permission`, `org_member_role`, `project_member.role_id`, `role.scope` / `color` / `default_path` / `is_invitable` / `archived_at` / `is_owner_role` | The permission-key design of the first version; the frontend uses four role settings, one role per member and no project roles. |
+| `owner_grant` (incl. `seat_limit`, `max_organizations`) and `organization.owner_grant_id`, `seat_limit`, `suspended_at`, status values `suspended` / `closed` | Replaced by `organization_invitation` and the frontend's active / pending / inactive status. |
+| `platform_admin.level` | The frontend has one kind of Super Admin. |
+| `project.visibility` | Who sees a project now comes from the role's project access and `project_member`. |
 
 Kept on purpose although they could be calculated (noted in the schema): `task.status`, `time_off_request.duration_days`, `signature_request_event.actor_name` / `actor_email`, and `organization_id` on child tables.
 
@@ -203,60 +199,25 @@ Kept on purpose although they could be calculated (noted in the schema): `task.s
 - **`project.allow_move`, `project_group`, `org_member.availability`, `announcement.is_pinned` / `draft`** are not in the SRS but are used by the frontend. They are kept.
 - **Job title at sign-up:** it lives on `org_member`, so it must be held until the organisation exists, or the field should move to onboarding.
 - **Retention period** for removed organisations and for anonymised accounts.
+- **Admin Dashboard scope (DEC-28):** the frontend shows organisation-wide figures to Team Lead (Project User Access). Decide whether to limit them to assigned projects. No schema change either way.
+- **Finer permissions (Annex C ACL-09, several roles per member, project-level roles):** not modelled; the four role settings cover Phase 1. Revisit if per-action permissions are needed.
+- **Can the Organization Owner role be given by invitation?** The frontend's invite dialog lists every role, including it. Recommend excluding it.
 
-## 8. Default permissions and roles (seed data)
+## 8. Default roles (seed data)
 
-Owner role: every permission, always. `client` gets no permissions: they only see agreements and documents addressed or shared to them. Signing a request sent to you needs no permission.
+These are the `role_template` rows, copied into each new organisation (`INITIAL_ROLES` in `lib/rbac.ts`):
 
-| Permission | Scope | Default roles |
-|---|---|---|
-| `organization.manage` (profile, branding, departments, features) | org | ceo, org_admin |
-| `member.invite` | org | ceo, org_admin |
-| `member.manage` (roles, suspend, remove) | org | ceo, org_admin |
-| `role.manage` (create and edit roles and permissions) | org | org_admin |
-| `team.manage` | org | ceo, org_admin, project_manager |
-| `project.create` | org | ceo, org_admin, project_manager, product_owner, engineering_lead |
-| `project.view_all` (incl. members-only projects) | org | ceo, org_admin, auditor |
-| `project.manage` (plan, boards, structure, members, baseline) | project | ceo, org_admin, project_manager, product_owner, engineering_lead |
-| `project.delete` | project | ceo, org_admin, project_manager |
-| `task.create`, `task.edit` (incl. move) | project | ceo, org_admin, project_manager, product_owner, engineering_lead, developer, qa_tester |
-| `task.delete` | project | ceo, org_admin, project_manager, product_owner, engineering_lead |
-| `sprint.manage` | project | project_manager, product_owner, engineering_lead |
-| `time.log` (own time) | project | all except client, auditor, document_manager |
-| `time.manage_others` | project | ceo, org_admin, project_manager, engineering_lead |
-| `time.view_team` | org | ceo, org_admin, project_manager, engineering_lead |
-| `planner.manage` (calendar events) | org | ceo, org_admin, project_manager, product_owner, engineering_lead |
-| `meeting.create` | org | all except client, auditor |
-| `time_off.approve` | org | ceo, org_admin, project_manager |
-| `announcement.publish` | org | ceo, org_admin |
-| `document.view` | org | all except client |
-| `document.create`, `document.edit` | org | ceo, org_admin, project_manager, product_owner, engineering_lead, document_manager |
-| `document.delete` | org | ceo, org_admin, document_manager |
-| `document.share` | org | ceo, org_admin, project_manager, document_manager |
-| `document.approve` | org | ceo, org_admin, project_manager, engineering_lead, document_manager |
-| `template.manage` | org | ceo, org_admin, document_manager |
-| `contract.manage` | org | ceo, org_admin, document_manager |
-| `contract.review` | org | ceo, document_manager |
-| `agreement.send` (prepare, send, sign it yourself) | org | ceo, org_admin, project_manager, product_owner, engineering_lead, document_manager |
-| `agreement.view_all` (whole organisation's requests) | org | ceo, org_admin, document_manager, auditor |
-| `seal.manage` | org | ceo, org_admin, document_manager |
-| `signing_defaults.manage` | org | org_admin, document_manager |
-| `srs.analyse`, `srs.review` | project | ceo, org_admin, project_manager, product_owner, engineering_lead |
-| `agent.use` (own tokens) | org | all except client, auditor, document_manager |
-| `agent.manage` (organisation policy, revoke any token) | org | ceo, org_admin |
-| `report.view` | org | ceo, org_admin, project_manager, engineering_lead, document_manager, auditor |
-| `activity.view` (audit log) | org | ceo, org_admin, auditor |
+| `role_key` | Name | System | Admin Dashboard | My Status | Project access | My Tasks | Team access |
+|---|---|---|---|---|---|---|---|
+| `organization_owner` | Organization Owner | yes | yes | yes | management | yes | management |
+| `project_manager` | Project Manager | yes | yes | yes | management | yes | management |
+| `team_lead` | Team Lead | no | yes | yes | user | yes | member |
+| `developer` | Developer | no | no | yes | user | yes | member |
+| `qa_tester` | QA Tester | no | no | yes | user | yes | member |
 
-Role templates (`role_key`, scope, default page):
-- `ceo` (org, /dashboard)
-- `org_admin` (org, /settings/users)
-- `project_manager` (org, /dashboard)
-- `product_owner` (project, /dashboard)
-- `engineering_lead` (project, /dashboard)
-- `developer` (project, /my-tasks)
-- `qa_tester` (project, /my-tasks)
-- `document_manager` (org, /agreements)
-- `client` (org, /agreements)
-- `auditor` (org, /reports)
+Rules that need no column:
+- The Owner (`organization.owner_user_id`) always has full access.
+- Only the Owner can open Settings › Preferences and AI Agent Hub › Organisation.
+- Planner and Agreements are open to every member; signing a request sent to you needs no role.
 
-Sidebar groups show when the person has at least one permission in that module.
+Demo accounts (`DEMO_ACCOUNTS`) are prototype data, not seed data.
