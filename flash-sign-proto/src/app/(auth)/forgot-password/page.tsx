@@ -8,11 +8,14 @@ import { FlashSignLogo } from '@/components/shared/flash-sign-logo';
 import { AuthCard } from '@/components/auth/auth-card';
 import { PrototypeNotice } from '@/components/shared/prototype-notice';
 import { forgotPasswordSchema, type ForgotPasswordFormData } from '@/lib/auth-validation';
-import { ArrowLeft, Mail, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { useRouter } from 'next/navigation';
+import { VerificationCodeStep, issueVerificationCode, type MockVerificationCode } from '@/components/auth/verification-code-step';
+import { ArrowLeft, Mail, Loader2 } from 'lucide-react';
 
 export default function ForgotPasswordPage() {
-  const [isSubmitted, setIsSubmitted] = useState(false);
-  const [submittedEmail, setSubmittedEmail] = useState('');
+  const router = useRouter();
+  // verification_code (purpose password_reset), kept in page state for the prototype
+  const [code, setCode] = useState<MockVerificationCode | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const {
@@ -29,8 +32,8 @@ export default function ForgotPasswordPage() {
   const onSubmit = async (data: ForgotPasswordFormData) => {
     setIsSubmitting(true);
     await new Promise((resolve) => setTimeout(resolve, 500));
-    setSubmittedEmail(data.email);
-    setIsSubmitted(true);
+    // The same answer whether or not the account exists, so emails can't be discovered
+    setCode(issueVerificationCode('password_reset', data.email.trim().toLowerCase()));
     setIsSubmitting(false);
   };
 
@@ -54,7 +57,7 @@ export default function ForgotPasswordPage() {
             <FlashSignLogo showBadge size="md" />
           </div>
 
-          {!isSubmitted ? (
+          {!code ? (
             <>
               {/* Form State */}
               <div className="text-center mb-6">
@@ -62,7 +65,7 @@ export default function ForgotPasswordPage() {
                   Reset your password
                 </h1>
                 <p className="text-xs text-[var(--muted)] mt-1.5 max-w-sm mx-auto leading-relaxed">
-                  Enter your verified work email address and we will generate a simulated password reset link for this prototype.
+                  Enter your work email address and we will send you a 6-digit code to reset your password.
                 </p>
               </div>
 
@@ -97,59 +100,25 @@ export default function ForgotPasswordPage() {
                   {isSubmitting ? (
                     <>
                       <Loader2 className="w-4 h-4 animate-spin" />
-                      <span>Sending reset link...</span>
+                      <span>Sending code...</span>
                     </>
                   ) : (
                     <>
                       <Mail className="w-4 h-4" />
-                      <span>Send reset link</span>
+                      <span>Send code</span>
                     </>
                   )}
                 </button>
               </form>
             </>
           ) : (
-            /* Confirmation State */
-            <div className="text-center py-2 animate-fade-up space-y-4">
-              <div className="w-12 h-12 rounded-full bg-emerald-100 text-[var(--flash-deep)] flex items-center justify-center mx-auto">
-                <CheckCircle2 className="w-6 h-6" />
-              </div>
-
-              <div>
-                <h2 className="text-xl font-bold text-[var(--ink)]">
-                  Simulated Link Sent
-                </h2>
-                <p className="text-xs text-[var(--muted)] mt-2 leading-relaxed">
-                  If this were a live production account, password-reset instructions would be dispatched to:
-                </p>
-                <p className="text-xs font-semibold text-[var(--ink)] mt-1 bg-[var(--paper)] py-1 px-2 rounded-md border border-[var(--line)] inline-block">
-                  {submittedEmail}
-                </p>
-              </div>
-
-              <div className="p-3 bg-emerald-50 rounded-lg border border-emerald-200 text-xs text-[var(--ink-soft)] text-left leading-relaxed">
-                <p className="font-semibold text-emerald-900 mb-1">Prototype Simulation:</p>
-                No real emails are dispatched. You can proceed directly to the reset password screen to test the form controls and strength meter.
-              </div>
-
-              <div className="pt-2 flex flex-col gap-2">
-                <Link
-                  href="/reset-password"
-                  className="w-full py-2.5 px-4 rounded-lg bg-[var(--flash-deep)] hover:bg-[var(--flash)] text-white font-semibold text-xs shadow-sm flex items-center justify-center gap-2 transition-all"
-                >
-                  <span>Open Reset Password Screen</span>
-                  <ArrowRight className="w-4 h-4" />
-                </Link>
-
-                <button
-                  type="button"
-                  onClick={() => setIsSubmitted(false)}
-                  className="w-full py-2 px-3 text-xs text-[var(--muted)] hover:text-[var(--ink)] hover:bg-[var(--mist)]/40 rounded-lg transition-colors"
-                >
-                  Try another email address
-                </button>
-              </div>
-            </div>
+            /* Code step: 6 digits, locked after 5 wrong tries, resend after 60 seconds */
+            <VerificationCodeStep
+              record={code}
+              onChange={setCode}
+              onChangeEmail={() => setCode(null)}
+              onVerified={() => router.push(`/reset-password?email=${encodeURIComponent(code.email)}&verified=1`)}
+            />
           )}
 
           {/* Prototype Notice */}

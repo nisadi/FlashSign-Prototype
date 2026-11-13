@@ -83,6 +83,7 @@ export const createOrganizationSchema = z.object({
     .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/, 'Slug can only contain lowercase letters, numbers, and single hyphens'),
   industry: z.string().min(1, 'Please select an industry'),
   size: z.string().min(1, 'Please select organization size'),
+  timezone: z.string().min(1, 'Please select a time zone'),
   website: z
     .string()
     .optional()
@@ -117,7 +118,6 @@ export const profileSetupSchema = z.object({
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   jobTitle: z.string().min(1, 'Please enter or select your job title'),
   department: z.string().min(1, 'Please select or enter your department'),
-  timezone: z.string().min(1, 'Please select your primary timezone'),
   bio: z.string().max(240, 'Bio must be under 240 characters').optional(),
   role: z.string().min(1, 'Please select a demo role for the workspace'),
   avatarColor: z.string().optional(),
@@ -126,13 +126,13 @@ export const profileSetupSchema = z.object({
 export type ProfileSetupFormData = z.infer<typeof profileSetupSchema>;
 
 export const preferencesSetupSchema = z.object({
+  // user_preference
   theme: z.enum(['light', 'dark']),
+  defaultCalendarView: z.enum(['month', 'week', 'day', 'agenda']),
   inAppNotifications: z.boolean(),
   emailNotifications: z.boolean(),
-  taskAssignmentAlerts: z.boolean(),
-  deadlineReminders: z.boolean(),
-  approvalReminders: z.boolean(),
-  timezone: z.string().min(1, 'Please select a timezone'),
+  desktopNotifications: z.boolean(),
+  weeklyDigest: z.boolean(),
 });
 
 export type PreferencesSetupFormData = z.infer<typeof preferencesSetupSchema>;

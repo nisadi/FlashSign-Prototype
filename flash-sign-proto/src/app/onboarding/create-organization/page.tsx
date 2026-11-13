@@ -1,5 +1,6 @@
 'use client';
 
+import { IANA_TIMEZONES } from '@/lib/rbac';
 import React, { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
@@ -59,6 +60,7 @@ export default function CreateOrganizationPage() {
       slug: '',
       industry: '',
       size: '',
+      timezone: 'Asia/Colombo',
       website: '',
       description: '',
     },
@@ -96,6 +98,7 @@ export default function CreateOrganizationPage() {
       slug: data.slug,
       industry: data.industry,
       size: data.size,
+      timezone: data.timezone,
       website: data.website,
       description: data.description,
     });
@@ -263,6 +266,27 @@ export default function CreateOrganizationPage() {
                 <p className="text-xs text-[var(--danger)] mt-1">{errors.size.message}</p>
               )}
             </div>
+          </div>
+
+          {/* Time zone (organization.timezone) */}
+          <div>
+            <label htmlFor="org-timezone" className="block text-xs font-semibold text-[var(--ink)] mb-1">
+              Time Zone <span className="text-[var(--danger)]">*</span>
+            </label>
+            <select
+              id="org-timezone"
+              {...register('timezone')}
+              className="w-full px-3.5 py-2.5 text-sm rounded-lg border border-[var(--line)] hover:border-[var(--muted)] bg-[var(--paper-elevated)] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--flash)] transition-all"
+            >
+              {IANA_TIMEZONES.map((tz) => (
+                <option key={tz} value={tz}>
+                  {tz}
+                </option>
+              ))}
+            </select>
+            {errors.timezone && (
+              <p className="text-xs text-[var(--danger)] mt-1">{errors.timezone.message}</p>
+            )}
           </div>
 
           {/* Company Website (Optional) */}

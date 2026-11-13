@@ -54,7 +54,6 @@ const PROJECT_STATUS_CONFIG: Record<ProjectStatus, { label: string; className: s
   on_hold:   { label: 'On Hold',   className: 'bg-amber-50 text-amber-700 border-amber-200' },
   completed: { label: 'Completed', className: 'bg-gray-100 text-gray-600 border-gray-200' },
   cancelled: { label: 'Cancelled', className: 'bg-red-50 text-red-700 border-red-200' },
-  archived:  { label: 'Archived',  className: 'bg-gray-100 text-gray-500 border-gray-300' },
 };
 
 export function ProjectStatusBadge({ status }: { status: ProjectStatus }) {

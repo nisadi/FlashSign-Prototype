@@ -16,17 +16,29 @@ export const TASK_STAGES: { status: TaskStatus; label: string; hint: string }[] 
 /** Stages every board must keep a column for: the timer and the AI agents move cards into them. */
 export const REQUIRED_STAGES: TaskStatus[] = ['todo', 'in_progress', 'review', 'done'];
 
+/** board_column.color is a hex value; older saved boards used theme variables. */
+const LEGACY_COLUMN_COLORS: Record<string, string> = {
+  'var(--muted)': '#5a6f6c',
+  'var(--waiting)': '#c47a12',
+  'var(--flash)': '#00c2a8',
+  'var(--danger)': '#c23b3b',
+};
+
+export function toHexColumnColor(color: string): string {
+  return LEGACY_COLUMN_COLORS[color] ?? color;
+}
+
 export const COLUMN_COLORS = [
-  'var(--muted)', '#42a5f5', '#7e57c2', 'var(--waiting)', '#26a69a', 'var(--flash)', '#ec407a', 'var(--danger)',
+  '#5a6f6c', '#42a5f5', '#7e57c2', '#c47a12', '#26a69a', '#00c2a8', '#ec407a', '#c23b3b',
 ];
 
 /** Default columns use the stage as their id, so tasks without a columnId land in them. */
 export const DEFAULT_BOARD_COLUMNS: BoardColumn[] = [
-  { id: 'todo', name: 'To Do', color: 'var(--muted)', status: 'todo' },
+  { id: 'todo', name: 'To Do', color: '#5a6f6c', status: 'todo' },
   { id: 'in_progress', name: 'In Progress', color: '#42a5f5', status: 'in_progress' },
-  { id: 'review', name: 'In Review', color: 'var(--waiting)', status: 'review' },
-  { id: 'done', name: 'Done', color: 'var(--flash)', status: 'done' },
-  { id: 'blocked', name: 'Blocked', color: 'var(--danger)', status: 'blocked' },
+  { id: 'review', name: 'In Review', color: '#c47a12', status: 'review' },
+  { id: 'done', name: 'Done', color: '#00c2a8', status: 'done' },
+  { id: 'blocked', name: 'Blocked', color: '#c23b3b', status: 'blocked' },
 ];
 
 export function stageLabel(status: TaskStatus): string {

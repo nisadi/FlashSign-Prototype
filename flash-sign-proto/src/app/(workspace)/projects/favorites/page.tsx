@@ -18,10 +18,11 @@ import {
 } from 'lucide-react';
 
 export default function FavoritesPage() {
-  const { projects, users, tasks, toggleFavoriteProject } = useApp();
+  const { projects, users, tasks, toggleFavoriteProject, favoriteProjectIds } = useApp();
   const [search, setSearch] = useState('');
 
-  const favoriteProjects = projects.filter((p) => p.isFavorite);
+  // user_favorite_project: the signed-in person's own favourites
+  const favoriteProjects = projects.filter((p) => favoriteProjectIds.includes(p.id));
   const filtered = favoriteProjects.filter((p) =>
     p.name.toLowerCase().includes(search.toLowerCase()) ||
     p.key.toLowerCase().includes(search.toLowerCase())

@@ -11,7 +11,7 @@ import { PasswordInput } from '@/components/auth/password-input';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { PrototypeNotice } from '@/components/shared/prototype-notice';
 import { acceptInviteSchema, type AcceptInviteFormData } from '@/lib/auth-validation';
-import { decodeInvite, isInviteExpired, roleTitle } from '@/lib/invitations';
+import { decodeInvite, invitationRoleName, isInviteExpired } from '@/lib/invitations';
 import { useDemoAuth } from '@/context/demo-auth-context';
 import { ArrowRight, Loader2, AlertCircle, Lock, MailPlus, Building2 } from 'lucide-react';
 
@@ -24,7 +24,7 @@ const fieldClass = (hasError: boolean) =>
 export default function AcceptInvitationPage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = use(params);
   const router = useRouter();
-  const { isHydrated, invitations, users, currentUser, isAuthenticated, acceptInvitation } = useDemoAuth();
+  const { isHydrated, invitations, users, currentUser, isAuthenticated, acceptInvitation, roles } = useDemoAuth();
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -109,7 +109,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ tok
               <div className="flex items-center justify-between mb-2">
                 <span className="text-xs font-semibold uppercase tracking-wider text-[var(--flash-deep)]">You&apos;re invited</span>
                 <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[var(--mist)] text-[var(--ink-soft)] font-medium">
-                  {roleTitle(invite.role)}
+                  {invitationRoleName(invite, roles)}
                 </span>
               </div>
               <h2 className="text-2xl font-bold tracking-tight text-[var(--ink)]">Join {invite.organizationName}</h2>

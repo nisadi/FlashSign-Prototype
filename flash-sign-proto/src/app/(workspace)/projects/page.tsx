@@ -19,7 +19,7 @@ import {
 type ViewMode = 'card' | 'table';
 
 export default function ProjectsPage() {
-  const { projects, users, tasks, demoRole, toggleFavoriteProject } = useApp();
+  const { projects, users, tasks, demoRole, toggleFavoriteProject, favoriteProjectIds } = useApp();
   const { currentRbacUser } = useDemoAuth();
   const [view, setView] = useState<ViewMode>('card');
   const [search, setSearch] = useState('');
@@ -42,10 +42,13 @@ export default function ProjectsPage() {
     const matchSearch = p.name.toLowerCase().includes(search.toLowerCase()) ||
       p.key.toLowerCase().includes(search.toLowerCase()) ||
       p.description.toLowerCase().includes(search.toLowerCase());
-    const matchStatus = statusFilter === 'all' || p.status === statusFilter;
+    // Archived (archived_at set) is separate from status: archived projects only show under "Archived"
+    const matchStatus = statusFilter === 'archived'
+      ? !!p.archivedAt
+      : !p.archivedAt && (statusFilter === 'all' || p.status === statusFilter);
     const matchPriority = priorityFilter === 'all' || p.priority === priorityFilter;
     const matchGroup = groupFilter === 'all' || p.group === groupFilter;
-    const matchFav = !favoritesOnly || p.isFavorite;
+    const matchFav = !favoritesOnly || favoriteProjectIds.includes(p.id);
     return matchSearch && matchStatus && matchPriority && matchGroup && matchFav;
   }).sort((a, b) => {
     if (sortBy === 'name') return a.name.localeCompare(b.name);
@@ -101,6 +104,8 @@ export default function ProjectsPage() {
             <option value="planning">Planning</option>
             <option value="on_hold">On Hold</option>
             <option value="completed">Completed</option>
+            <option value="cancelled">Cancelled</option>
+            <option value="archived">Archived</option>
           </select>
 
           {/* Priority Filter */}
@@ -226,6 +231,8 @@ function ProjectCardItem({
   tasks: ReturnType<typeof useApp>['tasks'];
   onToggleFavorite: () => void;
 }) {
+  const { favoriteProjectIds } = useApp();
+  const isFavorite = favoriteProjectIds.includes(project.id);
   const members = users.filter(u => project.memberIds.includes(u.id));
   const owner = users.find(u => u.id === project.ownerId);
   const projectTasks = tasks.filter(t => t.projectId === project.id);
@@ -272,9 +279,9 @@ function ProjectCardItem({
                 onToggleFavorite();
               }}
               className="p-1 text-muted hover:text-amber-500 rounded transition-colors"
-              title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+              title={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
             >
-              <Star className={`w-4 h-4 ${project.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />
+              <Star className={`w-4 h-4 ${isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />
             </button>
             <ProjectStatusBadge status={project.status} />
           </div>
@@ -347,6 +354,7 @@ function ProjectTable({
   tasks: ReturnType<typeof useApp>['tasks'];
   onToggleFavorite: (id: string) => void;
 }) {
+  const { favoriteProjectIds } = useApp();
   return (
     <div className="bg-paper-elevated rounded-xl border border-line overflow-hidden shadow-xs">
       <div className="overflow-x-auto">
@@ -375,7 +383,7 @@ function ProjectTable({
                 <tr key={p.id} className="hover:bg-mist/30 transition-colors">
                   <td className="py-3 px-4 text-center">
                     <button onClick={() => onToggleFavorite(p.id)} className="text-muted hover:text-amber-500">
-                      <Star className={`w-3.5 h-3.5 ${p.isFavorite ? 'fill-amber-400 text-amber-500' : ''}`} />
+                      <Star className={`w-3.5 h-3.5 ${favoriteProjectIds.includes(p.id) ? 'fill-amber-400 text-amber-500' : ''}`} />
                     </button>
                   </td>
                   <td className="py-3 px-4">

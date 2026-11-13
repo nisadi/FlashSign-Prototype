@@ -111,7 +111,16 @@ export default function ProjectSettingsPage({
         durationUnit: baseline.unit,
         baselineHistory: [
           ...(project.baselineHistory ?? []),
-          { at: new Date().toISOString(), byUserId: currentUserId, reason: baselineReason.trim(), startDate: baselineStart, endDate: baselineEnd },
+          // baseline_change: the baseline before and after (reason kept for SRS FR-PLAN-002; not in the finalized table)
+          {
+            at: new Date().toISOString(),
+            byUserId: currentUserId,
+            oldStartDate: baselineStart,
+            oldEndDate: baselineEnd,
+            newStartDate: startDate,
+            newEndDate: dueDate,
+            reason: baselineReason.trim(),
+          },
         ],
       }),
     });
@@ -296,7 +305,10 @@ export default function ProjectSettingsPage({
                 {project.baselineHistory?.length
                   ? ` Re-baselined ${project.baselineHistory.length} time${project.baselineHistory.length === 1 ? '' : 's'}, last by ${
                       users.find((u) => u.id === project.baselineHistory!.at(-1)!.byUserId)?.name ?? 'someone'
-                    }: "${project.baselineHistory.at(-1)!.reason}".`
+                    }${(() => {
+                      const last = project.baselineHistory!.at(-1)!;
+                      return ` (${formatDate(last.oldStartDate)} – ${formatDate(last.oldEndDate)} → ${formatDate(last.newStartDate)} – ${formatDate(last.newEndDate)})${last.reason ? `: "${last.reason}"` : ''}`;
+                    })()}.`
                   : ''}
               </p>
               {rebaselining && (
@@ -366,7 +378,7 @@ export default function ProjectSettingsPage({
                 onClick={handleArchive}
                 className="shrink-0 text-muted hover:text-ink"
               >
-                {project.isArchived ? 'Unarchive Project' : 'Archive Project'}
+                {project.archivedAt ? 'Unarchive Project' : 'Archive Project'}
               </Button>
             </div>
 

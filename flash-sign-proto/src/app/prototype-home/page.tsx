@@ -172,7 +172,7 @@ export default function PrototypeHomePage() {
                 {currentUser.email}
               </p>
               <p className="text-[11px] text-[var(--muted)] truncate">
-                Timezone: {currentUser.timezone?.split(' ')[0]}
+                {currentUser.company ? `Company: ${currentUser.company}` : 'Profile saved'}
               </p>
               <span className="inline-block text-[10px] px-2 py-0.5 rounded-md bg-[var(--paper-elevated)] border border-[var(--line)] text-[var(--ink-soft)] font-medium">
                 Initial Setup Complete

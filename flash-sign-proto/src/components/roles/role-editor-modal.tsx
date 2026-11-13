@@ -26,6 +26,8 @@ interface RoleEditorModalProps {
   onClose: () => void;
   onSave: (roleData: Omit<CustomRole, 'id' | 'createdAt' | 'isSystem'>) => void;
   initialRole?: CustomRole | null;
+  /** role is unique per organisation by name: (organization_id, name) */
+  isNameTaken?: (name: string, exceptRoleId?: string) => boolean;
 }
 
 export function RoleEditorModal({
@@ -33,6 +35,7 @@ export function RoleEditorModal({
   onClose,
   onSave,
   initialRole,
+  isNameTaken,
 }: RoleEditorModalProps) {
   const isEditing = Boolean(initialRole);
 
@@ -89,6 +92,14 @@ export function RoleEditorModal({
     e.preventDefault();
     if (!name.trim()) {
       setError('Role name is required.');
+      return;
+    }
+    if (name.trim().length > 60) {
+      setError('Keep the role name to 60 characters or fewer.');
+      return;
+    }
+    if (isNameTaken?.(name.trim(), initialRole?.id)) {
+      setError(`A role called "${name.trim()}" already exists in this organisation.`);
       return;
     }
 

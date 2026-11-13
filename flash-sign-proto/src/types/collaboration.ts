@@ -86,17 +86,3 @@ export interface Announcement {
   createdAt: string;
 }
 
-export interface CollaborationSettings {
-  defaultCalendarView: 'month' | 'week' | 'day' | 'agenda';
-  workingHoursStart: string; // e.g. "09:00"
-  workingHoursEnd: string;   // e.g. "17:00"
-  timeZone: string;          // e.g. "America/New_York (EST)"
-  weekStartDay: 'sunday' | 'monday';
-  defaultPlanningView: 'calendar' | 'timeline' | 'list';
-  workloadThresholdHours: number; // e.g. 40
-  emailNotifications: boolean;
-  desktopNotifications: boolean;
-  weeklyDigest: boolean;
-  /** Per-event notification choices (Settings > Notifications); missing keys count as on */
-  notificationEvents?: Record<string, boolean>;
-}

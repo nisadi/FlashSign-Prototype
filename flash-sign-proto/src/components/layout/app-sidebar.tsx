@@ -158,15 +158,18 @@ export function AppSidebar() {
       icon: Users,
       items: teamItems,
     },
-    {
-      id: 'ai-agents',
-      title: 'AI Agent Hub',
-      icon: Bot,
-      direct: true,
-      items: [
-        { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot, activeWhen: (path: string) => path.startsWith('/ai-agents') },
-      ],
-    },
+    // AI Agent Hub is an organisation feature (organization_feature 'ai_agents')
+    ...(FEATURES.aiAgents
+      ? [{
+          id: 'ai-agents',
+          title: 'AI Agent Hub',
+          icon: Bot,
+          direct: true,
+          items: [
+            { label: 'AI Agent Hub', href: '/ai-agents', icon: Bot, activeWhen: (path: string) => path.startsWith('/ai-agents') },
+          ],
+        }]
+      : []),
     {
       id: 'settings',
       title: 'Settings',

@@ -403,7 +403,7 @@ export default function ProjectOverviewPage({ params }: { params: Promise<{ proj
                       onClick={handleArchive}
                       className="justify-start text-muted hover:text-ink"
                     >
-                      {project.isArchived ? 'Unarchive' : 'Archive'}
+                      {project.archivedAt ? 'Unarchive' : 'Archive'}
                     </Button>
                   </>
                 )}

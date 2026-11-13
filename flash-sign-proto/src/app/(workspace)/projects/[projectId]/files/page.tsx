@@ -37,6 +37,7 @@ import { GeneratedTasksReviewModal } from '@/components/projects/generated-tasks
 import { SrsGeneratedTasksModal } from '@/components/projects/srs-generated-tasks-modal';
 import { Modal, ModalHeader, ModalBody, ModalFooter } from '@/components/shared/modal';
 import { generateSuggestedTasksFromSrs, SrsSuggestedTask } from '@/lib/srs-analysis';
+import { FEATURES } from '@/lib/features';
 
 export default function ProjectFilesPage({
   params,
@@ -529,7 +530,8 @@ export default function ProjectFilesPage({
                           >
                             <Sparkles className="w-3.5 h-3.5" /> View Generated Tasks
                           </button>
-                        ) : (
+                        ) : FEATURES.srsAnalysis && (
+                          // SRS analysis is an organisation feature (organization_feature 'srs_analysis')
                           <button
                             onClick={() => setSrsModalFile(file)}
                             className="w-full py-1.5 px-3 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-xs border border-emerald-500/30 flex items-center justify-center gap-1.5 transition-colors"
@@ -631,7 +633,7 @@ export default function ProjectFilesPage({
                                 >
                                   <Sparkles className="w-3 h-3" /> View Tasks
                                 </button>
-                              ) : (
+                              ) : FEATURES.srsAnalysis && (
                                 <button
                                   onClick={() => setSrsModalFile(file)}
                                   className="px-2.5 py-1 rounded-lg bg-emerald-500/10 hover:bg-emerald-500/20 text-emerald-700 dark:text-emerald-400 font-semibold text-[11px] border border-emerald-500/25 flex items-center gap-1 transition-colors"

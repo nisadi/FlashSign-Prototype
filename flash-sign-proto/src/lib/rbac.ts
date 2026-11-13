@@ -12,8 +12,18 @@ export type ProjectAccess = 'management' | 'user';
 
 export type TeamAccess = 'management' | 'member';
 
+/**
+ * role: one of an organisation's own roles. The five defaults are copied from role_template when
+ * the organisation is created; custom roles have no template. Names are unique per organisation,
+ * and a role needs at least one dashboard. The default dashboard is calculated (Admin Dashboard
+ * when allowed, otherwise My Status).
+ */
 export interface CustomRole {
   id: string;
+  /** role.role_template_id: the default it was copied from; empty for a custom role */
+  roleTemplateId?: string;
+  /** role.created_by_user_id: empty for roles copied at organisation creation */
+  createdByUserId?: string;
   name: string;
   description: string;
   isSystem: boolean;
@@ -22,6 +32,28 @@ export interface CustomRole {
   myTasksAccess: boolean;
   teamAccess: TeamAccess;
   createdAt?: string;
+  updatedAt?: string;
+}
+
+/** role_template: the platform's default roles, copied into every new organisation. */
+export interface RoleTemplate {
+  id: string;
+  roleKey: 'organization_owner' | 'project_manager' | 'team_lead' | 'developer' | 'qa_tester';
+  name: string;
+  sortOrder: number;
+}
+
+export const ROLE_TEMPLATES: RoleTemplate[] = [
+  { id: 'rt-owner', roleKey: 'organization_owner', name: 'Organization Owner', sortOrder: 1 },
+  { id: 'rt-pm', roleKey: 'project_manager', name: 'Project Manager', sortOrder: 2 },
+  { id: 'rt-team-lead', roleKey: 'team_lead', name: 'Team Lead', sortOrder: 3 },
+  { id: 'rt-dev', roleKey: 'developer', name: 'Developer', sortOrder: 4 },
+  { id: 'rt-qa', roleKey: 'qa_tester', name: 'QA Tester', sortOrder: 5 },
+];
+
+/** The dashboard a role lands on: calculated, never stored. */
+export function defaultDashboardFor(access: Pick<DashboardAccess, 'adminDashboard'>): DashboardType {
+  return access.adminDashboard ? 'admin' : 'my-status';
 }
 
 export interface DemoUserAccount {
@@ -45,31 +77,139 @@ export interface DemoUserAccount {
   avatarInitials: string;
 }
 
-export interface SuperAdminOrg {
-  id: string;
-  name: string;
-  slug: string;
-  plan: 'Starter' | 'Pro' | 'Enterprise';
-  industry: string;
-  size: string;
-  ownerName: string;
-  ownerEmail: string;
-  status: 'active' | 'pending' | 'inactive';
-  memberCount: number;
-  projectCount: number;
-  website?: string;
-  createdAt: string;
+// ─── Platform tables (Super Admin) ─────────────────────────────────────────
+// These mirror the finalized global tables super_admin, organization,
+// organization_invitation and organization_feature. Mock data only.
+
+export type OrgPlan = 'starter' | 'pro' | 'enterprise';
+export type OrgStatus = 'active' | 'pending' | 'inactive';
+
+export const ORG_PLANS: OrgPlan[] = ['enterprise', 'pro', 'starter'];
+export const ORG_STATUSES: OrgStatus[] = ['active', 'pending', 'inactive'];
+
+export function planLabel(plan: OrgPlan | string): string {
+  const p = String(plan).toLowerCase();
+  return p === 'enterprise' ? 'Enterprise' : p === 'pro' ? 'Pro' : 'Starter';
 }
 
+/** IANA time zone names (organization.timezone). */
+export const IANA_TIMEZONES = [
+  'Asia/Colombo',
+  'Asia/Kolkata',
+  'Asia/Singapore',
+  'Asia/Tokyo',
+  'Australia/Sydney',
+  'Europe/London',
+  'Europe/Berlin',
+  'America/New_York',
+  'America/Chicago',
+  'America/Los_Angeles',
+  'UTC',
+];
+
+/** users (global): only the columns the platform screens need. */
+export interface PlatformUser {
+  id: string;
+  name: string;
+  email: string;
+}
+
+/** super_admin: a person allowed into the Super Admin Dashboard. */
+export interface SuperAdminRecord {
+  id: string;
+  userId: string;
+  /** Empty for the first (seeded) Super Admin */
+  grantedByUserId?: string;
+  createdAt: string;
+  revokedAt?: string;
+}
+
+/** organization: the tenant itself. Member and project counts are counted, never stored. */
+export interface SuperAdminOrg {
+  id: string;
+  /** The Organization Owner; empty until the Owner accepts the invitation */
+  ownerUserId?: string;
+  /** The Super Admin who created it, or the Owner on accepting */
+  createdByUserId: string;
+  name: string;
+  slug: string;
+  description?: string;
+  industry: string;
+  website?: string;
+  plan: OrgPlan;
+  status: OrgStatus;
+  /** IANA name, e.g. Asia/Colombo */
+  timezone: string;
+  /** 'HH:mm' */
+  workingHoursStart: string;
+  workingHoursEnd: string;
+  createdAt: string;
+  updatedAt: string;
+  /** Deleted by the Super Admin (soft delete) */
+  deletedAt?: string;
+}
+
+/**
+ * organization_invitation: a Super Admin's invitation for an Owner to take over or create an
+ * organisation. Revoking sets status 'expired' and revokedAt; revokedAt tells the two apart.
+ */
 export interface SuperAdminOrgInvitation {
   id: string;
+  /** Set when the Super Admin created the organisation first, or once the Owner accepts */
+  organizationId?: string;
+  invitedByUserId: string;
+  acceptedByUserId?: string;
   organizationName: string;
+  ownerName: string;
   ownerEmail: string;
-  plan: string;
-  message?: string;
+  plan: OrgPlan;
   status: 'pending' | 'accepted' | 'expired';
+  /** Last time it was sent (moves on resend) */
   sentAt: string;
+  /** sentAt + 7 days */
   expiresAt: string;
+  acceptedAt?: string;
+  revokedAt?: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export const ORG_INVITE_VALID_DAYS = 7;
+
+/** How an organisation invitation reads in the UI: a pending one past expires_at counts as expired. */
+export function orgInviteDisplayStatus(
+  inv: SuperAdminOrgInvitation,
+  now = Date.now()
+): 'pending' | 'accepted' | 'expired' | 'revoked' {
+  if (inv.revokedAt) return 'revoked';
+  if (inv.status === 'pending' && new Date(inv.expiresAt).getTime() <= now) return 'expired';
+  return inv.status;
+}
+
+export type FeatureKey = 'teams' | 'contracts' | 'ai_agents' | 'srs_analysis';
+
+/** organization_feature: one switch per organisation and feature key. */
+export interface OrganizationFeature {
+  organizationId: string;
+  featureKey: FeatureKey;
+  isEnabled: boolean;
+  updatedByUserId: string;
+  updatedAt: string;
+}
+
+export const FEATURE_DEFINITIONS: { key: FeatureKey; label: string; description: string; defaultEnabled: boolean }[] = [
+  { key: 'teams', label: 'Teams', description: 'Teams directory, team cards and team pickers.', defaultEnabled: false },
+  { key: 'contracts', label: 'Contracts', description: 'Contracts as their own record type under Documents.', defaultEnabled: false },
+  { key: 'ai_agents', label: 'AI Agent Hub', description: 'AI coding-agent connections, tokens and activity (Phase 2).', defaultEnabled: true },
+  { key: 'srs_analysis', label: 'SRS analysis', description: 'Analyse uploaded SRS files into proposed tasks (Phase 2).', defaultEnabled: true },
+];
+
+/** The effective switches for one organisation: its organization_feature rows over the defaults. */
+export function featuresFor(organizationId: string | undefined, rows: OrganizationFeature[]): Record<FeatureKey, boolean> {
+  const result = Object.fromEntries(FEATURE_DEFINITIONS.map(f => [f.key, f.defaultEnabled])) as Record<FeatureKey, boolean>;
+  if (!organizationId) return result;
+  rows.filter(r => r.organizationId === organizationId).forEach(r => { result[r.featureKey] = r.isEnabled; });
+  return result;
 }
 
 // ─── Default System and Custom Roles ────────────────────────────────────────
@@ -77,6 +217,7 @@ export interface SuperAdminOrgInvitation {
 export const INITIAL_ROLES: CustomRole[] = [
   {
     id: 'role-owner',
+    roleTemplateId: 'rt-owner',
     name: 'Organization Owner',
     description: 'Full workspace authority, role creation, member invites, billing, and organizational AI controls.',
     isSystem: true,
@@ -92,6 +233,7 @@ export const INITIAL_ROLES: CustomRole[] = [
   },
   {
     id: 'role-pm',
+    roleTemplateId: 'rt-pm',
     name: 'Project Manager',
     description: 'Full project CRUD, milestones, timeline reports, sprint management, and team allocation.',
     isSystem: true,
@@ -107,6 +249,7 @@ export const INITIAL_ROLES: CustomRole[] = [
   },
   {
     id: 'role-team-lead',
+    roleTemplateId: 'rt-team-lead',
     name: 'Team Lead',
     description: 'Assigned project leadership, team execution visibility, and delivery coordination.',
     isSystem: false,
@@ -122,6 +265,7 @@ export const INITIAL_ROLES: CustomRole[] = [
   },
   {
     id: 'role-dev',
+    roleTemplateId: 'rt-dev',
     name: 'Developer',
     description: 'Assigned task execution, Kanban boards, sprint task delivery, and AI agent automation.',
     isSystem: false,
@@ -137,6 +281,7 @@ export const INITIAL_ROLES: CustomRole[] = [
   },
   {
     id: 'role-qa',
+    roleTemplateId: 'rt-qa',
     name: 'QA Tester',
     description: 'Defect verification, regression tracking, and test execution on assigned projects.',
     isSystem: false,
@@ -303,116 +448,194 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
 
 // ─── Initial Super Admin Organizations & Invitations ────────────────────────
 
+/** users rows for the people the platform screens refer to (mock reference data). */
+export const PLATFORM_USERS: PlatformUser[] = [
+  { id: 'demo-super-admin', name: 'Alex Thorne', email: 'superadmin@flashsign.com' },
+  { id: 'demo-owner', name: 'Aria Chen', email: 'owner@flashsign.com' },
+  { id: 'user-sarah', name: 'Sarah Chen', email: 'sarah.chen@acmedigital.com' },
+  { id: 'user-alex', name: 'Alex Rivera', email: 'alex.rivera@northstar.io' },
+  { id: 'user-david', name: 'David Kim', email: 'david@cloudscale.net' },
+];
+
+/** super_admin rows. The first Super Admin is seeded, so granted_by is empty. */
+export const INITIAL_SUPER_ADMINS: SuperAdminRecord[] = [
+  { id: 'sa-1', userId: 'demo-super-admin', createdAt: '2026-01-01T09:00:00Z' },
+];
+
+/** organization rows. Ids match the workspaces, so each record is that tenant. */
 export const INITIAL_SUPER_ADMIN_ORGS: SuperAdminOrg[] = [
   {
-    id: 'org-flash',
+    id: 'ws-flash',
+    ownerUserId: 'demo-owner',
+    createdByUserId: 'demo-super-admin',
     name: 'Flash Technologies',
     slug: 'flash-technologies',
-    plan: 'Enterprise',
+    description: 'Unified project management, digital agreements, and AI agent execution suite.',
     industry: 'Software & Technology',
-    size: '51–200 Employees',
-    ownerName: 'Aria Chen',
-    ownerEmail: 'owner@flashsign.com',
-    status: 'active',
-    memberCount: 52,
-    projectCount: 14,
     website: 'https://flashsign.com',
+    plan: 'enterprise',
+    status: 'active',
+    timezone: 'Asia/Colombo',
+    workingHoursStart: '09:00',
+    workingHoursEnd: '17:00',
     createdAt: '2026-01-15T09:00:00Z',
+    updatedAt: '2026-01-15T09:00:00Z',
   },
   {
-    id: 'org-acme',
+    id: 'ws-acme',
+    ownerUserId: 'user-sarah',
+    createdByUserId: 'demo-super-admin',
     name: 'Acme Digital',
     slug: 'acme-digital',
-    plan: 'Enterprise',
-    industry: 'Digital Engineering',
-    size: '51–200 Employees',
-    ownerName: 'Sarah Chen',
-    ownerEmail: 'sarah.chen@acmedigital.com',
-    status: 'active',
-    memberCount: 48,
-    projectCount: 12,
+    description: 'Enterprise digital engineering & cloud solutions group.',
+    industry: 'Software & Technology',
     website: 'https://acmedigital.io',
+    plan: 'enterprise',
+    status: 'active',
+    timezone: 'America/New_York',
+    workingHoursStart: '09:00',
+    workingHoursEnd: '17:00',
     createdAt: '2026-01-10T09:00:00Z',
+    updatedAt: '2026-01-10T09:00:00Z',
   },
   {
-    id: 'org-northstar',
+    id: 'ws-northstar',
+    ownerUserId: 'user-alex',
+    createdByUserId: 'demo-super-admin',
     name: 'Northstar Software',
     slug: 'northstar-sw',
-    plan: 'Pro',
+    description: 'B2B SaaS product studio building next-generation fintech tools.',
     industry: 'Financial Services & Fintech',
-    size: '11–50 Employees',
-    ownerName: 'Alex Rivera',
-    ownerEmail: 'alex.rivera@acmedigital.com',
-    status: 'active',
-    memberCount: 24,
-    projectCount: 7,
     website: 'https://northstar.io',
+    plan: 'pro',
+    status: 'active',
+    timezone: 'America/Los_Angeles',
+    workingHoursStart: '08:30',
+    workingHoursEnd: '17:30',
     createdAt: '2026-02-01T09:00:00Z',
+    updatedAt: '2026-02-01T09:00:00Z',
   },
   {
-    id: 'org-vertex',
+    id: 'ws-vertex',
+    createdByUserId: 'demo-super-admin',
     name: 'Vertex Labs',
     slug: 'vertex-labs',
-    plan: 'Starter',
+    description: 'Applied AI research & production agent orchestration laboratory.',
     industry: 'Consulting & Professional Services',
-    size: 'Just Me',
-    ownerName: 'Elena Rostova',
-    ownerEmail: 'elena.r@acmedigital.com',
-    status: 'pending',
-    memberCount: 16,
-    projectCount: 5,
     website: 'https://vertexlabs.ai',
+    plan: 'starter',
+    status: 'pending',
+    timezone: 'Europe/London',
+    workingHoursStart: '09:00',
+    workingHoursEnd: '17:00',
     createdAt: '2026-02-15T09:00:00Z',
+    updatedAt: '2026-02-15T09:00:00Z',
   },
   {
-    id: 'org-cloudscale',
+    id: 'ws-cloudscale',
+    ownerUserId: 'user-david',
+    createdByUserId: 'demo-super-admin',
     name: 'CloudScale Systems',
     slug: 'cloudscale-sys',
-    plan: 'Pro',
     industry: 'Cloud Infrastructure',
-    size: '11–50 Employees',
-    ownerName: 'David Kim',
-    ownerEmail: 'david@cloudscale.net',
-    status: 'inactive',
-    memberCount: 8,
-    projectCount: 2,
     website: 'https://cloudscale.net',
+    plan: 'pro',
+    status: 'inactive',
+    timezone: 'Asia/Singapore',
+    workingHoursStart: '09:00',
+    workingHoursEnd: '18:00',
     createdAt: '2026-03-01T09:00:00Z',
+    updatedAt: '2026-03-01T09:00:00Z',
   },
 ];
 
+/**
+ * Member and project counts per organisation. In production they are counted from the
+ * organisation's member and project rows (never stored on organization). The prototype only
+ * holds members and projects for Flash Technologies, so the others use these sample counts.
+ */
+export const MOCK_ORG_COUNTS: Record<string, { members: number; projects: number }> = {
+  'ws-acme': { members: 48, projects: 12 },
+  'ws-northstar': { members: 24, projects: 7 },
+  'ws-cloudscale': { members: 8, projects: 2 },
+};
+
+/** organization_invitation rows */
 export const INITIAL_SUPER_ADMIN_INVITATIONS: SuperAdminOrgInvitation[] = [
   {
-    id: 'inv-org-1',
-    organizationName: 'Quantum Dynamics',
-    ownerEmail: 'contact@quantumdynamics.io',
-    plan: 'Enterprise',
-    message: 'Invitation to onboard enterprise workspace on FlashSign.',
+    id: 'inv-org-vertex',
+    organizationId: 'ws-vertex',
+    invitedByUserId: 'demo-super-admin',
+    organizationName: 'Vertex Labs',
+    ownerName: 'Elena Rostova',
+    ownerEmail: 'elena.r@vertexlabs.ai',
+    plan: 'starter',
     status: 'pending',
-    sentAt: '2026-11-03T10:00:00Z',
-    expiresAt: '2026-11-10T10:00:00Z',
+    sentAt: '2026-11-10T09:00:00Z',
+    expiresAt: '2026-11-17T09:00:00Z',
+    createdAt: '2026-02-15T09:00:00Z',
+    updatedAt: '2026-11-10T09:00:00Z',
+  },
+  {
+    id: 'inv-org-1',
+    invitedByUserId: 'demo-super-admin',
+    organizationName: 'Quantum Dynamics',
+    ownerName: 'Noah Fernando',
+    ownerEmail: 'contact@quantumdynamics.io',
+    plan: 'enterprise',
+    status: 'pending',
+    sentAt: '2026-11-11T10:00:00Z',
+    expiresAt: '2026-11-18T10:00:00Z',
+    createdAt: '2026-11-11T10:00:00Z',
+    updatedAt: '2026-11-11T10:00:00Z',
   },
   {
     id: 'inv-org-2',
-    organizationName: 'Aura Health Systems',
-    ownerEmail: 'admin@aurahealth.org',
-    plan: 'Pro',
-    message: 'Welcome to FlashSign compliance and signature workspace.',
+    organizationId: 'ws-acme',
+    invitedByUserId: 'demo-super-admin',
+    acceptedByUserId: 'user-sarah',
+    organizationName: 'Acme Digital',
+    ownerName: 'Sarah Chen',
+    ownerEmail: 'sarah.chen@acmedigital.com',
+    plan: 'enterprise',
     status: 'accepted',
-    sentAt: '2026-10-25T08:30:00Z',
-    expiresAt: '2026-11-01T08:30:00Z',
+    sentAt: '2026-01-08T08:30:00Z',
+    expiresAt: '2026-01-15T08:30:00Z',
+    acceptedAt: '2026-01-10T09:00:00Z',
+    createdAt: '2026-01-08T08:30:00Z',
+    updatedAt: '2026-01-10T09:00:00Z',
   },
   {
     id: 'inv-org-3',
+    invitedByUserId: 'demo-super-admin',
     organizationName: 'Starlight Media',
+    ownerName: 'Maya Silva',
     ownerEmail: 'founders@starlight.co',
-    plan: 'Starter',
-    message: 'Join FlashSign to manage collaborative media delivery.',
-    status: 'expired',
+    plan: 'starter',
+    status: 'pending',
     sentAt: '2026-10-10T12:00:00Z',
     expiresAt: '2026-10-17T12:00:00Z',
+    createdAt: '2026-10-10T12:00:00Z',
+    updatedAt: '2026-10-10T12:00:00Z',
+  },
+  {
+    id: 'inv-org-4',
+    invitedByUserId: 'demo-super-admin',
+    organizationName: 'Harbor Logistics',
+    ownerName: 'Ishan Perera',
+    ownerEmail: 'ishan@harborlogistics.lk',
+    plan: 'pro',
+    status: 'expired',
+    sentAt: '2026-10-20T12:00:00Z',
+    expiresAt: '2026-10-27T12:00:00Z',
+    revokedAt: '2026-10-22T08:00:00Z',
+    createdAt: '2026-10-20T12:00:00Z',
+    updatedAt: '2026-10-22T08:00:00Z',
   },
 ];
+
+/** organization_feature rows. No row = the feature's default (FEATURE_DEFINITIONS). */
+export const INITIAL_ORGANIZATION_FEATURES: OrganizationFeature[] = [];
 
 // ─── Storage Keys ───────────────────────────────────────────────────────────
 
@@ -420,8 +643,10 @@ export const RBAC_STORAGE_KEYS = {
   CURRENT_USER: 'flashsign_rbac_current_user',
   CUSTOM_ROLES: 'flashsign_rbac_custom_roles',
   DEMO_ACCOUNTS: 'flashsign_rbac_demo_accounts',
-  SUPER_ADMIN_ORGS: 'flashsign_super_admin_orgs',
-  SUPER_ADMIN_INVITATIONS: 'flashsign_super_admin_invites',
+  SUPER_ADMIN_ORGS: 'flashsign_super_admin_orgs_v2',
+  SUPER_ADMIN_INVITATIONS: 'flashsign_super_admin_invites_v2',
+  SUPER_ADMINS: 'flashsign_super_admins',
+  ORGANIZATION_FEATURES: 'flashsign_organization_features',
 };
 
 // ─── Reusable Permission Checking Utilities ─────────────────────────────────

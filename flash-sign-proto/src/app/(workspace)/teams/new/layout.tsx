@@ -1,8 +1,6 @@
-import { redirect } from 'next/navigation';
-import { FEATURES } from '@/lib/features';
+import { FeatureGate } from '@/components/shared/feature-gate';
 
-// Hidden with the rest of the Teams feature (lib/features.ts)
+// Hidden with the rest of the Teams feature (organization_feature 'teams')
 export default function NewTeamLayout({ children }: { children: React.ReactNode }) {
-  if (!FEATURES.teams) redirect('/teams');
-  return children;
+  return <FeatureGate feature="teams" fallback="/teams">{children}</FeatureGate>;
 }

@@ -1,5 +1,5 @@
 import type {
-  CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
+  CalendarEvent, TimeOffRequest, Meeting, Announcement,
 } from '@/types';
 
 function d(offset: number, timeStr = '09:00:00'): string {
@@ -639,17 +639,3 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     createdAt: d(-12),
   },
 ];
-
-// ── Collaboration Settings ───────────────────────────────────────────────────
-export const MOCK_COLLABORATION_SETTINGS: CollaborationSettings = {
-  defaultCalendarView: 'month',
-  workingHoursStart: '09:00',
-  workingHoursEnd: '17:00',
-  timeZone: 'America/New_York (EST)',
-  weekStartDay: 'monday',
-  defaultPlanningView: 'calendar',
-  workloadThresholdHours: 40,
-  emailNotifications: true,
-  desktopNotifications: true,
-  weeklyDigest: true,
-};

@@ -32,9 +32,17 @@ export default function RolesManagementPage() {
     createRole,
     updateRole,
     deleteRole,
+    isRoleNameTaken,
   } = useDemoAuth();
 
-  // Guard: Must have Team Management role or be Owner
+  const [modalOpen, setModalOpen] = useState(false);
+  const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
+  const [deleteConfirmRoleId, setDeleteConfirmRoleId] = useState<string | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+
+  // Guard (after all hooks): Must have Team Management role or be Owner
   if (!canManageRoles(currentRbacUser)) {
     return (
       <AccessDenied
@@ -45,11 +53,6 @@ export default function RolesManagementPage() {
       />
     );
   }
-
-  const [modalOpen, setModalOpen] = useState(false);
-  const [editingRole, setEditingRole] = useState<CustomRole | null>(null);
-  const [deleteConfirmRoleId, setDeleteConfirmRoleId] = useState<string | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -81,9 +84,10 @@ export default function RolesManagementPage() {
   const handleDeleteRole = (id: string) => {
     const res = deleteRole(id);
     if (!res.success) {
-      alert(res.error);
+      setDeleteError(res.error ?? 'This role cannot be deleted.');
       return;
     }
+    setDeleteError(null);
     setDeleteConfirmRoleId(null);
     showToast('Role removed from workspace.');
   };
@@ -273,6 +277,7 @@ export default function RolesManagementPage() {
         onClose={() => setModalOpen(false)}
         onSave={handleSaveRole}
         initialRole={editingRole}
+        isNameTaken={isRoleNameTaken}
       />
 
       {/* Delete Confirmation Modal */}
@@ -286,10 +291,13 @@ export default function RolesManagementPage() {
             <p className="text-xs text-muted leading-relaxed">
               Are you sure you want to delete this custom role? This cannot be undone.
             </p>
+            {deleteError && (
+              <p className="text-xs text-danger font-medium" role="alert">{deleteError}</p>
+            )}
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
               <button
                 type="button"
-                onClick={() => setDeleteConfirmRoleId(null)}
+                onClick={() => { setDeleteConfirmRoleId(null); setDeleteError(null); }}
                 className="px-3.5 py-1.5 text-xs font-semibold rounded-lg border border-line text-muted hover:text-ink"
               >
                 Cancel

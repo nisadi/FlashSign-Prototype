@@ -8,7 +8,7 @@ import { useDemoAuth } from '@/context/demo-auth-context';
 import { canManageProjects } from '@/lib/rbac';
 import { AccessDenied } from '@/components/shared/access-denied';
 import { notify } from '@/components/shared/toaster';
-import type { ProjectStatus, ProjectPriority, ProjectHealth } from '@/types';
+import type { ProjectStatus, ProjectPriority, ProjectHealth, ProjectTemplate } from '@/types';
 import { ArrowLeft, ArrowRight, FolderKanban, Sparkles, Check, Users, Calendar, Flag, Shield, Layers, Rows3 } from 'lucide-react';
 import {
   PhasesStep, EpicsStep, StoriesStep, BoardsStep, draftEpicSpan, draftEpicWindow,
@@ -31,7 +31,7 @@ const ACCENT_COLORS = [
   { label: 'Amber Flame', value: '#f59e0b' },
 ];
 
-const TEMPLATES = [
+const TEMPLATES: { id: ProjectTemplate; name: string; description: string }[] = [
   { id: 'scrum', name: 'Agile Scrum Delivery', description: 'Sprint planning, capacity forecasting, and backlog refinement.' },
   { id: 'kanban', name: 'Continuous Kanban', description: 'Visual swimlanes with WIP limits and cycle time metrics.' },
   { id: 'esign', name: 'Document & E-Sign Pipeline', description: 'Legal approval workflows and cryptographic audit tracking.' },
@@ -93,8 +93,7 @@ export default function CreateProjectPage() {
   });
   const { start: startDate, end: endDate } = timeline;
   const duration = startDate && endDate ? diffCalendarDays(startDate, endDate) : 0;
-  const [template, setTemplate] = useState('scrum');
-  const [visibility, setVisibility] = useState('workspace');
+  const [template, setTemplate] = useState<ProjectTemplate>('scrum');
   const [goalText, setGoalText] = useState('');
   const [goals, setGoals] = useState<string[]>([
     'Ship MVP within planned sprint cadence',
@@ -232,12 +231,13 @@ export default function CreateProjectPage() {
       dueDate: new Date(endDate).toISOString(),
       progress: 0,
       priority,
-      tags: [template, visibility],
+      // project.template is its own column (it used to be stored as a tag)
+      template,
+      tags: [],
       accentColor,
       group,
       goals,
-      isFavorite: false,
-      isArchived: false,
+      nextTaskNumber: 1,
       // Timeline Baseline & Initial Calculated Values
       originalStartDate: startDate,
       originalEndDate: endDate,

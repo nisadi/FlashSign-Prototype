@@ -1,5 +1,5 @@
-import type { DemoInvitation, DemoRole } from '@/types/demo-auth';
-import { DEMO_ROLE_OPTIONS } from '@/types/demo-auth';
+import type { DemoInvitation } from '@/types/demo-auth';
+import type { CustomRole } from '@/lib/rbac';
 
 // Invitation links for the frontend prototype. The link carries the invitation itself
 // (base64url JSON), so it also opens in another browser or an incognito window, where this
@@ -7,11 +7,17 @@ import { DEMO_ROLE_OPTIONS } from '@/types/demo-auth';
 
 export const INVITE_VALID_DAYS = 7;
 
-/** Roles the owner can invite people as (the owner role itself isn't offered) */
-export const INVITABLE_ROLES = DEMO_ROLE_OPTIONS.filter(r => r.id !== 'executive');
+/**
+ * The organisation's roles an invitation can carry (invitation.role_id). The Organization Owner
+ * role is not offered: the Owner comes from the Super Admin's organisation invitation.
+ */
+export function invitableRoles(roles: CustomRole[]): CustomRole[] {
+  return roles.filter(r => r.id !== 'role-owner');
+}
 
-export function roleTitle(role: DemoRole): string {
-  return DEMO_ROLE_OPTIONS.find(r => r.id === role)?.title ?? role;
+/** The invitation's role name: looked up by role_id, falling back to the name it was sent with. */
+export function invitationRoleName(inv: Pick<DemoInvitation, 'roleId' | 'roleName'>, roles: CustomRole[] = []): string {
+  return roles.find(r => r.id === inv.roleId)?.name ?? inv.roleName ?? 'Member';
 }
 
 export function isInviteExpired(inv: Pick<DemoInvitation, 'expiresAt'>, now = Date.now()): boolean {

@@ -4,19 +4,18 @@ import React, { createContext, useContext, useEffect, useState, useCallback, use
 import type {
   DemoRole, User, Project, Task, Sprint, Document, ApprovalRequest,
   Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
-  CalendarEvent, TimeOffRequest, Meeting, Announcement, CollaborationSettings,
+  CalendarEvent, TimeOffRequest, Meeting, Announcement,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
-  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, TaskStatusChange, BoardColumn, Epic, Story, ProjectStructure,
+  AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, UserFavoriteProject, BaselineChange, TaskStatusChange, BoardColumn, Epic, Story, ProjectStructure,
 } from '@/types';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
   MOCK_APPROVALS, MOCK_NOTIFICATIONS, MOCK_AUDIT_LOGS, MOCK_AGENT_RUNS,
   MOCK_MILESTONES, MOCK_TEAMS, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG, MOCK_EPICS, MOCK_STORIES,
-  INITIAL_SRS_TASK_HISTORY,
+  INITIAL_SRS_TASK_HISTORY, MOCK_FAVORITE_PROJECTS,
 } from '@/data/mock-data';
 import {
   MOCK_CALENDAR_EVENTS, MOCK_TIME_OFF, MOCK_MEETINGS, MOCK_ANNOUNCEMENTS,
-  MOCK_COLLABORATION_SETTINGS,
 } from '@/data/mock-collaboration';
 import {
   MOCK_DOCUMENT_ITEMS, MOCK_FOLDERS, MOCK_TEMPLATES, MOCK_CONTRACTS,
@@ -33,7 +32,7 @@ import { DEFAULT_SIGNING_DEFAULTS, MOCK_COMPANY_SEALS } from '@/data/mock-signin
 import { MOCK_WORK_SESSIONS, MOCK_AGENT_EVENTS, DEFAULT_AGENT_SETTINGS, MOCK_AGENT_TOKENS, MOCK_STATUS_CHANGES } from '@/data/mock-agent-activity';
 import { applyAutoStops } from '@/lib/task-time';
 import {
-  MAIN_BOARD_ID, boardColumnsFor, boardOfTask, boardsSharingColumns, columnOfTask, projectBoards,
+  MAIN_BOARD_ID, boardColumnsFor, boardOfTask, boardsSharingColumns, columnOfTask, projectBoards, toHexColumnColor,
 } from '@/lib/board-columns';
 import { ROLE_CONFIGS } from '@/lib/permissions';
 import { FEATURES, FIXED_DEMO_ROLE } from '@/lib/features';
@@ -115,7 +114,6 @@ export interface AppState {
   timeOffRequests: TimeOffRequest[];
   meetings: Meeting[];
   announcements: Announcement[];
-  collaborationSettings: CollaborationSettings;
   savedSignatures: SavedSignature[];
   signingDefaults: SigningDefaults;
   companySeals: CompanySeal[];
@@ -126,6 +124,8 @@ export interface AppState {
   taskStatusChanges: TaskStatusChange[];
   sidebarCollapsed: boolean;
   recentProjectIds: string[];
+  /** user_favorite_project rows (personal favourites) */
+  favoriteProjects: UserFavoriteProject[];
   activeTaskDrawerId: string | null;
   srsTaskHistories: Record<string, SrsGeneratedTaskRecord[]>;
 }
@@ -401,6 +401,8 @@ function startParentOf(
 /**
  * The next key for a new task: the project's key and the next number (FSV2-112), or for a
  * subtask its task's key and the next number (FSV2-105-3).
+ * Top-level numbers come from the project's counter (project.next_task_number), which never
+ * goes back, so a deleted task's key is never handed out again.
  */
 function nextTaskKey(tasks: Task[], projects: Project[], projectId: string, parentId?: string): string {
   if (parentId) {
@@ -410,12 +412,25 @@ function nextTaskKey(tasks: Task[], projects: Project[], projectId: string, pare
       return `${parent.key}-${Math.max(0, ...nums) + 1}`;
     }
   }
-  const prefix = projects.find(p => p.id === projectId)?.key ?? 'TASK';
+  const project = projects.find(p => p.id === projectId);
+  const prefix = project?.key ?? 'TASK';
   const nums = tasks
     .filter(t => t.projectId === projectId && !t.parentId && t.key.startsWith(`${prefix}-`))
     .map(t => Number(t.key.slice(prefix.length + 1)))
     .filter(n => Number.isFinite(n));
-  return `${prefix}-${Math.max(0, ...nums) + 1}`;
+  return `${prefix}-${Math.max(project?.nextTaskNumber ?? 1, Math.max(0, ...nums) + 1)}`;
+}
+
+/** Moves each project's task counter past the keys just handed out (it never goes back). */
+function withTaskCounters(projects: Project[], added: Task[]): Project[] {
+  return projects.map(p => {
+    const nums = added
+      .filter(t => t.projectId === p.id && !t.parentId && t.key.startsWith(`${p.key}-`))
+      .map(t => Number(t.key.slice(p.key.length + 1)))
+      .filter(n => Number.isFinite(n));
+    if (nums.length === 0) return p;
+    return { ...p, nextTaskNumber: Math.max(p.nextTaskNumber ?? 1, Math.max(...nums) + 1) };
+  });
 }
 
 /** Re-derive the plan links of the tasks that match, after an epic or story changed */
@@ -516,8 +531,6 @@ interface AppActions {
   markAnnouncementRead: (id: string) => void;
   togglePinAnnouncement: (id: string) => void;
   deleteAnnouncement: (id: string) => void;
-  // Collaboration Settings
-  updateCollaborationSettings: (updates: Partial<CollaborationSettings>) => void;
   // Saved signatures, signing defaults & company seals
   saveSignature: (signature: SavedSignature) => void;
   deleteSignature: (userId: string) => void;
@@ -629,6 +642,8 @@ export type AppContextValue = AppState & AppActions & {
   trashedSignatureRequests: SignatureRequest[];
   /** False until the saved data has been read from the browser (first render uses the samples) */
   isHydrated: boolean;
+  /** The signed-in person's favourite projects (user_favorite_project) */
+  favoriteProjectIds: string[];
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -667,7 +682,6 @@ function getInitialState(): AppState {
     timeOffRequests: MOCK_TIME_OFF,
     meetings: MOCK_MEETINGS,
     announcements: MOCK_ANNOUNCEMENTS,
-    collaborationSettings: MOCK_COLLABORATION_SETTINGS,
     savedSignatures: [],
     signingDefaults: DEFAULT_SIGNING_DEFAULTS,
     companySeals: MOCK_COMPANY_SEALS,
@@ -678,9 +692,46 @@ function getInitialState(): AppState {
     taskStatusChanges: MOCK_STATUS_CHANGES,
     sidebarCollapsed: false,
     recentProjectIds: ['p1', 'p2', 'p3'],
+    favoriteProjects: MOCK_FAVORITE_PROJECTS,
     activeTaskDrawerId: null,
     srsTaskHistories: INITIAL_SRS_TASK_HISTORY,
   };
+}
+
+/**
+ * Brings a project saved by an older version of the prototype up to the finalized tables:
+ * isArchived → archivedAt, status 'archived' → 'active' + archivedAt, isFavorite dropped
+ * (favourites are per person now), old baseline entries → old/new dates.
+ */
+function migrateProject(p: Project): Project {
+  const legacy = p as unknown as Omit<Project, 'status'> & { isArchived?: boolean; isFavorite?: boolean; status: string };
+  const { isArchived, isFavorite: _fav, ...rest } = legacy;
+  void _fav;
+  const archived = isArchived || legacy.status === 'archived';
+  return {
+    ...rest,
+    status: (legacy.status === 'archived' ? 'active' : rest.status) as Project['status'],
+    archivedAt: rest.archivedAt ?? (archived ? rest.updatedAt : undefined),
+    boardColumns: rest.boardColumns?.map(c => ({ ...c, color: toHexColumnColor(c.color) })),
+    extraBoards: rest.extraBoards?.map(b => ({
+      ...b,
+      columns: b.columns?.map(c => ({ ...c, color: toHexColumnColor(c.color) })),
+    })),
+    baselineHistory: rest.baselineHistory?.map(b => {
+      const old = b as BaselineChange & { startDate?: string; endDate?: string };
+      return old.oldStartDate
+        ? b
+        : {
+            at: old.at,
+            byUserId: old.byUserId,
+            reason: old.reason,
+            oldStartDate: old.startDate ?? '',
+            oldEndDate: old.endDate ?? '',
+            newStartDate: old.startDate ?? '',
+            newEndDate: old.endDate ?? '',
+          };
+    }),
+  } as Project;
 }
 
 function loadState(): AppState {
@@ -692,7 +743,7 @@ function loadState(): AppState {
     const initial = getInitialState();
     const tasks = saved.tasks && saved.tasks.length > 0 ? saved.tasks : initial.tasks;
     const milestones = saved.milestones && saved.milestones.length > 0 ? saved.milestones : initial.milestones;
-    const rawProjects = saved.projects && saved.projects.length > 0 ? saved.projects : initial.projects;
+    const rawProjects = (saved.projects && saved.projects.length > 0 ? saved.projects : initial.projects).map(migrateProject);
     const hydratedProjects = rawProjects.map(p => calculateProjectTimeline(p, tasks, milestones, saved.taskStatusChanges ?? initial.taskStatusChanges));
 
     return {
@@ -732,7 +783,6 @@ function saveState(state: AppState): void {
       timeOffRequests: state.timeOffRequests,
       meetings: state.meetings,
       announcements: state.announcements,
-      collaborationSettings: state.collaborationSettings,
       savedSignatures: state.savedSignatures,
       signingDefaults: state.signingDefaults,
       companySeals: state.companySeals,
@@ -749,6 +799,7 @@ function saveState(state: AppState): void {
       documentFolders: state.documentFolders,
       sidebarCollapsed: state.sidebarCollapsed,
       recentProjectIds: state.recentProjectIds,
+      favoriteProjects: state.favoriteProjects,
       srsTaskHistories: state.srsTaskHistories,
     };
     localStorage.setItem(STORAGE_KEY, JSON.stringify(toSave));
@@ -887,7 +938,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         color: userColor,
         isActive: true,
         projectIds: currentRbacUser?.assignedProjectIds || ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
-        timeZone: authUser?.timezone || 'America/New_York (EST)',
+        // users has no time zone column: keep the member's existing value (org_member data, not in scope)
+        timeZone: prev.users[existingUserIdx]?.timeZone,
         createdAt: authUser?.createdAt || new Date().toISOString(),
       };
 
@@ -949,8 +1001,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         tags: p.tags || [],
         category: p.category,
         group: p.group,
-        isFavorite: p.isFavorite,
-        isArchived: p.isArchived,
+        template: p.template,
+        archivedAt: p.archivedAt,
+        nextTaskNumber: p.nextTaskNumber ?? 1,
         accentColor: p.accentColor,
         goals: p.goals,
         boardColumns: p.boardColumns,
@@ -1050,15 +1103,25 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       sprints: s.sprints.filter(sp => sp.projectId !== id),
       milestones: s.milestones.filter(m => m.projectId !== id),
       recentProjectIds: s.recentProjectIds.filter(pid => pid !== id),
+      favoriteProjects: s.favoriteProjects.filter(f => f.projectId !== id),
     })),
     archiveProject: (id) => update(s => ({
       ...s,
-      projects: s.projects.map(p => p.id === id ? { ...p, isArchived: !p.isArchived, updatedAt: new Date().toISOString() } : p),
+      // project.archived_at: set to archive, cleared to unarchive
+      projects: s.projects.map(p => p.id === id
+        ? { ...p, archivedAt: p.archivedAt ? undefined : new Date().toISOString(), updatedAt: new Date().toISOString() }
+        : p),
     })),
-    toggleFavoriteProject: (id) => update(s => ({
-      ...s,
-      projects: s.projects.map(p => p.id === id ? { ...p, isFavorite: !p.isFavorite } : p),
-    })),
+    toggleFavoriteProject: (id) => update(s => {
+      // user_favorite_project: unique (user_id, project_id), one row per person
+      const mine = s.favoriteProjects.find(f => f.userId === s.currentUserId && f.projectId === id);
+      return {
+        ...s,
+        favoriteProjects: mine
+          ? s.favoriteProjects.filter(f => f !== mine)
+          : [...s.favoriteProjects, { id: `fav-${Date.now()}`, userId: s.currentUserId, projectId: id, createdAt: new Date().toISOString() }],
+      };
+    }),
     addRecentProject: (id) => update(s => {
       if (s.recentProjectIds && s.recentProjectIds[0] === id) return s;
       return {
@@ -1110,7 +1173,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       const projectTasks = nextTasks.filter(item => item.projectId === newTask.projectId);
       const progress = progressOfTasks(projectTasks);
       
-      const nextProjects = s.projects.map(p => {
+      const nextProjects = withTaskCounters(s.projects, [newTask]).map(p => {
         if (p.id !== newTask.projectId) return p;
         const updatedP = { ...p, progress, updatedAt: new Date().toISOString() };
         return calculateProjectTimeline(updatedP, nextTasks, s.milestones, s.taskStatusChanges);
@@ -1168,7 +1231,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
 
       const nextTasks = [...addedTasks, ...s.tasks];
       const affectedProjectIds = Array.from(new Set(newTaskList.map(t => t.projectId)));
-      const nextProjects = s.projects.map(p => {
+      const nextProjects = withTaskCounters(s.projects, addedTasks).map(p => {
         if (!affectedProjectIds.includes(p.id)) return p;
         const projectTasks = nextTasks.filter(item => item.projectId === p.id);
         const progress = progressOfTasks(projectTasks);
@@ -1978,12 +2041,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteAnnouncement: (id) => update(s => ({
       ...s,
       announcements: s.announcements.filter(a => a.id !== id),
-    })),
-
-    // Collaboration Settings
-    updateCollaborationSettings: (updates) => update(s => ({
-      ...s,
-      collaborationSettings: { ...s.collaborationSettings, ...updates },
     })),
 
     // Saved signatures (one per person, replaced on save)
@@ -3172,6 +3229,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       trashedSignatureRequests: visible.filter(r => r.deletedAt && r.senderId === state.currentUserId),
       allSignatureRequests: state.signatureRequests,
       isHydrated: hydrated,
+      favoriteProjectIds: state.favoriteProjects.filter(f => f.userId === state.currentUserId).map(f => f.projectId),
     };
   }, [state, actions, hydrated]);
 
@@ -3247,10 +3305,6 @@ export function useMeetings() {
 
 export function useAnnouncements() {
   return useApp().announcements;
-}
-
-export function useCollaborationSettings() {
-  return useApp().collaborationSettings;
 }
 
 export function useDocumentItems() {

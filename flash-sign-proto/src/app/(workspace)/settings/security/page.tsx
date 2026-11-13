@@ -1,7 +1,10 @@
 'use client';
 
 import React, { useState } from 'react';
-import { KeyRound, ShieldCheck, Monitor } from 'lucide-react';
+import { KeyRound, ShieldCheck, Monitor, Smartphone, LogOut } from 'lucide-react';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { formatDate } from '@/lib/utils';
+import { useNow } from '@/lib/use-now';
 import { PasswordInput } from '@/components/auth/password-input';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { resetPasswordSchema } from '@/lib/auth-validation';
@@ -10,6 +13,13 @@ import {
 } from '@/components/settings/settings-layout';
 
 export default function SecuritySettingsPage() {
+  const { sessions, revokeSession, revokeOtherSessions } = useDemoAuth();
+  const now = useNow() ?? 0;
+  // session rows that still work: not revoked and not past expires_at
+  const activeSessions = sessions
+    .filter(x => !x.revokedAt && new Date(x.expiresAt).getTime() > now)
+    .sort((a, b) => Number(!!b.isCurrent) - Number(!!a.isCurrent) || b.lastSeenAt.localeCompare(a.lastSeenAt));
+  const otherCount = activeSessions.filter(x => !x.isCurrent).length;
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [confirm, setConfirm] = useState('');
@@ -32,7 +42,9 @@ export default function SecuritySettingsPage() {
     setErrors(found);
     if (Object.keys(found).length > 0) return;
 
-    // Demo: there is no auth backend in the prototype, so nothing is stored
+    // Demo: there is no auth backend in the prototype, so nothing is stored.
+    // Changing the password ends the person's other sessions (session.revoked_at).
+    revokeOtherSessions();
     setCurrent('');
     setNext('');
     setConfirm('');
@@ -71,16 +83,61 @@ export default function SecuritySettingsPage() {
         />
       </SettingsCard>
 
-      <SettingsCard title="Where you're signed in" icon={Monitor}>
-        <div className="flex items-center justify-between gap-3 p-3 rounded-lg bg-paper border border-line">
-          <div>
-            <p className="font-semibold text-ink">This browser</p>
-            <p className="text-muted">Active now</p>
-          </div>
-          <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-            Current session
-          </span>
-        </div>
+      <SettingsCard
+        title="Where you're signed in"
+        description="Sessions that are still signed in. Signing one out ends it straight away."
+        icon={Monitor}
+        footer={
+          otherCount > 0 ? (
+            <button
+              type="button"
+              onClick={revokeOtherSessions}
+              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-line text-ink hover:text-danger hover:bg-danger/10 font-semibold"
+            >
+              <LogOut className="w-3.5 h-3.5" /> Sign out of all other sessions ({otherCount})
+            </button>
+          ) : undefined
+        }
+      >
+        {activeSessions.length === 0 ? (
+          <p className="text-muted">No active sessions.</p>
+        ) : (
+          <ul className="space-y-2">
+            {activeSessions.map(sess => {
+              const mobile = /iphone|android|mobile/i.test(sess.userAgent);
+              const Icon = mobile ? Smartphone : Monitor;
+              return (
+                <li key={sess.id} className="flex items-center justify-between gap-3 p-3 rounded-lg bg-paper border border-line">
+                  <div className="flex items-start gap-3 min-w-0">
+                    <Icon className="w-4 h-4 text-muted mt-0.5 shrink-0" />
+                    <div className="min-w-0">
+                      <p className="font-semibold text-ink truncate">{sess.userAgent}</p>
+                      <p className="text-muted">
+                        IP {sess.ipAddress} · {sess.isCurrent ? 'Active now' : `Last active ${formatDate(sess.lastSeenAt)}`}
+                      </p>
+                      <p className="text-[11px] text-muted">
+                        Signed in {formatDate(sess.createdAt)} · {sess.rememberMe ? 'Remembered' : 'Not remembered'} · expires {formatDate(sess.expiresAt)}
+                      </p>
+                    </div>
+                  </div>
+                  {sess.isCurrent ? (
+                    <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20 shrink-0">
+                      Current session
+                    </span>
+                  ) : (
+                    <button
+                      type="button"
+                      onClick={() => revokeSession(sess.id)}
+                      className="shrink-0 px-2.5 py-1 rounded-md border border-line text-muted hover:text-danger hover:bg-danger/10 font-semibold"
+                    >
+                      Sign out
+                    </button>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
       </SettingsCard>
     </SettingsPage>
   );

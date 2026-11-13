@@ -32,8 +32,10 @@ export interface User {
   skills?: string[];
   availability?: 'available' | 'busy' | 'focus_time' | 'out_of_office';
   weeklyCapacity?: number;
-  /** Profile details edited in Settings > Profile */
+  /** Profile details edited in Settings > Profile (users.bio, users.company) */
+  bio?: string;
   company?: string;
+  /** Not in the finalized users table; kept because SRS FR-AUTH-003 asks for them (see Frontend_Changes_List.md §9) */
   phone?: string;
   address?: string;
   createdAt: string;
@@ -53,7 +55,10 @@ export interface Organization {
 
 // ─── Projects ───────────────────────────────────────────────────────────────
 
-export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled' | 'archived';
+/** project.status. Archiving is separate: a project is archived when archivedAt is set. */
+export type ProjectStatus = 'planning' | 'active' | 'on_hold' | 'completed' | 'cancelled';
+/** project.template: the template the project was created from */
+export type ProjectTemplate = 'scrum' | 'kanban' | 'esign' | 'agent';
 export type ProjectHealth = 'on_track' | 'at_risk' | 'off_track' | 'delayed';
 export type ProjectPriority = 'low' | 'medium' | 'high' | 'critical';
 /**
@@ -93,11 +98,17 @@ export interface Project {
   priority: ProjectPriority;
   tags: string[];
   category?: string;
-  isFavorite?: boolean;
-  isArchived?: boolean;
+  /** project.template */
+  template?: ProjectTemplate;
+  /** project.archived_at: archived = this is set */
+  archivedAt?: string;
+  /** project.next_task_number: counter for task keys; never goes back, so keys are never reused */
+  nextTaskNumber?: number;
   icon?: string;
   accentColor?: string;
+  /** project_goal rows, in sort_order */
   goals?: string[];
+  /** project.project_group */
   group?: string;
   /** This project's Kanban columns, in board order. Missing = the five default columns. */
   boardColumns?: BoardColumn[];
@@ -123,17 +134,35 @@ export interface Project {
   structure?: ProjectStructure;
   /** 'auto' (default): health follows the timeline. 'manual': someone set it in Settings. */
   healthMode?: 'auto' | 'manual';
-  /** Earlier baselines, kept when someone re-baselines the original plan */
+  /** baseline_change rows: kept when someone re-baselines the original plan */
   baselineHistory?: BaselineChange[];
 }
 
+/** baseline_change */
 export interface BaselineChange {
+  /** created_at */
   at: string;
+  /** changed_by_user_id */
   byUserId: string;
-  reason: string;
-  /** The baseline as it was before this change */
-  startDate: string;
-  endDate: string;
+  /** The baseline before the change (old_start_date, old_end_date) */
+  oldStartDate: string;
+  oldEndDate: string;
+  /** The baseline after the change (new_start_date, new_end_date) */
+  newStartDate: string;
+  newEndDate: string;
+  /**
+   * Not in the finalized baseline_change table; SRS FR-PLAN-002 makes it mandatory.
+   * Kept in the prototype until the conflict is resolved (Frontend_Changes_List.md §9).
+   */
+  reason?: string;
+}
+
+/** user_favorite_project: favourites are personal, one row per person and project */
+export interface UserFavoriteProject {
+  id: string;
+  userId: string;
+  projectId: string;
+  createdAt: string;
 }
 
 /**
@@ -478,7 +507,10 @@ export interface Notification {
   userId: string;
   title: string;
   body: string;
-  type: 'task' | 'document' | 'agent' | 'approval' | 'system';
+  /** notification.type */
+  type: 'task' | 'document' | 'signature' | 'agent' | 'approval' | 'meeting' | 'time_off' | 'announcement' | 'system';
+  /** notification.notification_event_id (by event key) */
+  eventKey?: string;
   isRead: boolean;
   link?: string;
   createdAt: string;
@@ -486,15 +518,26 @@ export interface Notification {
 
 // ─── Audit Log ───────────────────────────────────────────────────────────────
 
+/** activity_log.category */
+export type ActivityCategory =
+  | 'project' | 'task' | 'time' | 'planning' | 'team' | 'member' | 'role'
+  | 'document' | 'contract' | 'agreement' | 'agent' | 'settings' | 'security';
+
 export interface AuditLog {
   id: string;
   actorId: string;
   actorName: string;
+  /** activity_log.category; missing = worked out from the action ("task.moved" → task) */
+  category?: ActivityCategory;
   action: string;
+  /** activity_log.resource_type */
   resource: string;
   resourceId: string;
+  /** activity_log.project_id */
+  projectId?: string;
   detail?: string;
   ipAddress?: string;
+  userAgent?: string;
   timestamp: string;
 }
 

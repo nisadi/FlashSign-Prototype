@@ -1,29 +1,49 @@
 import type { DemoRole } from '@/types';
+import { FEATURE_DEFINITIONS, type FeatureKey } from '@/lib/rbac';
 
 /**
- * Feature switches for parts of the prototype that are hidden but kept in the code.
- * Flip a value to true to bring that feature back everywhere it appears.
+ * Feature switches per organisation (finalized table `organization_feature`).
+ *
+ * The switches are no longer hard-coded: the Super Admin turns them on or off per organisation
+ * (Super Admin Dashboard › organisation details › Features), and the demo-auth context pushes
+ * the active organisation's switches in here with `setActiveOrganizationFeatures`. A feature with
+ * no organization_feature row uses its default from FEATURE_DEFINITIONS.
+ *
+ * `FEATURES.teams` etc. keep working everywhere they are read; they now return the active
+ * organisation's value.
  */
+const DEFAULTS = Object.fromEntries(FEATURE_DEFINITIONS.map(f => [f.key, f.defaultEnabled])) as Record<FeatureKey, boolean>;
+
+let active: Record<FeatureKey, boolean> = { ...DEFAULTS };
+
+/** Called by the demo-auth context whenever the active organisation or its switches change. */
+export function setActiveOrganizationFeatures(features: Record<FeatureKey, boolean>): void {
+  active = { ...DEFAULTS, ...features };
+}
+
 export const FEATURES = {
+  /** Teams ("squads"): the Teams Directory, team cards, team badges, filters and pickers. */
+  get teams(): boolean {
+    return active.teams;
+  },
+  /** Contracts as a separate record type under Documents. */
+  get contracts(): boolean {
+    return active.contracts;
+  },
+  /** AI Agent Hub (Phase 2). */
+  get aiAgents(): boolean {
+    return active.ai_agents;
+  },
+  /** SRS analysis of uploaded project files (Phase 2). */
+  get srsAnalysis(): boolean {
+    return active.srs_analysis;
+  },
   /**
-   * Teams ("squads"): the Teams Directory, team cards and Create Team, team badges
-   * on members, team filters and team pickers. Off while the organisation is small;
-   * team data in the store is untouched.
-   */
-  teams: false,
-  /**
-   * Contracts as a separate record type: the Contracts tab under Documents, linking
-   * a contract to a signature request, and contract counts in Agreements reports.
-   * Off because everything here is simply a document to sign; contract data in the
-   * store is untouched.
-   */
-  contracts: false,
-  /**
-   * The "Role: …" demo persona switcher in the sidebar. Off for the stakeholder demo:
-   * the app always runs as FIXED_DEMO_ROLE. Turn on to switch roles again.
+   * The "Role: …" demo persona switcher in the sidebar. A prototype-only switch (not an
+   * organisation feature); off for the stakeholder demo.
    */
   roleSwitcher: false,
-} as const;
+};
 
 /** The role the app runs as while the role switcher is off (Owner / CEO). */
 export const FIXED_DEMO_ROLE: DemoRole = 'ceo';

@@ -26,7 +26,7 @@ export default function ProfileSettingsPage() {
   const user = useCurrentUser();
   const [saved, flashSaved] = useSavedFlash();
 
-  const [form, setForm] = useState({ name: '', title: '', department: '', company: '', phone: '', address: '', avatar: '' });
+  const [form, setForm] = useState({ name: '', title: '', department: '', company: '', bio: '', phone: '', address: '', avatar: '' });
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Load the signed-in user's details (and reload when the demo role switches user)
@@ -38,6 +38,7 @@ export default function ProfileSettingsPage() {
       title: user.title ?? '',
       department: user.department ?? '',
       company: user.company ?? '',
+      bio: user.bio ?? '',
       phone: user.phone ?? '',
       address: user.address ?? '',
       avatar: user.avatar ?? '',
@@ -50,7 +51,8 @@ export default function ProfileSettingsPage() {
     setForm(f => ({ ...f, [key]: e.target.value }));
 
   const phoneProblem = phoneError(form.phone);
-  const canSave = form.name.trim().length > 0 && !phoneProblem;
+  const bioProblem = form.bio.length > 240 ? 'Keep your bio to 240 characters or fewer.' : null;
+  const canSave = form.name.trim().length > 0 && !phoneProblem && !bioProblem;
 
   const handlePhoto = (file: File | undefined) => {
     setPhotoError(null);
@@ -71,6 +73,7 @@ export default function ProfileSettingsPage() {
       title: form.title.trim() || undefined,
       department: form.department.trim() || undefined,
       company: form.company.trim() || undefined,
+      bio: form.bio.trim() || undefined,
       phone: form.phone.trim() || undefined,
       address: form.address.trim() || undefined,
       avatar: form.avatar || undefined,
@@ -135,6 +138,9 @@ export default function ProfileSettingsPage() {
         </div>
         <Field label="Address">
           <textarea className={inputClass} rows={2} value={form.address} onChange={set('address')} />
+        </Field>
+        <Field label="Bio" hint={`${form.bio.length}/240 · A short line about you, shown on your profile.`} error={bioProblem}>
+          <textarea className={inputClass} rows={2} value={form.bio} onChange={set('bio')} placeholder="e.g. Frontend lead for the e-sign product" />
         </Field>
       </SettingsCard>
     </SettingsPage>

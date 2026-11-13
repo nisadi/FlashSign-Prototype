@@ -3,14 +3,16 @@
 import React, { useMemo, useState } from 'react';
 import { Copy, Check, RotateCw, XCircle, ExternalLink, MailPlus, Clock, AlertTriangle } from 'lucide-react';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { daysLeftText, inviteLink, isInviteExpired, roleTitle } from '@/lib/invitations';
+import { daysLeftText, inviteLink, invitationRoleName, isInviteExpired } from '@/lib/invitations';
+import { useApp } from '@/context/app-context';
 import { formatDate } from '@/lib/utils';
 import { Modal } from '@/components/shared/modal';
 import type { DemoInvitation } from '@/types/demo-auth';
 
 /** Members > Invited: people who have been invited but haven't created their account yet. */
 export function InvitationsList({ onInvite, canManage }: { onInvite: () => void; canManage: boolean }) {
-  const { invitations, selectedWorkspace, resendInvitation, revokeInvitation } = useDemoAuth();
+  const { invitations, selectedWorkspace, resendInvitation, revokeInvitation, roles } = useDemoAuth();
+  const { projects } = useApp();
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toRevoke, setToRevoke] = useState<DemoInvitation | null>(null);
 
@@ -59,6 +61,7 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
               <tr>
                 <th className="py-3 px-4">Invited person</th>
                 <th className="py-3 px-4">Role</th>
+                <th className="py-3 px-4">Projects</th>
                 <th className="py-3 px-4">Invited by</th>
                 <th className="py-3 px-4">Sent</th>
                 <th className="py-3 px-4">Status</th>
@@ -82,8 +85,15 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
                       </div>
                     </td>
                     <td className="py-3 px-4">
-                      <p className="font-semibold text-ink">{inv.jobTitle ?? roleTitle(inv.role)}</p>
-                      <p className="text-[10px] text-muted">{[inv.jobTitle && roleTitle(inv.role), inv.department].filter(Boolean).join(' · ')}</p>
+                      <p className="font-semibold text-ink">{invitationRoleName(inv, roles)}</p>
+                      <p className="text-[10px] text-muted">{[inv.jobTitle, inv.department].filter(Boolean).join(' · ')}</p>
+                    </td>
+                    <td className="py-3 px-4 text-muted max-w-[180px]">
+                      {inv.projectIds.length === 0 ? (
+                        <span title="Management roles see every project">All projects</span>
+                      ) : (
+                        <span className="line-clamp-2">{inv.projectIds.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')}</span>
+                      )}
                     </td>
                     <td className="py-3 px-4 text-ink">{inv.invitedByName}</td>
                     <td className="py-3 px-4 text-muted whitespace-nowrap">{formatDate(inv.sentAt)}</td>

@@ -13,18 +13,6 @@ import { useDemoAuth } from '@/context/demo-auth-context';
 import { type DemoRole } from '@/types/demo-auth';
 import { ArrowLeft, ArrowRight, User } from 'lucide-react';
 
-const TIMEZONE_OPTIONS = [
-  'America/New_York (UTC-5)',
-  'America/Chicago (UTC-6)',
-  'America/Denver (UTC-7)',
-  'America/Los_Angeles (UTC-8)',
-  'Europe/London (UTC+0)',
-  'Europe/Paris (UTC+1)',
-  'Asia/Tokyo (UTC+9)',
-  'Asia/Singapore (UTC+8)',
-  'Australia/Sydney (UTC+11)',
-];
-
 const DEPARTMENT_OPTIONS = [
   'Product & Design',
   'Engineering',
@@ -58,7 +46,6 @@ export default function ProfileSetupPage() {
       fullName: currentUser.fullName || '',
       jobTitle: currentUser.jobTitle || 'Product Manager',
       department: currentUser.department || 'Product & Design',
-      timezone: currentUser.timezone || 'America/New_York (UTC-5)',
       bio: currentUser.bio || '',
       role: currentUser.role || 'project_manager',
       avatarColor: currentUser.avatarColor || '#00c2a8',
@@ -86,7 +73,6 @@ export default function ProfileSetupPage() {
       fullName: data.fullName,
       jobTitle: data.jobTitle,
       department: data.department,
-      timezone: data.timezone,
       bio: data.bio,
       role: selectedRole,
       avatarColor,
@@ -158,7 +144,7 @@ export default function ProfileSetupPage() {
           </div>
         </div>
 
-        {/* Department & Timezone */}
+        {/* Department */}
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label className="block text-xs font-semibold text-[var(--ink)] mb-1.5">
@@ -171,22 +157,6 @@ export default function ProfileSetupPage() {
               {DEPARTMENT_OPTIONS.map((d) => (
                 <option key={d} value={d}>
                   {d}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <label className="block text-xs font-semibold text-[var(--ink)] mb-1.5">
-              Primary Timezone <span className="text-[var(--danger)]">*</span>
-            </label>
-            <select
-              {...register('timezone')}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--line)] bg-[var(--paper-elevated)] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--flash)]"
-            >
-              {TIMEZONE_OPTIONS.map((tz) => (
-                <option key={tz} value={tz}>
-                  {tz}
                 </option>
               ))}
             </select>

@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { use, useState } from 'react';
 import Link from 'next/link';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,9 +10,16 @@ import { PasswordInput } from '@/components/auth/password-input';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { PrototypeNotice } from '@/components/shared/prototype-notice';
 import { resetPasswordSchema, type ResetPasswordFormData } from '@/lib/auth-validation';
-import { ArrowLeft, CheckCircle2, Loader2, ArrowRight } from 'lucide-react';
+import { ArrowLeft, CheckCircle2, Loader2, ArrowRight, KeyRound } from 'lucide-react';
 
-export default function ResetPasswordPage() {
+export default function ResetPasswordPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ email?: string; verified?: string }>;
+}) {
+  // Reached from Forgot Password once the 6-digit code (verification_code) was accepted
+  const { email, verified } = use(searchParams);
+  const codeVerified = verified === '1' && !!email;
   const [isSuccess, setIsSuccess] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -56,14 +63,33 @@ export default function ResetPasswordPage() {
             <FlashSignLogo showBadge size="md" />
           </div>
 
-          {!isSuccess ? (
+          {!codeVerified && !isSuccess ? (
+            <div className="text-center py-2 space-y-4">
+              <div className="w-12 h-12 rounded-full bg-[var(--mist)] flex items-center justify-center mx-auto">
+                <KeyRound className="w-6 h-6 text-[var(--muted)]" />
+              </div>
+              <div>
+                <h2 className="text-xl font-bold text-[var(--ink)]">Verify your email first</h2>
+                <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
+                  To set a new password, request a 6-digit code and enter it on the Forgot Password page.
+                </p>
+              </div>
+              <Link
+                href="/forgot-password"
+                className="w-full py-2.5 px-4 rounded-lg bg-[var(--flash-deep)] hover:bg-[var(--flash)] text-white font-semibold text-xs shadow-sm flex items-center justify-center gap-2 transition-all"
+              >
+                <span>Get a code</span>
+                <ArrowRight className="w-4 h-4" />
+              </Link>
+            </div>
+          ) : !isSuccess ? (
             <>
               <div className="text-center mb-6">
                 <h1 className="text-2xl font-bold text-[var(--ink)] tracking-tight">
                   Set new password
                 </h1>
                 <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
-                  Choose a robust password to test Flash Sign&apos;s client-side password verification.
+                  Choose a new password for <strong className="text-[var(--ink)]">{email}</strong>.
                 </p>
               </div>
 
@@ -132,10 +158,10 @@ export default function ResetPasswordPage() {
 
               <div>
                 <h2 className="text-xl font-bold text-[var(--ink)]">
-                  Password Updated (Simulated)
+                  Password updated
                 </h2>
                 <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
-                  Your new demo password was verified locally. You can now return to the login screen and enter any credentials to access the workspace.
+                  Your password was changed and you were signed out on all your other devices. Sign in with your new password.
                 </p>
               </div>
 

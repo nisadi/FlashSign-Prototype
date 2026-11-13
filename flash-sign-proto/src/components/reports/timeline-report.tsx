@@ -257,7 +257,12 @@ export function TimelineReport({ projectId }: { projectId: string }) {
               <p className="text-sm text-ink">
                 Re-planned <span className="font-semibold">{summary.replans} time{summary.replans === 1 ? '' : 's'}</span>
               </p>
-              {lastReplan && <p className="text-[11px] text-ink-soft truncate" title={lastReplan.reason}>Last: {formatDate(lastReplan.at)}, &quot;{lastReplan.reason}&quot;</p>}
+              {lastReplan && (
+                <p className="text-[11px] text-ink-soft truncate" title={lastReplan.reason}>
+                  Last: {formatDate(lastReplan.at)}, end {formatDate(lastReplan.oldEndDate)} → {formatDate(lastReplan.newEndDate)}
+                  {lastReplan.reason && <>, &quot;{lastReplan.reason}&quot;</>}
+                </p>
+              )}
             </>
           ) : (
             <p className="text-sm text-ink">Original plan, not changed</p>

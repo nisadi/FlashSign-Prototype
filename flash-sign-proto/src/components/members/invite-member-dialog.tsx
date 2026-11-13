@@ -5,8 +5,8 @@ import { Send, Copy, Check, Mail, UserPlus, X, CheckCircle2 } from 'lucide-react
 import { Modal } from '@/components/shared/modal';
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { INVITABLE_ROLES, INVITE_VALID_DAYS, inviteLink, roleTitle } from '@/lib/invitations';
-import type { DemoInvitation, DemoRole } from '@/types/demo-auth';
+import { INVITE_VALID_DAYS, inviteLink, invitableRoles, invitationRoleName } from '@/lib/invitations';
+import type { DemoInvitation } from '@/types/demo-auth';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -21,8 +21,7 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   const [email, setEmail] = useState('');
   const [fullName, setFullName] = useState('');
   const [selectedRoleId, setSelectedRoleId] = useState<string>('role-dev');
-  const [assignedProjectIds, setAssignedProjectIds] = useState<string[]>(['p1']);
-  const [role, setRole] = useState<DemoRole>('developer');
+  const [assignedProjectIds, setAssignedProjectIds] = useState<string[]>([]);
   const [jobTitle, setJobTitle] = useState('');
   const [department, setDepartment] = useState('');
   const [message, setMessage] = useState('');
@@ -30,7 +29,11 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   const [sent, setSent] = useState<DemoInvitation | null>(null);
   const [copied, setCopied] = useState(false);
 
-  const selectedCustomRole = roles.find(r => r.id === selectedRoleId) || roles[0];
+  // invitation.role_id: one of this organisation's roles, never the Organization Owner role
+  const roleOptions = invitableRoles(roles);
+  const selectedCustomRole = roleOptions.find(r => r.id === selectedRoleId) ?? roleOptions[0];
+  // Archived projects can't take new members
+  const assignableProjects = projects.filter(p => !p.archivedAt);
 
   const departments = Array.from(new Set(users.map(u => u.department).filter(Boolean))) as string[];
   const inviter = currentUser?.fullName ?? 'Your workspace owner';
@@ -39,7 +42,8 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   const reset = () => {
     setEmail('');
     setFullName('');
-    setRole('developer');
+    setSelectedRoleId('role-dev');
+    setAssignedProjectIds([]);
     setJobTitle('');
     setDepartment('');
     setMessage('');
@@ -65,15 +69,22 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
       setError(`${member.name} is already a member.`);
       return;
     }
+    if (!selectedCustomRole) {
+      setError('Choose a role.');
+      return;
+    }
+    if (selectedCustomRole.projectAccess === 'user' && assignedProjectIds.length === 0) {
+      setError(`${selectedCustomRole.name} only sees assigned projects. Choose at least one project.`);
+      return;
+    }
     const result = sendInvitation({
       email: trimmed,
       fullName,
-      role,
       jobTitle,
       department,
       message,
-      roleId: selectedRoleId,
-      assignedProjectIds,
+      roleId: selectedCustomRole.id,
+      assignedProjectIds: selectedCustomRole.projectAccess === 'user' ? assignedProjectIds : [],
     });
     if (!result.success || !result.invitation) {
       setError(result.error ?? 'Could not send the invitation.');
@@ -103,7 +114,10 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
             <div>
               <h2 id="invite-title" className="text-base font-bold text-ink">Invitation sent</h2>
               <p className="text-muted mt-0.5">
-                {sent.fullName ?? sent.email} will get an email to join {orgName} as {roleTitle(sent.role)}.
+                {sent.fullName ?? sent.email} will get an email to join {orgName} as {invitationRoleName(sent, roles)}.
+                {sent.projectIds.length > 0 && (
+                  <> They&apos;ll be added to {sent.projectIds.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')}.</>
+                )}
                 They&apos;ll appear under Members once they create their account; until then they&apos;re in the Invited tab.
               </p>
             </div>
@@ -168,21 +182,13 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
               </label>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="block space-y-1">
-                  <span className="font-semibold text-ink">Customized Role</span>
+                  <span className="font-semibold text-ink">Role <span className="text-danger">*</span></span>
                   <select
-                    value={selectedRoleId}
-                    onChange={e => {
-                      const newRoleId = e.target.value;
-                      setSelectedRoleId(newRoleId);
-                      const cr = roles.find(r => r.id === newRoleId);
-                      if (cr?.id === 'role-dev') setRole('developer');
-                      else if (cr?.id === 'role-qa') setRole('qa');
-                      else if (cr?.id === 'role-pm') setRole('project_manager');
-                      else setRole('developer');
-                    }}
+                    value={selectedCustomRole?.id ?? ''}
+                    onChange={e => { setSelectedRoleId(e.target.value); setError(null); }}
                     className={inputClass}
                   >
-                    {roles.map(r => (
+                    {roleOptions.map(r => (
                       <option key={r.id} value={r.id}>
                         {r.name} ({r.projectAccess === 'management' ? 'All Projects' : 'User Access'})
                       </option>
@@ -202,15 +208,17 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
               {selectedCustomRole?.projectAccess === 'user' && (
                 <div className="p-3 rounded-lg bg-mist/60 border border-line space-y-1.5 animate-fade-in">
                   <span className="font-semibold text-ink text-[11px] block">
-                    Assign Projects (User Access scope):
+                    Assigned projects <span className="text-danger">*</span>
                   </span>
+                  <p className="text-[11px] text-muted">This role only sees the projects it is assigned to. They are added to these projects when they accept.</p>
                   <div className="grid grid-cols-2 gap-1.5 max-h-28 overflow-y-auto pr-1">
-                    {projects.map(p => (
+                    {assignableProjects.map(p => (
                       <label key={p.id} className="flex items-center gap-1.5 text-[11px] text-ink cursor-pointer">
                         <input
                           type="checkbox"
                           checked={assignedProjectIds.includes(p.id)}
                           onChange={e => {
+                            setError(null);
                             if (e.target.checked) setAssignedProjectIds(prev => [...prev, p.id]);
                             else setAssignedProjectIds(prev => prev.filter(id => id !== p.id));
                           }}
@@ -255,7 +263,7 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
                   <p>Hi {fullName.trim().split(' ')[0] || 'there'},</p>
                   <p>
                     <strong>{inviter}</strong> has invited you to join <strong>{orgName}</strong> on Flash Sign as{' '}
-                    <strong>{roleTitle(role)}</strong>{department.trim() && <> in {department.trim()}</>}.
+                    <strong>{selectedCustomRole?.name ?? 'a member'}</strong>{department.trim() && <> in {department.trim()}</>}.
                   </p>
                   {message.trim() && (
                     <blockquote className="border-l-2 border-flash pl-3 text-ink-soft italic whitespace-pre-line">{message.trim()}</blockquote>

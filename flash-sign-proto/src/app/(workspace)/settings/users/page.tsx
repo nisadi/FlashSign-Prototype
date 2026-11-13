@@ -5,7 +5,8 @@ import { useApp } from '@/context/app-context';
 import { PageHeader, Button, Card } from '@/components/shared/ui';
 import { Avatar } from '@/components/shared/avatar';
 import { formatRelative } from '@/lib/utils';
-import { canManageUsers } from '@/lib/permissions';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageTeam } from '@/lib/rbac';
 import { Users, Plus, Mail, MoreHorizontal, Shield, Check, X } from 'lucide-react';
 import type { DemoRole } from '@/types';
 
@@ -17,13 +18,15 @@ const ROLE_LABELS: Record<DemoRole, string> = {
 };
 
 export default function UsersSettingsPage() {
-  const { users, demoRole } = useApp();
+  const { users } = useApp();
   const [inviteOpen, setInviteOpen] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
   const [inviteRole, setInviteRole] = useState<DemoRole>('developer');
   const [inviteSent, setInviteSent] = useState(false);
 
-  const canManage = canManageUsers(demoRole);
+  // G-04: the role's Team Management setting (role.team_access), not the old persona list
+  const { currentRbacUser } = useDemoAuth();
+  const canManage = canManageTeam(currentRbacUser);
 
   const handleInvite = () => {
     if (!inviteEmail.trim()) return;

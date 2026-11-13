@@ -40,7 +40,7 @@ interface ProjectHeaderNavProps {
 }
 
 export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps) {
-  const { projects, tasks, sprints, milestones, toggleFavoriteProject } = useApp();
+  const { projects, tasks, sprints, milestones, toggleFavoriteProject, favoriteProjectIds } = useApp();
   const { currentRbacUser } = useDemoAuth();
   const project = projects.find((p) => p.id === projectId) || (projectId === 'p-mvhmnblw' ? projects.find(p => p.id === 'p1') : undefined) || projects[0];
 
@@ -119,13 +119,13 @@ export function ProjectHeaderNav({ projectId, activeTab }: ProjectHeaderNavProps
                   type="button"
                   onClick={() => toggleFavoriteProject(project.id)}
                   className={`p-1 rounded-md transition-colors ${
-                    project.isFavorite
+                    favoriteProjectIds.includes(project.id)
                       ? 'text-amber-500 hover:text-amber-600'
                       : 'text-muted/40 hover:text-amber-500'
                   }`}
-                  title={project.isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                  title={favoriteProjectIds.includes(project.id) ? 'Remove from favorites' : 'Add to favorites'}
                 >
-                  <Star className={`w-4 h-4 ${project.isFavorite ? 'fill-current' : ''}`} />
+                  <Star className={`w-4 h-4 ${favoriteProjectIds.includes(project.id) ? 'fill-current' : ''}`} />
                 </button>
                 <ProjectStatusBadge status={project.status} />
                 <HealthBadge health={project.health} />

@@ -1,233 +1,194 @@
 'use client';
 
 import React, { useState } from 'react';
-import {
-  Clock, Calendar, Check, RotateCcw,
-} from 'lucide-react';
+import { Building2, Clock, RotateCcw, ToggleRight } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { canAccessPreferences } from '@/lib/rbac';
+import { FEATURE_DEFINITIONS, IANA_TIMEZONES, canAccessPreferences, featuresFor, planLabel, type SuperAdminOrg } from '@/lib/rbac';
+import { slugify } from '@/lib/utils';
 import { AccessDenied } from '@/components/shared/access-denied';
-import type { CollaborationSettings } from '@/types';
+import { SettingsPage, SettingsCard, SaveButton, SavedNote, useSavedFlash } from '@/components/settings/settings-layout';
 
-const TIMEZONES = [
-  'America/New_York (EST)',
-  'America/Los_Angeles (PST)',
-  'America/Chicago (CST)',
-  'Europe/London (GMT)',
-  'Europe/Berlin (CET)',
-  'Asia/Singapore (SGT)',
-  'Asia/Tokyo (JST)',
-];
+const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+const URL_RE = /^https?:\/\/[^\s.]+\.[^\s]+$/i;
 
+const inputClass =
+  'w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs';
+
+type OrgForm = Pick<SuperAdminOrg, 'name' | 'slug' | 'description' | 'industry' | 'website' | 'timezone' | 'workingHoursStart' | 'workingHoursEnd'>;
+
+function toForm(org: SuperAdminOrg): OrgForm {
+  return {
+    name: org.name,
+    slug: org.slug,
+    description: org.description ?? '',
+    industry: org.industry,
+    website: org.website ?? '',
+    timezone: org.timezone,
+    workingHoursStart: org.workingHoursStart,
+    workingHoursEnd: org.workingHoursEnd,
+  };
+}
+
+/**
+ * Organization Owner only: the organisation's own settings (finalized table `organization`).
+ * Plan, status and feature switches are set by the Super Admin and shown read-only here.
+ * Personal settings (theme, calendar view, notifications) are under Settings › Notifications.
+ */
 export default function PreferencesSettingsPage() {
-  const { collaborationSettings, updateCollaborationSettings, resetDemoData } = useApp();
-  const { currentRbacUser } = useDemoAuth();
+  const { resetDemoData } = useApp();
+  const { currentRbacUser, currentOrganizationRecord, updateOrganization, organizationFeatures } = useDemoAuth();
+
+  // All hooks run before the access guard
+  const [form, setForm] = useState<OrgForm | null>(currentOrganizationRecord ? toForm(currentOrganizationRecord) : null);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, flashSaved] = useSavedFlash();
 
   if (!canAccessPreferences(currentRbacUser)) {
     return (
       <AccessDenied
         title="Owner Authority Required"
-        message="Workspace preferences, calendar planning defaults, and scheduling policies are strictly accessible to the Organization Owner."
+        message="Organisation settings (name, web address, time zone and working hours) can only be changed by the Organization Owner."
         requiredRole="Organization Owner"
         backHref="/settings/profile"
       />
     );
   }
 
-  const [settings, setSettings] = useState<CollaborationSettings>(collaborationSettings);
-  const [saved, setSaved] = useState(false);
+  if (!currentOrganizationRecord || !form) {
+    return (
+      <SettingsPage title="Preferences" description="Organisation settings.">
+        <SettingsCard title="Organisation" icon={Building2}>
+          <p className="text-xs text-muted">No organisation record is linked to this workspace.</p>
+        </SettingsCard>
+      </SettingsPage>
+    );
+  }
+
+  const set = (patch: Partial<OrgForm>) => {
+    setError(null);
+    setForm(prev => (prev ? { ...prev, ...patch } : prev));
+  };
 
   const handleSave = (e: React.FormEvent) => {
     e.preventDefault();
-    updateCollaborationSettings(settings);
-    setSaved(true);
-    setTimeout(() => setSaved(false), 2500);
+    const slug = slugify(form.slug);
+    if (!form.name.trim()) return setError('Enter the organisation name.');
+    if (!SLUG_RE.test(slug)) return setError('Use lower-case letters, numbers and single hyphens in the web address.');
+    if (form.website?.trim() && !URL_RE.test(form.website.trim())) return setError('Enter the website as a full address, e.g. https://acme.com.');
+    if (form.workingHoursStart >= form.workingHoursEnd) return setError('The working day must end after it starts.');
+    const result = updateOrganization(currentOrganizationRecord.id, {
+      ...form,
+      name: form.name.trim(),
+      slug,
+      description: form.description?.trim() || undefined,
+      website: form.website?.trim() || undefined,
+    });
+    if (!result.success) return setError(result.error ?? 'Could not save.');
+    setForm(prev => (prev ? { ...prev, slug } : prev));
+    flashSaved();
   };
 
+  const features = featuresFor(currentOrganizationRecord.id, organizationFeatures);
+
   return (
-    <div className="min-h-full bg-paper pb-16">
-      <div className="p-4 sm:p-6 lg:p-8 max-w-4xl mx-auto space-y-6">
-        {/* Header */}
-        <div>
-          <h1 className="text-2xl font-bold text-ink tracking-tight">Preferences</h1>
-          <p className="text-sm text-muted mt-0.5">
-            Calendar and planning defaults, working hours, time zone and workload limits.
+    <SettingsPage
+      title="Preferences"
+      description="Your organisation's details, time zone and working hours. Only the Organization Owner can change these."
+      actions={<SavedNote show={saved} text="Preferences saved" />}
+    >
+      <form onSubmit={handleSave} className="space-y-6 text-xs" noValidate>
+        <SettingsCard title="Organisation" icon={Building2}>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Organisation name <span className="text-danger">*</span></span>
+              <input value={form.name} onChange={e => set({ name: e.target.value })} className={inputClass} />
+            </label>
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Web address <span className="text-danger">*</span></span>
+              <div className="flex items-center gap-1">
+                <input value={form.slug} onChange={e => set({ slug: e.target.value })} className={`${inputClass} font-mono`} />
+                <span className="text-muted font-mono shrink-0">.flashsign.com</span>
+              </div>
+            </label>
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Industry</span>
+              <input value={form.industry} onChange={e => set({ industry: e.target.value })} className={inputClass} />
+            </label>
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Website</span>
+              <input type="url" value={form.website ?? ''} onChange={e => set({ website: e.target.value })} placeholder="https://" className={inputClass} />
+            </label>
+            <label className="space-y-1 sm:col-span-2">
+              <span className="block font-semibold text-ink">Description</span>
+              <textarea rows={2} value={form.description ?? ''} onChange={e => set({ description: e.target.value })} className={`${inputClass} resize-none`} />
+            </label>
+          </div>
+          <p className="text-[11px] text-muted">
+            Plan: <strong className="text-ink">{planLabel(currentOrganizationRecord.plan)}</strong> · Status:{' '}
+            <strong className="text-ink capitalize">{currentOrganizationRecord.status}</strong> (set by the FlashSign Super Admin)
           </p>
+        </SettingsCard>
+
+        <SettingsCard
+          title="Time zone & working hours"
+          description="Used for due dates, reminders and the planner across the organisation."
+          icon={Clock}
+        >
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Time zone</span>
+              <select value={form.timezone} onChange={e => set({ timezone: e.target.value })} className={inputClass}>
+                {Array.from(new Set([form.timezone, ...IANA_TIMEZONES])).map(tz => (
+                  <option key={tz} value={tz}>{tz}</option>
+                ))}
+              </select>
+            </label>
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Work day start</span>
+              <input type="time" value={form.workingHoursStart} onChange={e => set({ workingHoursStart: e.target.value })} className={inputClass} />
+            </label>
+            <label className="space-y-1">
+              <span className="block font-semibold text-ink">Work day end</span>
+              <input type="time" value={form.workingHoursEnd} onChange={e => set({ workingHoursEnd: e.target.value })} className={inputClass} />
+            </label>
+          </div>
+        </SettingsCard>
+
+        <SettingsCard title="Features" description="Turned on or off for your organisation by the FlashSign Super Admin." icon={ToggleRight}>
+          <ul className="space-y-2">
+            {FEATURE_DEFINITIONS.map(f => (
+              <li key={f.key} className="flex items-start justify-between gap-4">
+                <span>
+                  <span className="font-semibold text-ink block">{f.label}</span>
+                  <span className="text-muted">{f.description}</span>
+                </span>
+                <span
+                  className={`shrink-0 px-2 py-0.5 rounded-full text-[10px] font-semibold ${
+                    features[f.key] ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-mist text-muted border border-line'
+                  }`}
+                >
+                  {features[f.key] ? 'On' : 'Off'}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </SettingsCard>
+
+        {error && <p className="text-danger font-medium" role="alert">{error}</p>}
+
+        <div className="flex items-center justify-between">
+          <button
+            type="button"
+            onClick={resetDemoData}
+            className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors font-medium text-xs"
+          >
+            <RotateCcw className="w-3.5 h-3.5" />
+            <span>Reset Demo State</span>
+          </button>
+          <SaveButton type="submit">Save Preferences</SaveButton>
         </div>
-
-        {/* Form Card */}
-        <div className="bg-paper-elevated border border-line rounded-xl shadow-xs p-6">
-          <form onSubmit={handleSave} className="space-y-6 text-xs">
-            {saved && (
-              <div className="p-3 rounded-lg bg-emerald-500/10 border border-emerald-500/30 text-emerald-700 flex items-center gap-2 font-medium">
-                <Check className="w-4 h-4 shrink-0" />
-                <span>Preferences saved.</span>
-              </div>
-            )}
-
-            {/* Calendar & Planning Defaults */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-ink flex items-center gap-2 border-b border-line pb-2">
-                <Calendar className="w-4 h-4 text-flash-deep" />
-                <span>Calendar & Planning Defaults</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                <div>
-                  <label className="block font-semibold text-ink mb-1">Default Calendar View</label>
-                  <select
-                    value={settings.defaultCalendarView}
-                    onChange={e =>
-                      setSettings(prev => ({
-                        ...prev,
-                        defaultCalendarView: e.target.value as any,
-                      }))
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                  >
-                    <option value="month">Month Grid View</option>
-                    <option value="week">Week Schedule View</option>
-                    <option value="day">Day Time-Slot View</option>
-                    <option value="agenda">List / Agenda View</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-ink mb-1">Week Start Day</label>
-                  <select
-                    value={settings.weekStartDay}
-                    onChange={e =>
-                      setSettings(prev => ({
-                        ...prev,
-                        weekStartDay: e.target.value as any,
-                      }))
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                  >
-                    <option value="monday">Monday (ISO 8601)</option>
-                    <option value="sunday">Sunday</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-ink mb-1">Default Planning Workspace View</label>
-                <div className="grid grid-cols-3 gap-2">
-                  {(['calendar', 'timeline', 'list'] as const).map(v => (
-                    <button
-                      key={v}
-                      type="button"
-                      onClick={() => setSettings(prev => ({ ...prev, defaultPlanningView: v }))}
-                      className={`p-2.5 rounded-lg border text-center font-semibold capitalize transition-colors ${
-                        settings.defaultPlanningView === v
-                          ? 'bg-ink text-white border-ink'
-                          : 'bg-paper text-muted border-line hover:text-ink'
-                      }`}
-                    >
-                      {v} View
-                    </button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Working Hours & Timezone */}
-            <div className="space-y-4">
-              <h3 className="text-sm font-bold text-ink flex items-center gap-2 border-b border-line pb-2">
-                <Clock className="w-4 h-4 text-flash-deep" />
-                <span>Working Hours & Timezone</span>
-              </h3>
-
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold text-ink mb-1">Timezone</label>
-                  <select
-                    value={settings.timeZone}
-                    onChange={e =>
-                      setSettings(prev => ({ ...prev, timeZone: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                  >
-                    {TIMEZONES.map(tz => (
-                      <option key={tz} value={tz}>
-                        {tz}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-ink mb-1">Work Day Start</label>
-                  <input
-                    type="time"
-                    value={settings.workingHoursStart}
-                    onChange={e =>
-                      setSettings(prev => ({ ...prev, workingHoursStart: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                  />
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-ink mb-1">Work Day End</label>
-                  <input
-                    type="time"
-                    value={settings.workingHoursEnd}
-                    onChange={e =>
-                      setSettings(prev => ({ ...prev, workingHoursEnd: e.target.value }))
-                    }
-                    className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-ink mb-1">
-                  Weekly Workload Warning Threshold:{' '}
-                  <strong className="text-flash-deep">{settings.workloadThresholdHours} hours</strong>
-                </label>
-                <input
-                  type="range"
-                  min="30"
-                  max="50"
-                  step="5"
-                  value={settings.workloadThresholdHours}
-                  onChange={e =>
-                    setSettings(prev => ({
-                      ...prev,
-                      workloadThresholdHours: Number(e.target.value),
-                    }))
-                  }
-                  className="w-full accent-flash cursor-pointer mt-1"
-                />
-                <p className="text-[11px] text-muted mt-1">
-                  Flag team members as "At Capacity" when assigned tasks exceed this baseline limit.
-                </p>
-              </div>
-            </div>
-
-            {/* Actions */}
-            <div className="pt-4 border-t border-line flex items-center justify-between">
-              <button
-                type="button"
-                onClick={resetDemoData}
-                className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-muted hover:text-danger hover:bg-danger/10 transition-colors font-medium text-xs"
-              >
-                <RotateCcw className="w-3.5 h-3.5" />
-                <span>Reset Demo State</span>
-              </button>
-
-              <button
-                type="submit"
-                className="px-6 py-2 rounded-lg bg-flash hover:bg-flash-deep text-ink font-bold shadow-xs transition-colors"
-              >
-                Save Preferences
-              </button>
-            </div>
-          </form>
-        </div>
-      </div>
-    </div>
+      </form>
+    </SettingsPage>
   );
 }

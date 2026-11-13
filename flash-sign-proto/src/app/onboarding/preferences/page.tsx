@@ -6,43 +6,51 @@ import { useRouter } from 'next/navigation';
 import { OnboardingStepLayout } from '@/components/onboarding/onboarding-step-layout';
 import { ThemeSelector, PreferenceToggleItem } from '@/components/onboarding/preference-toggle';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { ArrowLeft, ArrowRight, Bell, Clock, ShieldCheck, Mail } from 'lucide-react';
+import {
+  NOTIFICATION_CATEGORY_LABELS,
+  NOTIFICATION_EVENTS,
+  isNotificationEnabled,
+  type DemoPreferences,
+  type NotificationEventKey,
+} from '@/types/demo-auth';
+import { ArrowLeft, ArrowRight, Bell, CalendarDays } from 'lucide-react';
 
-const TIMEZONE_OPTIONS = [
-  'America/New_York (UTC-5)',
-  'America/Chicago (UTC-6)',
-  'America/Denver (UTC-7)',
-  'America/Los_Angeles (UTC-8)',
-  'Europe/London (UTC+0)',
-  'Europe/Paris (UTC+1)',
-  'Asia/Tokyo (UTC+9)',
-  'Asia/Singapore (UTC+8)',
-  'Australia/Sydney (UTC+11)',
+const CALENDAR_VIEWS: { value: DemoPreferences['defaultCalendarView']; label: string }[] = [
+  { value: 'month', label: 'Month' },
+  { value: 'week', label: 'Week' },
+  { value: 'day', label: 'Day' },
+  { value: 'agenda', label: 'Agenda' },
 ];
+
+/** The per-event switches offered during onboarding (user_notification_setting); the rest are in Settings › Notifications. */
+const ONBOARDING_EVENTS: NotificationEventKey[] = ['task_assigned', 'deadline_reminder', 'approval_reminder'];
 
 export default function PreferencesSetupPage() {
   const router = useRouter();
-  const { preferences, updatePreferences } = useDemoAuth();
+  const { preferences, updatePreferences, notificationSettings, setNotificationSetting } = useDemoAuth();
 
+  // user_preference
   const [theme, setTheme] = useState<'light' | 'dark'>(preferences.theme || 'light');
+  const [calendarView, setCalendarView] = useState<DemoPreferences['defaultCalendarView']>(preferences.defaultCalendarView);
   const [inApp, setInApp] = useState(preferences.inAppNotifications);
   const [emailNotifs, setEmailNotifs] = useState(preferences.emailNotifications);
-  const [taskAlerts, setTaskAlerts] = useState(preferences.taskAssignmentAlerts);
-  const [deadlineReminders, setDeadlineReminders] = useState(preferences.deadlineReminders);
-  const [approvalReminders, setApprovalReminders] = useState(preferences.approvalReminders);
-  const [timezone, setTimezone] = useState(preferences.timezone || 'America/New_York (UTC-5)');
+  const [desktop, setDesktop] = useState(preferences.desktopNotifications);
+  const [weeklyDigest, setWeeklyDigest] = useState(preferences.weeklyDigest);
+  // user_notification_setting (no row = the event's default)
+  const [events, setEvents] = useState<Record<string, boolean>>(() =>
+    Object.fromEntries(ONBOARDING_EVENTS.map(k => [k, isNotificationEnabled(notificationSettings, k)]))
+  );
 
   const handleSaveAndContinue = () => {
     updatePreferences({
       theme,
+      defaultCalendarView: calendarView,
       inAppNotifications: inApp,
       emailNotifications: emailNotifs,
-      taskAssignmentAlerts: taskAlerts,
-      deadlineReminders,
-      approvalReminders,
-      timezone,
+      desktopNotifications: desktop,
+      weeklyDigest,
     });
-
+    ONBOARDING_EVENTS.forEach(k => setNotificationSetting(k, events[k]));
     router.push('/onboarding/complete');
   };
 
@@ -50,27 +58,28 @@ export default function PreferencesSetupPage() {
     <OnboardingStepLayout
       currentStep="preferences"
       title="Customize your workspace"
-      subtitle="Tailor your visual theme, notification dispatch settings, and deadline alerts."
+      subtitle="Choose your theme, calendar view and how you want to be notified. These are personal and apply in every organisation."
       maxWidth="max-w-2xl"
     >
       <div className="space-y-6">
         {/* Theme Selector */}
         <ThemeSelector theme={theme} onChange={setTheme} />
 
-        {/* Timezone Configuration */}
+        {/* Default calendar view (user_preference.default_calendar_view) */}
         <div className="pt-2">
-          <label className="block text-xs font-semibold text-[var(--ink)] mb-1.5 flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-[var(--flash-deep)]" />
-            <span>Workspace Timezone</span>
+          <label htmlFor="pref-calendar-view" className="block text-xs font-semibold text-[var(--ink)] mb-1.5 flex items-center gap-1.5">
+            <CalendarDays className="w-3.5 h-3.5 text-[var(--flash-deep)]" />
+            <span>Default calendar view</span>
           </label>
           <select
-            value={timezone}
-            onChange={(e) => setTimezone(e.target.value)}
+            id="pref-calendar-view"
+            value={calendarView}
+            onChange={(e) => setCalendarView(e.target.value as DemoPreferences['defaultCalendarView'])}
             className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--line)] bg-[var(--paper-elevated)] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--flash)]"
           >
-            {TIMEZONE_OPTIONS.map((tz) => (
-              <option key={tz} value={tz}>
-                {tz}
+            {CALENDAR_VIEWS.map((v) => (
+              <option key={v.value} value={v.value}>
+                {v.label}
               </option>
             ))}
           </select>
@@ -81,54 +90,59 @@ export default function PreferencesSetupPage() {
           <div className="flex items-center justify-between">
             <label className="text-xs font-semibold text-[var(--ink)] flex items-center gap-1.5">
               <Bell className="w-3.5 h-3.5 text-[var(--flash-deep)]" />
-              <span>Simulated Notification Feeds</span>
+              <span>Notifications</span>
             </label>
-            <span className="text-[11px] text-[var(--muted)]">Toggle notification triggers</span>
+            <span className="text-[11px] text-[var(--muted)]">You can change these later</span>
           </div>
 
           <div className="space-y-2.5">
             <PreferenceToggleItem
               id="pref-in-app"
-              label="In-App Notification Center"
-              description="Receive realtime badge alerts and toast banners in the top navigation bar."
+              label="In-app notifications"
+              description="Show alerts in the bell in the top bar."
               checked={inApp}
               onChange={setInApp}
               badge="Recommended"
             />
-
             <PreferenceToggleItem
               id="pref-email"
-              label="Simulated Email Digests"
-              description="Daily summary of sprint velocity, blocker mentions, and AI agent pull requests."
+              label="Email notifications"
+              description="Send the events you switch on below to your email as well."
               checked={emailNotifs}
               onChange={setEmailNotifs}
-              badge="Daily"
             />
-
             <PreferenceToggleItem
-              id="pref-tasks"
-              label="Task & Story Assignment Alerts"
-              description="Notify immediately when Jira/ClickUp-style stories are assigned to your persona."
-              checked={taskAlerts}
-              onChange={setTaskAlerts}
+              id="pref-desktop"
+              label="Desktop notifications"
+              description="Show a browser notification while Flash Sign is open."
+              checked={desktop}
+              onChange={setDesktop}
             />
-
             <PreferenceToggleItem
-              id="pref-deadlines"
-              label="Sprint & Milestone Deadline Reminders"
-              description="Warning alerts 48 hours before milestone deadlines or sprint cut-offs."
-              checked={deadlineReminders}
-              onChange={setDeadlineReminders}
+              id="pref-digest"
+              label="Weekly digest"
+              description="One email each week summarising your tasks, approvals and signatures."
+              checked={weeklyDigest}
+              onChange={setWeeklyDigest}
+              badge="Weekly"
             />
+          </div>
 
-            <PreferenceToggleItem
-              id="pref-approvals"
-              label="Signature & Contract Approval Requests"
-              description="High-priority alerts when Master Service Agreements or code sign-offs require your signature."
-              checked={approvalReminders}
-              onChange={setApprovalReminders}
-              badge="High Priority"
-            />
+          <p className="text-xs font-semibold text-[var(--ink)] pt-2">Notify me when</p>
+          <div className="space-y-2.5">
+            {ONBOARDING_EVENTS.map((key) => {
+              const def = NOTIFICATION_EVENTS.find((e) => e.eventKey === key)!;
+              return (
+                <PreferenceToggleItem
+                  key={key}
+                  id={`pref-event-${key}`}
+                  label={def.name}
+                  description={`${NOTIFICATION_CATEGORY_LABELS[def.category]} • more events in Settings › Notifications`}
+                  checked={events[key]}
+                  onChange={(v) => setEvents((prev) => ({ ...prev, [key]: v }))}
+                />
+              );
+            })}
           </div>
         </div>
 

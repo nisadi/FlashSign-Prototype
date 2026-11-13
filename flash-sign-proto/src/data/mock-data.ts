@@ -1,7 +1,7 @@
 import type {
   User, Organization, Project, Team, Task, Sprint, Milestone, Epic, Story,
   Document, ApprovalRequest, Notification, AuditLog, Integration,
-  AgentRun, DemoRole, ProjectFile, SrsGeneratedTaskRecord,
+  AgentRun, DemoRole, ProjectFile, SrsGeneratedTaskRecord, UserFavoriteProject,
 } from '@/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -112,6 +112,14 @@ export const MOCK_USERS: User[] = [
     createdAt: d(-95),
   },
 ];
+
+/** user_favorite_project: favourites are personal (seeded for the Owner demo user u1) */
+export const MOCK_FAVORITE_PROJECTS: UserFavoriteProject[] = ['p1', 'p-mvhmnblw', 'p2', 'p3'].map((projectId, i) => ({
+  id: `fav-u1-${projectId}`,
+  userId: 'u1',
+  projectId,
+  createdAt: new Date(Date.now() - (i + 1) * 86400000).toISOString(),
+}));
 
 export const DEMO_ROLE_USERS: Record<DemoRole, string> = {
   ceo: 'u1',
@@ -224,7 +232,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p1', name: 'Flash Sign v2.0', key: 'FSV2', description: 'Next-generation e-signature platform with AI-assisted document preparation.',
     status: 'active', health: 'on_track', ownerId: 'u2', teamIds: ['t1', 't2', 't3'], memberIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
     startDate: d(-60), endDate: d(46), progress: 68, priority: 'critical', tags: ['platform', 'core'],
-    isFavorite: true, isArchived: false, group: 'Core Platform', accentColor: '#00c2a8',
+    template: 'scrum', group: 'Core Platform', accentColor: '#00c2a8',
     goals: ['Launch v2 public beta by end of month', 'Reach <1s document render latency', 'Complete eIDAS compliance checks'],
     originalStartDate: d(-60), originalEndDate: d(30), originalDuration: 90,
     currentStartDate: d(-60), currentEndDate: d(46), currentDuration: 106,
@@ -236,7 +244,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p-mvhmnblw', name: 'Flash Sign v2.0', key: 'FSV2', description: 'Next-generation e-signature platform with AI-assisted document preparation.',
     status: 'active', health: 'on_track', ownerId: 'u2', teamIds: ['t1', 't2', 't3'], memberIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
     startDate: d(-60), endDate: d(46), progress: 68, priority: 'critical', tags: ['platform', 'core'],
-    isFavorite: true, isArchived: false, group: 'Core Platform', accentColor: '#00c2a8',
+    template: 'scrum', group: 'Core Platform', accentColor: '#00c2a8',
     goals: ['Launch v2 public beta by end of month', 'Reach <1s document render latency', 'Complete eIDAS compliance checks'],
     originalStartDate: d(-60), originalEndDate: d(30), originalDuration: 90,
     currentStartDate: d(-60), currentEndDate: d(46), currentDuration: 106,
@@ -247,7 +255,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p2', name: 'ACME Corp Integration', key: 'ACME', description: 'Custom API integration and white-label portal for ACME Corporation.',
     status: 'active', health: 'at_risk', ownerId: 'u2', teamIds: ['t1', 't4'], memberIds: ['u2', 'u4', 'u14', 'u9'],
     startDate: d(-30), endDate: d(14), progress: 42, priority: 'high', tags: ['client', 'integration'],
-    isFavorite: true, isArchived: false, group: 'Client Engagements', accentColor: '#3b82f6',
+    template: 'kanban', group: 'Client Engagements', accentColor: '#3b82f6',
     goals: ['Production deployment for 2,000 corporate users', '100% test coverage on webhook queues'],
     originalStartDate: d(-30), originalEndDate: d(14), originalDuration: 44,
     currentStartDate: d(-30), currentEndDate: d(14), currentDuration: 44,
@@ -258,7 +266,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p3', name: 'AI Agent Orchestration', key: 'AIAG', description: 'Build infrastructure to run Claude, Codex, and Gemini agents on tasks.',
     status: 'active', health: 'on_track', ownerId: 'u4', teamIds: ['t1'], memberIds: ['u4', 'u5', 'u14'],
     startDate: d(-45), endDate: d(45), progress: 55, priority: 'high', tags: ['ai', 'platform'],
-    isFavorite: true, isArchived: false, group: 'AI & Automation', accentColor: '#8b5cf6',
+    template: 'agent', group: 'AI & Automation', accentColor: '#8b5cf6',
     goals: ['Autonomous bug triaging pipeline', 'Multi-model fallback support (Claude + Gemini)'],
     originalStartDate: d(-45), originalEndDate: d(45), originalDuration: 90,
     currentStartDate: d(-45), currentEndDate: d(45), currentDuration: 90,
@@ -269,7 +277,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p4', name: 'Mobile App Beta', key: 'MOB', description: 'iOS and Android mobile client for document signing on the go.',
     status: 'planning', health: 'on_track', ownerId: 'u3', teamIds: ['t2', 't3'], memberIds: ['u3', 'u6', 'u7'],
     startDate: d(5), endDate: d(78), progress: 8, priority: 'medium', tags: ['mobile', 'beta'],
-    isFavorite: false, isArchived: false, group: 'Product Studio', accentColor: '#ec4899',
+    template: 'scrum', group: 'Product Studio', accentColor: '#ec4899',
     goals: ['TestFlight beta with 500 external signers', 'Biometric sign unlock'],
     originalStartDate: d(5), originalEndDate: d(85), originalDuration: 80,
     currentStartDate: d(5), currentEndDate: d(78), currentDuration: 73,
@@ -280,7 +288,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p5', name: 'Security Hardening Q4', key: 'SEC', description: 'Pen testing, SOC 2 gap analysis, and remediation for Q4 audit.',
     status: 'active', health: 'off_track', ownerId: 'u8', teamIds: ['t1', 't4'], memberIds: ['u8', 'u4', 'u14'],
     startDate: d(-20), endDate: d(20), progress: 30, priority: 'critical', tags: ['security', 'compliance'],
-    isFavorite: false, isArchived: false, group: 'Compliance & IT', accentColor: '#ef4444',
+    template: 'kanban', group: 'Compliance & IT', accentColor: '#ef4444',
     goals: ['Zero high-severity findings on re-test', 'Complete SOC 2 Type II audit report'],
     originalStartDate: d(-20), originalEndDate: d(10), originalDuration: 30,
     currentStartDate: d(-20), currentEndDate: d(20), currentDuration: 40,
@@ -291,7 +299,7 @@ export const MOCK_PROJECTS: Project[] = [
     id: 'p6', name: 'Onboarding Redesign', key: 'ONB', description: 'Revamp the user onboarding flow based on customer research.',
     status: 'completed', health: 'on_track', ownerId: 'u3', teamIds: ['t2'], memberIds: ['u3', 'u6'],
     startDate: d(-90), endDate: d(-15), progress: 100, priority: 'medium', tags: ['ux', 'growth'],
-    isFavorite: false, isArchived: false, group: 'Growth & UX', accentColor: '#10b981',
+    template: 'kanban', group: 'Growth & UX', accentColor: '#10b981',
     goals: ['Increase first-envelope completion rate by 25%'],
     originalStartDate: d(-90), originalEndDate: d(-15), originalDuration: 75,
     currentStartDate: d(-90), currentEndDate: d(-15), currentDuration: 75,
@@ -1098,13 +1106,13 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
 
 // ── Audit Logs ────────────────────────────────────────────────────────────────
 export const MOCK_AUDIT_LOGS: AuditLog[] = [
-  { id: 'al1', actorId: 'u9', actorName: 'David Osei', action: 'document.created', resource: 'Document', resourceId: 'doc1', detail: 'ACME Corp MSA', ipAddress: '102.89.3.12', timestamp: d(-5) },
-  { id: 'al2', actorId: 'u9', actorName: 'David Osei', action: 'document.sent', resource: 'Document', resourceId: 'doc1', detail: 'Sent to 2 signers', ipAddress: '102.89.3.12', timestamp: d(-3) },
-  { id: 'al3', actorId: 'u5', actorName: 'Priya Nair', action: 'agent.run.started', resource: 'AgentRun', resourceId: 'run3', detail: 'Claude on FSV2-102', ipAddress: '192.168.1.5', timestamp: d(-2) },
-  { id: 'al4', actorId: 'u8', actorName: 'Rachel Kim', action: 'user.invited', resource: 'User', resourceId: 'u10', detail: 'claire@acmecorp.com', ipAddress: '10.0.0.1', timestamp: d(-30) },
-  { id: 'al5', actorId: 'u13', actorName: 'CI/CD Bot', action: 'integration.sync', resource: 'Integration', resourceId: 'int1', detail: 'GitHub sync — 3 repos updated', ipAddress: '10.0.1.99', timestamp: d(-1) },
-  { id: 'al6', actorId: 'u4', actorName: 'James Okafor', action: 'agent.run.approved', resource: 'AgentRun', resourceId: 'run1', detail: 'Approved AIAG-21 Claude run', ipAddress: '192.168.1.4', timestamp: d(-5) },
-  { id: 'al7', actorId: 'u8', actorName: 'Rachel Kim', action: 'settings.mfa.updated', resource: 'Settings', resourceId: 'org1', detail: 'MFA required for admins', ipAddress: '10.0.0.1', timestamp: d(-10) },
+  { id: 'al1', category: 'document', actorId: 'u9', actorName: 'David Osei', action: 'document.created', resource: 'Document', resourceId: 'doc1', detail: 'ACME Corp MSA', ipAddress: '102.89.3.12', userAgent: 'Chrome 131 on Windows', timestamp: d(-5) },
+  { id: 'al2', category: 'document', actorId: 'u9', actorName: 'David Osei', action: 'document.sent', resource: 'Document', resourceId: 'doc1', detail: 'Sent to 2 signers', ipAddress: '102.89.3.12', timestamp: d(-3) },
+  { id: 'al3', category: 'agent', actorId: 'u5', actorName: 'Priya Nair', action: 'agent.run.started', resource: 'AgentRun', resourceId: 'run3', detail: 'Claude on FSV2-102', ipAddress: '192.168.1.5', timestamp: d(-2) },
+  { id: 'al4', category: 'member', actorId: 'u8', actorName: 'Rachel Kim', action: 'user.invited', resource: 'User', resourceId: 'u10', detail: 'claire@acmecorp.com', ipAddress: '10.0.0.1', timestamp: d(-30) },
+  { id: 'al5', category: 'settings', actorId: 'u13', actorName: 'CI/CD Bot', action: 'integration.sync', resource: 'Integration', resourceId: 'int1', detail: 'GitHub sync — 3 repos updated', ipAddress: '10.0.1.99', timestamp: d(-1) },
+  { id: 'al6', category: 'agent', actorId: 'u4', actorName: 'James Okafor', action: 'agent.run.approved', resource: 'AgentRun', resourceId: 'run1', detail: 'Approved AIAG-21 Claude run', ipAddress: '192.168.1.4', timestamp: d(-5) },
+  { id: 'al7', category: 'security', actorId: 'u8', actorName: 'Rachel Kim', action: 'settings.mfa.updated', resource: 'Settings', resourceId: 'org1', detail: 'MFA required for admins', ipAddress: '10.0.0.1', timestamp: d(-10) },
 ];
 
 // ── Integrations ──────────────────────────────────────────────────────────────

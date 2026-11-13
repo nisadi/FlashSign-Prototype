@@ -17,8 +17,16 @@ export interface DemoUser {
   password?: string;
   jobTitle?: string;
   department?: string;
-  timezone?: string;
+  /** users.bio */
   bio?: string;
+  /** users.company: fills the Company field when signing */
+  company?: string;
+  /** users.avatar_file_id (shown as a data URL in the prototype) */
+  avatarUrl?: string;
+  /** users.is_active: false = disabled by a platform admin */
+  isActive?: boolean;
+  emailVerifiedAt?: string;
+  lastLoginAt?: string;
   role: DemoRole;
   organizationId?: string | null;
   registrationCompleted?: boolean;
@@ -46,33 +54,114 @@ export interface DemoWorkspace {
   createdAt?: string;
 }
 
-/** An invitation to join an organization. Only the owner signs up directly; everyone else joins through one of these. */
+/**
+ * An invitation to join an organization (finalized tables `invitation` + `invitation_project`).
+ * Only the Owner comes in through an organisation invitation; everyone else joins through one
+ * of these. The invitee gets one of the organisation's own roles (`roleId`) and, for a Project
+ * User Access role, the projects in `projectIds` (copied to project_member on acceptance).
+ * Expired = status 'pending' and past `expiresAt` (not a stored status).
+ */
 export interface DemoInvitation {
   id: string;
   email: string;
+  /** invitation.name */
   fullName?: string;
-  role: DemoRole;
+  /** invitation.role_id: one of this organisation's roles */
+  roleId: string;
+  /** Role name at the time of sending (display only; the role is looked up by roleId) */
+  roleName?: string;
+  /** invitation.title (job title; never grants access) */
   jobTitle?: string;
+  /** invitation.department_id, shown by name */
   department?: string;
   message?: string;
+  /** invitation_project rows */
+  projectIds: string[];
   organizationId: string;
   organizationName: string;
   invitedById: string;
   invitedByName: string;
+  acceptedByUserId?: string;
   sentAt: string;
   expiresAt: string;
   status: 'pending' | 'accepted' | 'revoked';
   acceptedAt?: string;
+  revokedAt?: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
+/** Personal settings, the same in every organisation (finalized table `user_preference`). */
 export interface DemoPreferences {
   theme: 'light' | 'dark';
+  defaultCalendarView: 'month' | 'week' | 'day' | 'agenda';
   inAppNotifications: boolean;
   emailNotifications: boolean;
-  taskAssignmentAlerts: boolean;
-  deadlineReminders: boolean;
-  approvalReminders: boolean;
-  timezone: string;
+  desktopNotifications: boolean;
+  weeklyDigest: boolean;
+}
+
+export type NotificationEventKey =
+  | 'task_assigned'
+  | 'mentioned'
+  | 'review_requested'
+  | 'task_blocked'
+  | 'deadline_reminder'
+  | 'approval_reminder'
+  | 'signature_requested'
+  | 'request_signed'
+  | 'request_declined'
+  | 'request_expiring'
+  | 'meeting_invite'
+  | 'meeting_conflict'
+  | 'time_off_decision'
+  | 'announcement';
+
+export type NotificationEventCategory = 'task' | 'signature' | 'approval' | 'meeting' | 'time_off' | 'announcement' | 'system';
+
+/** The fixed list of events a person can switch on or off (finalized table `notification_event`). */
+export interface NotificationEventDef {
+  eventKey: NotificationEventKey;
+  name: string;
+  category: NotificationEventCategory;
+  defaultEnabled: boolean;
+}
+
+export const NOTIFICATION_EVENTS: NotificationEventDef[] = [
+  { eventKey: 'task_assigned', name: 'A task is assigned to me', category: 'task', defaultEnabled: true },
+  { eventKey: 'mentioned', name: 'Someone mentions me in a comment', category: 'task', defaultEnabled: true },
+  { eventKey: 'review_requested', name: 'My review is requested', category: 'task', defaultEnabled: true },
+  { eventKey: 'task_blocked', name: 'A task I own is blocked', category: 'task', defaultEnabled: true },
+  { eventKey: 'deadline_reminder', name: 'A task I own is close to its due date', category: 'task', defaultEnabled: true },
+  { eventKey: 'approval_reminder', name: 'An approval is waiting for me', category: 'approval', defaultEnabled: true },
+  { eventKey: 'signature_requested', name: 'A document is waiting for my signature', category: 'signature', defaultEnabled: true },
+  { eventKey: 'request_signed', name: 'Someone signs a request I sent', category: 'signature', defaultEnabled: true },
+  { eventKey: 'request_declined', name: 'Someone declines a request I sent', category: 'signature', defaultEnabled: true },
+  { eventKey: 'request_expiring', name: 'A request I sent is about to expire', category: 'signature', defaultEnabled: true },
+  { eventKey: 'meeting_invite', name: 'I am invited to a meeting', category: 'meeting', defaultEnabled: true },
+  { eventKey: 'meeting_conflict', name: 'A meeting clashes with my schedule', category: 'meeting', defaultEnabled: true },
+  { eventKey: 'time_off_decision', name: 'My time-off request is approved or declined', category: 'time_off', defaultEnabled: true },
+  { eventKey: 'announcement', name: 'A new announcement is posted', category: 'announcement', defaultEnabled: true },
+];
+
+export const NOTIFICATION_CATEGORY_LABELS: Record<NotificationEventCategory, string> = {
+  task: 'Tasks',
+  signature: 'Signatures',
+  approval: 'Approvals',
+  meeting: 'Meetings',
+  time_off: 'Time off',
+  announcement: 'Announcements',
+  system: 'System',
+};
+
+/**
+ * user_notification_setting rows for one person: event key → is_enabled.
+ * No entry = the event's default_enabled.
+ */
+export type UserNotificationSettings = Partial<Record<NotificationEventKey, boolean>>;
+
+export function isNotificationEnabled(settings: UserNotificationSettings, key: NotificationEventKey): boolean {
+  return settings[key] ?? NOTIFICATION_EVENTS.find(e => e.eventKey === key)?.defaultEnabled ?? true;
 }
 
 export interface RoleOption {
@@ -244,7 +333,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     password: 'Demo123!',
     jobTitle: 'Product Director',
     department: 'Product Delivery',
-    timezone: 'America/New_York (UTC-5)',
     bio: 'Primary demo account for evaluating Flash Sign onboarding, management, and e-signatures.',
     role: 'org_admin',
     organizationId: 'ws-flash',
@@ -261,7 +349,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     password: 'Demo123!',
     jobTitle: 'VP of Product',
     department: 'Product & Design',
-    timezone: 'America/New_York (UTC-5)',
     bio: 'Overseeing core platform roadmap, cross-functional sprints, and customer deliverables.',
     role: 'product_owner',
     organizationId: 'ws-acme',
@@ -278,7 +365,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     password: 'Demo123!',
     jobTitle: 'Staff Software Architect',
     department: 'Engineering',
-    timezone: 'America/Los_Angeles (UTC-8)',
     bio: 'Lead architect building AI-agent workflows and high-concurrency microservices.',
     role: 'engineering_lead',
     organizationId: 'ws-acme',
@@ -295,7 +381,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     password: 'Demo123!',
     jobTitle: 'Head of Legal & Compliance',
     department: 'Legal Operations',
-    timezone: 'Europe/London (UTC+0)',
     bio: 'Managing enterprise agreements, digital signature audit trails, and data governance.',
     role: 'document_manager',
     organizationId: 'ws-acme',
@@ -312,7 +397,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     password: 'Demo123!',
     jobTitle: 'Founder & CEO',
     department: 'Executive',
-    timezone: 'America/New_York (UTC-5)',
     bio: 'New user registered without completing organization setup.',
     role: 'org_admin',
     organizationId: null,
@@ -332,14 +416,16 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     id: 'inv-demo-1',
     email: 'ravi.perera@flashsign.io',
     fullName: 'Ravi Perera',
-    role: 'developer',
+    roleId: 'role-dev',
+    roleName: 'Developer',
+    projectIds: ['p1', 'p3'],
     jobTitle: 'Frontend Developer',
     department: 'Engineering',
     message: 'Welcome aboard! You will be working with Priya on the signing canvas.',
     organizationId: 'ws-flash',
     organizationName: 'Flash Technologies',
-    invitedById: 'user-demo',
-    invitedByName: 'Demo User',
+    invitedById: 'demo-owner',
+    invitedByName: 'Aria Chen',
     sentAt: daysFromNow(-1),
     expiresAt: daysFromNow(6),
     status: 'pending',
@@ -348,13 +434,15 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     id: 'inv-demo-2',
     email: 'emma.clarke@flashsign.io',
     fullName: 'Emma Clarke',
-    role: 'qa',
+    roleId: 'role-qa',
+    roleName: 'QA Tester',
+    projectIds: ['p1', 'p4'],
     jobTitle: 'QA Engineer',
     department: 'Quality',
     organizationId: 'ws-flash',
     organizationName: 'Flash Technologies',
-    invitedById: 'user-demo',
-    invitedByName: 'Demo User',
+    invitedById: 'demo-owner',
+    invitedByName: 'Aria Chen',
     sentAt: daysFromNow(-3),
     expiresAt: daysFromNow(4),
     status: 'pending',
@@ -362,12 +450,14 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
   {
     id: 'inv-demo-3',
     email: 'jordan.lee@flashsign.io',
-    role: 'project_manager',
+    roleId: 'role-pm',
+    roleName: 'Project Manager',
+    projectIds: [],
     department: 'Delivery',
     organizationId: 'ws-flash',
     organizationName: 'Flash Technologies',
-    invitedById: 'user-demo',
-    invitedByName: 'Demo User',
+    invitedById: 'demo-owner',
+    invitedByName: 'Aria Chen',
     sentAt: daysFromNow(-9),
     expiresAt: daysFromNow(-2),
     status: 'pending',
