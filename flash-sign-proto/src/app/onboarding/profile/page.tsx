@@ -13,16 +13,6 @@ import { useDemoAuth } from '@/context/demo-auth-context';
 import { type DemoRole } from '@/types/demo-auth';
 import { ArrowLeft, ArrowRight, User } from 'lucide-react';
 
-const DEPARTMENT_OPTIONS = [
-  'Product & Design',
-  'Engineering',
-  'Executive Leadership',
-  'Quality Assurance',
-  'Legal & Compliance',
-  'Operations',
-  'Sales & Client Relations',
-];
-
 import { DEMO_PRESET_USERS } from '@/types/demo-auth';
 
 export default function ProfileSetupPage() {
@@ -45,7 +35,6 @@ export default function ProfileSetupPage() {
     defaultValues: {
       fullName: currentUser.fullName || '',
       jobTitle: currentUser.jobTitle || 'Product Manager',
-      department: currentUser.department || 'Product & Design',
       bio: currentUser.bio || '',
       role: currentUser.role || 'project_manager',
       avatarColor: currentUser.avatarColor || '#00c2a8',
@@ -72,7 +61,6 @@ export default function ProfileSetupPage() {
     updateProfile({
       fullName: data.fullName,
       jobTitle: data.jobTitle,
-      department: data.department,
       bio: data.bio,
       role: selectedRole,
       avatarColor,
@@ -141,25 +129,6 @@ export default function ProfileSetupPage() {
             {errors.jobTitle && (
               <p className="text-xs text-[var(--danger)] mt-1">{errors.jobTitle.message}</p>
             )}
-          </div>
-        </div>
-
-        {/* Department */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-          <div>
-            <label className="block text-xs font-semibold text-[var(--ink)] mb-1.5">
-              Department <span className="text-[var(--danger)]">*</span>
-            </label>
-            <select
-              {...register('department')}
-              className="w-full px-3 py-2 text-sm rounded-lg border border-[var(--line)] bg-[var(--paper-elevated)] text-[var(--ink)] focus:outline-none focus:ring-2 focus:ring-[var(--flash)]"
-            >
-              {DEPARTMENT_OPTIONS.map((d) => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
           </div>
         </div>
 

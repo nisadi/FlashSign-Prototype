@@ -13,7 +13,6 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import type { AvailabilityStatus, Task } from '@/types';
-import { FEATURES } from '@/lib/features';
 import { Modal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
 
@@ -23,7 +22,7 @@ export default function MemberProfilePage() {
   const memberId = params?.memberId as string;
 
   const {
-    users, teams, projects, tasks, activities, updateMemberAvailability,
+    users, projects, tasks, activities, updateMemberAvailability,
     addTask,
   } = useApp();
 
@@ -35,11 +34,6 @@ export default function MemberProfilePage() {
 
   // Find member
   const member = users.find(u => u.id === memberId) || users[0];
-
-  const memberTeams = useMemo(() => {
-    if (!member) return [];
-    return teams.filter(t => member.teamIds?.includes(t.id));
-  }, [member, teams]);
 
   const memberProjects = useMemo(() => {
     if (!member) return [];
@@ -129,7 +123,7 @@ export default function MemberProfilePage() {
                 </div>
 
                 <p className="text-sm font-medium text-ink-soft">
-                  {member.title || 'Specialist'} &bull; <span className="text-muted">{member.department}</span>
+                  {member.title || 'Specialist'}
                 </p>
 
                 <div className="flex flex-wrap items-center gap-4 pt-1 text-xs text-muted">
@@ -321,45 +315,6 @@ export default function MemberProfilePage() {
                 <p>Schedule: <span className="text-ink">{member.workingHours || '09:00 - 17:00 EST'}</span></p>
               </div>
             </div>
-
-            {/* Assigned Squads */}
-            {FEATURES.teams && (
-            <div className="bg-paper-elevated border border-line rounded-xl shadow-xs p-5 space-y-3">
-              <h3 className="text-sm font-bold text-ink">Assigned Squads</h3>
-              <div className="space-y-2">
-                {memberTeams.map(t => (
-                  <Link
-                    key={t.id}
-                    href={`/teams/${t.id}`}
-                    className="p-3 rounded-lg bg-paper border border-line flex items-center justify-between hover:border-flash/50 transition-colors"
-                  >
-                    <div className="flex items-center gap-2.5">
-                      <span className="w-3 h-3 rounded-full" style={{ backgroundColor: t.color }} />
-                      <span className="font-semibold text-xs text-ink">{t.name}</span>
-                    </div>
-                    <ArrowRight className="w-3.5 h-3.5 text-muted" />
-                  </Link>
-                ))}
-              </div>
-            </div>
-            )}
-
-            {/* Skills & Expertise */}
-            {member.skills && member.skills.length > 0 && (
-              <div className="bg-paper-elevated border border-line rounded-xl shadow-xs p-5 space-y-3">
-                <h3 className="text-sm font-bold text-ink">Skills & Expertise</h3>
-                <div className="flex flex-wrap gap-1.5">
-                  {member.skills.map((s, idx) => (
-                    <span
-                      key={idx}
-                      className="px-2.5 py-1 rounded-md text-xs font-medium bg-mist/60 text-ink border border-line"
-                    >
-                      {s}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            )}
 
             {/* Recent Member Activity */}
             <div className="bg-paper-elevated border border-line rounded-xl shadow-xs p-5 space-y-3">

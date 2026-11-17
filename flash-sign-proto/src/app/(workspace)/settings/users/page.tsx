@@ -103,7 +103,6 @@ export default function UsersSettingsPage() {
                   <tr className="border-b border-line bg-mist/40">
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted">User</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted">Role</th>
-                    <th className="text-left px-4 py-3 text-xs font-semibold text-muted hidden md:table-cell">Department</th>
                     <th className="text-left px-4 py-3 text-xs font-semibold text-muted hidden lg:table-cell">Status</th>
                     {canManage && <th className="px-4 py-3"></th>}
                   </tr>
@@ -126,7 +125,6 @@ export default function UsersSettingsPage() {
                           {ROLE_LABELS[u.role]}
                         </span>
                       </td>
-                      <td className="px-4 py-3 hidden md:table-cell text-xs text-muted">{u.department}</td>
                       <td className="px-4 py-3 hidden lg:table-cell">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full font-medium ${
                           u.isActive ? 'bg-emerald-50 text-emerald-700' : 'bg-gray-100 text-gray-500'

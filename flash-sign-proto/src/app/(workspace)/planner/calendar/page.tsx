@@ -15,12 +15,11 @@ import { CreateCalendarEventDialog } from '@/components/collaboration/create-cal
 import { CreateMeetingDialog } from '@/components/collaboration/create-meeting-dialog';
 import { MeetingDetailDrawer } from '@/components/collaboration/meeting-detail-drawer';
 import type { CalendarEvent, Meeting } from '@/types';
-import { FEATURES } from '@/lib/features';
 
 const CATEGORIES = ['meeting', 'task_deadline', 'milestone', 'time_off', 'team_event'];
 
 function FullCalendarView() {
-  const { calendarEvents, meetings, deleteCalendarEvent, users, teams, projects } = useApp();
+  const { calendarEvents, meetings, deleteCalendarEvent, users, projects } = useApp();
   // Links such as ?category=time_off open the calendar pre-filtered
   const categoryParam = useSearchParams().get('category');
 
@@ -29,7 +28,6 @@ function FullCalendarView() {
   const [categoryFilter, setCategoryFilter] = useState(
     categoryParam && CATEGORIES.includes(categoryParam) ? categoryParam : 'all'
   );
-  const [teamFilter, setTeamFilter] = useState('all');
   const [memberFilter, setMemberFilter] = useState('all');
 
   const [createEventOpen, setCreateEventOpen] = useState(false);
@@ -109,14 +107,13 @@ function FullCalendarView() {
   const filteredEvents = useMemo(() => {
     return calendarEvents.filter(evt => {
       const matchesCat = categoryFilter === 'all' || evt.category === categoryFilter;
-      const matchesTeam = teamFilter === 'all' || evt.teamId === teamFilter;
       const matchesMember =
         memberFilter === 'all' ||
         evt.organizerId === memberFilter ||
         (evt.attendeeIds && evt.attendeeIds.includes(memberFilter));
-      return matchesCat && matchesTeam && matchesMember;
+      return matchesCat && matchesMember;
     });
-  }, [calendarEvents, categoryFilter, teamFilter, memberFilter]);
+  }, [calendarEvents, categoryFilter, memberFilter]);
 
   const monthYearLabel = currentDate.toLocaleDateString('en-US', {
     month: 'long',
@@ -233,21 +230,6 @@ function FullCalendarView() {
               <option value="time_off">Time Off</option>
               <option value="team_event">Team Events</option>
             </select>
-
-            {FEATURES.teams && (
-              <select
-                value={teamFilter}
-                onChange={e => setTeamFilter(e.target.value)}
-                className="px-2.5 py-1.5 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              >
-                <option value="all">All Squads</option>
-                {teams.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )}
 
             {/* View Mode Toggle */}
             <div className="flex items-center bg-paper rounded-lg border border-line p-0.5 font-semibold">
@@ -420,7 +402,6 @@ function FullCalendarView() {
             <div className="divide-y divide-line">
               {filteredEvents.map(evt => {
                 const organizer = users.find(u => u.id === evt.organizerId);
-                const team = teams.find(t => t.id === evt.teamId);
                 const project = projects.find(p => p.id === evt.projectId);
 
                 return (
@@ -444,7 +425,6 @@ function FullCalendarView() {
                         </div>
                         <p className="text-muted truncate">{evt.description || 'No description'}</p>
                         <div className="flex items-center gap-3 pt-0.5 text-[11px] text-muted">
-                          {FEATURES.teams && team && <span>Squad: <strong>{team.name}</strong></span>}
                           {project && <span>Project: <strong>{project.name}</strong></span>}
                         </div>
                       </div>

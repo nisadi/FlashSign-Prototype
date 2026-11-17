@@ -3,7 +3,7 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type {
   DemoRole, User, Project, Task, Sprint, Document, ApprovalRequest,
-  Notification, AuditLog, AgentRun, Milestone, Team, ProjectFile,
+  Notification, AuditLog, AgentRun, Milestone, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
   AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, UserFavoriteProject, BaselineChange, TaskStatusChange, BoardColumn, Epic, Story, ProjectStructure,
@@ -11,7 +11,7 @@ import type {
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
   MOCK_APPROVALS, MOCK_NOTIFICATIONS, MOCK_AUDIT_LOGS, MOCK_AGENT_RUNS,
-  MOCK_MILESTONES, MOCK_TEAMS, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG, MOCK_EPICS, MOCK_STORIES,
+  MOCK_MILESTONES, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG, MOCK_EPICS, MOCK_STORIES,
   INITIAL_SRS_TASK_HISTORY, MOCK_FAVORITE_PROJECTS,
 } from '@/data/mock-data';
 import {
@@ -51,7 +51,6 @@ export type CreateMilestoneInput = Partial<Milestone> & { name: string; projectI
 export type CreateEpicInput = Partial<Epic> & { name: string; projectId: string };
 export type CreateStoryInput = Partial<Story> & { title: string; projectId: string };
 export type CreateFileInput = Partial<ProjectFile> & { name: string; projectId: string };
-export type CreateTeamInput = Partial<Team> & { name: string };
 export type CreateMemberInput = Partial<User> & { name: string; email: string };
 export type CreateCalendarEventInput = Partial<CalendarEvent> & { title: string; category: EventCategory; startDate: string; endDate: string };
 export type CreateTimeOffInput = Partial<TimeOffRequest> & { memberId: string; leaveType: LeaveType; startDate: string; endDate: string; durationDays: number };
@@ -97,7 +96,6 @@ export interface AppState {
   /** Plan levels between phases (milestones) and tasks */
   epics: Epic[];
   stories: Story[];
-  teams: Team[];
   files: ProjectFile[];
   documents: Document[];
   documentItems: DocumentItem[];
@@ -501,10 +499,6 @@ interface AppActions {
    * items' children move up to the level above (e.g. a removed epic's stories stay in its phase).
    */
   setProjectStructure: (projectId: string, structure: ProjectStructure) => void;
-  // Teams
-  addTeam: (team: CreateTeamInput) => void;
-  updateTeam: (id: string, updates: Partial<Team>) => void;
-  deleteTeam: (id: string) => void;
   // Members
   addMember: (user: CreateMemberInput) => void;
   updateMember: (id: string, updates: Partial<User>) => void;
@@ -665,7 +659,6 @@ function getInitialState(): AppState {
     milestones: MOCK_MILESTONES,
     epics: MOCK_EPICS,
     stories: MOCK_STORIES,
-    teams: MOCK_TEAMS,
     files: MOCK_PROJECT_FILES,
     documents: MOCK_DOCUMENTS,
     documentItems: MOCK_DOCUMENT_ITEMS,
@@ -768,7 +761,6 @@ function saveState(state: AppState): void {
       demoRole: state.demoRole,
       currentUserId: state.currentUserId,
       users: state.users,
-      teams: state.teams,
       projects: state.projects,
       tasks: state.tasks,
       sprints: state.sprints,
@@ -886,7 +878,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let userInitials = currentRbacUser?.avatarInitials || authUser?.avatarInitials || 'AC';
       let userColor = currentRbacUser?.avatarColor || authUser?.avatarColor || '#009882';
       let userTitle = currentRbacUser?.jobTitle || authUser?.jobTitle || 'Executive';
-      let userDept = currentRbacUser?.department || authUser?.department || 'Executive Leadership';
 
       if (currentRbacUser) {
         userId = currentRbacUser.id;
@@ -895,7 +886,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         userInitials = currentRbacUser.avatarInitials;
         userColor = currentRbacUser.avatarColor;
         userTitle = currentRbacUser.jobTitle || 'Team Member';
-        userDept = currentRbacUser.department || 'Operations';
 
         if (currentRbacUser.isSuperAdmin) {
           mappedRole = 'platform_admin';
@@ -934,7 +924,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         initials: userInitials,
         role: mappedRole,
         title: userTitle,
-        department: userDept,
         color: userColor,
         isActive: true,
         projectIds: currentRbacUser?.assignedProjectIds || ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
@@ -991,7 +980,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         status: p.status || 'active',
         health: p.health || 'on_track',
         ownerId: p.ownerId || s.currentUserId,
-        teamIds: p.teamIds || [],
         memberIds: p.memberIds || [s.currentUserId],
         startDate,
         endDate,
@@ -1564,66 +1552,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       };
     }),
 
-    // Teams
-    addTeam: (t) => update(s => {
-      const newTeam: Team = {
-        id: t.id || `team-${Date.now()}`,
-        name: t.name,
-        description: t.description || '',
-        leadId: t.leadId || s.currentUserId,
-        memberIds: t.memberIds || [s.currentUserId],
-        color: t.color || '#00c2a8',
-        department: t.department || 'Engineering',
-        category: t.category || 'Product Development',
-        goals: t.goals || [],
-        status: t.status || 'active',
-        projectIds: t.projectIds || [],
-        icon: t.icon || 'Users',
-        createdAt: t.createdAt || new Date().toISOString(),
-      };
-      const log: AuditLog = {
-        id: `act-${Date.now()}`,
-        actorId: s.currentUserId,
-        actorName: s.users.find(u => u.id === s.currentUserId)?.name || 'User',
-        action: 'created a team',
-        resource: 'Team',
-        resourceId: newTeam.id,
-        detail: `Created "${newTeam.name}"`,
-        timestamp: new Date().toISOString(),
-      };
-      return {
-        ...s,
-        teams: [...s.teams, newTeam],
-        auditLogs: [log, ...s.auditLogs],
-        activities: [log, ...s.activities],
-      };
-    }),
-    updateTeam: (id, updates) => update(s => {
-      const log: AuditLog = {
-        id: `act-${Date.now()}`,
-        actorId: s.currentUserId,
-        actorName: s.users.find(u => u.id === s.currentUserId)?.name || 'User',
-        action: 'updated team information',
-        resource: 'Team',
-        resourceId: id,
-        timestamp: new Date().toISOString(),
-      };
-      return {
-        ...s,
-        teams: s.teams.map(t => t.id === id ? { ...t, ...updates } : t),
-        auditLogs: [log, ...s.auditLogs],
-        activities: [log, ...s.activities],
-      };
-    }),
-    deleteTeam: (id) => update(s => ({
-      ...s,
-      teams: s.teams.filter(t => t.id !== id),
-      users: s.users.map(u => ({
-        ...u,
-        teamIds: (u.teamIds || []).filter(tid => tid !== id),
-      })),
-    })),
-
     // Members
     addMember: (u) => update(s => {
       const initials = u.initials || u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'TM';
@@ -1634,16 +1562,13 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         initials,
         color: u.color || '#00c2a8',
         role: u.role || 'developer',
-        department: u.department || 'Engineering',
         title: u.title || 'Specialist',
         avatar: u.avatar,
         isActive: u.isActive ?? true,
-        skills: u.skills || ['Collaboration', 'TypeScript'],
         timeZone: u.timeZone || 'America/New_York (EST)',
         workingHours: u.workingHours || '09:00 - 17:00 EST',
         availability: u.availability || 'available',
         weeklyCapacity: u.weeklyCapacity || 40,
-        teamIds: u.teamIds || [],
         projectIds: u.projectIds || [],
         createdAt: new Date().toISOString(),
       };
@@ -1657,16 +1582,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         detail: `Added ${newMember.name} (${newMember.title})`,
         timestamp: new Date().toISOString(),
       };
-      const nextTeams = s.teams.map(t => {
-        if (newMember.teamIds?.includes(t.id) && !t.memberIds.includes(newMember.id)) {
-          return { ...t, memberIds: [...t.memberIds, newMember.id] };
-        }
-        return t;
-      });
       return {
         ...s,
         users: [...s.users, newMember],
-        teams: nextTeams,
         auditLogs: [log, ...s.auditLogs],
         activities: [log, ...s.activities],
       };
@@ -1678,11 +1596,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     deleteMember: (id) => update(s => ({
       ...s,
       users: s.users.filter(u => u.id !== id),
-      teams: s.teams.map(t => ({
-        ...t,
-        memberIds: t.memberIds.filter(mid => mid !== id),
-        leadId: t.leadId === id ? (t.memberIds.find(mid => mid !== id) || '') : t.leadId,
-      })),
     })),
     updateMemberAvailability: (id, availability) => update(s => {
       const user = s.users.find(u => u.id === id);
@@ -1716,7 +1629,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         allDay: evt.allDay ?? false,
         organizerId: evt.organizerId || s.currentUserId,
         attendeeIds: evt.attendeeIds || [s.currentUserId],
-        teamId: evt.teamId,
         projectId: evt.projectId,
         taskId: evt.taskId,
         milestoneId: evt.milestoneId,
@@ -1877,7 +1789,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         durationMinutes: m.durationMinutes || 45,
         organizerId: m.organizerId || s.currentUserId,
         participantIds: m.participantIds || [s.currentUserId],
-        teamId: m.teamId,
         projectId: m.projectId,
         agenda: m.agenda || [],
         location: m.location || 'FlashSign Conference Room A',
@@ -1896,7 +1807,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         allDay: false,
         organizerId: newMeeting.organizerId,
         attendeeIds: newMeeting.participantIds,
-        teamId: newMeeting.teamId,
         projectId: newMeeting.projectId,
         location: newMeeting.location,
         meetingLink: newMeeting.meetingLink,
@@ -3271,10 +3181,6 @@ export function useSprints() {
 
 export function useMilestones() {
   return useApp().milestones;
-}
-
-export function useTeams() {
-  return useApp().teams;
 }
 
 export function useProjectFiles() {

@@ -19,7 +19,6 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import type { User, AvailabilityStatus } from '@/types';
-import { FEATURES } from '@/lib/features';
 import { Modal } from '@/components/shared/modal';
 
 type MembersTab = 'members' | 'invited';
@@ -35,7 +34,7 @@ export default function MembersDirectoryPage() {
 function MembersDirectory() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { users, teams, projects, tasks, deleteMember, demoRole } = useApp();
+  const { users, projects, tasks, deleteMember, demoRole } = useApp();
   const { invitations, selectedWorkspace, currentRbacUser } = useDemoAuth();
   const canManage = canManageTeam(currentRbacUser);
   const canInvite = canManage;
@@ -47,20 +46,13 @@ function MembersDirectory() {
   const pendingCount = invitations.filter(i => i.organizationId === selectedWorkspace.id && i.status === 'pending').length;
 
   const [search, setSearch] = useState('');
-  const [departmentFilter, setDepartmentFilter] = useState('all');
-  const [teamFilter, setTeamFilter] = useState('all');
   const [availabilityFilter, setAvailabilityFilter] = useState('all');
-  const [sortBy, setSortBy] = useState<'name' | 'workload' | 'department'>('name');
+  const [sortBy, setSortBy] = useState<'name' | 'workload'>('name');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
 
   const [createMemberOpen, setCreateMemberOpen] = useState(false);
   const [memberToEdit, setMemberToEdit] = useState<User | null>(null);
   const [deleteConfirmMember, setDeleteConfirmMember] = useState<User | null>(null);
-
-  // Departments
-  const departments = useMemo(() => {
-    return Array.from(new Set(users.map(u => u.department || 'Engineering')));
-  }, [users]);
 
   // Filtered and Sorted Members
   const filteredMembers = useMemo(() => {
@@ -71,17 +63,13 @@ function MembersDirectory() {
           u.email.toLowerCase().includes(search.toLowerCase()) ||
           (u.title || '').toLowerCase().includes(search.toLowerCase());
 
-        const matchesDept = departmentFilter === 'all' || u.department === departmentFilter;
-        const matchesTeam =
-          teamFilter === 'all' || (u.teamIds && u.teamIds.includes(teamFilter));
         const matchesAvailability =
           availabilityFilter === 'all' || u.availability === availabilityFilter;
 
-        return matchesSearch && matchesDept && matchesTeam && matchesAvailability;
+        return matchesSearch && matchesAvailability;
       })
       .sort((a, b) => {
         if (sortBy === 'name') return a.name.localeCompare(b.name);
-        if (sortBy === 'department') return (a.department || '').localeCompare(b.department || '');
         if (sortBy === 'workload') {
           const aCount = tasks.filter(t => t.assigneeId === a.id && t.status !== 'done').length;
           const bCount = tasks.filter(t => t.assigneeId === b.id && t.status !== 'done').length;
@@ -89,7 +77,7 @@ function MembersDirectory() {
         }
         return 0;
       });
-  }, [users, search, departmentFilter, teamFilter, availabilityFilter, sortBy, tasks]);
+  }, [users, search, availabilityFilter, sortBy, tasks]);
 
   const handleDelete = (member: User) => {
     deleteMember(member.id);
@@ -175,36 +163,6 @@ function MembersDirectory() {
               />
             </div>
 
-            {/* Department */}
-            <select
-              value={departmentFilter}
-              onChange={e => setDepartmentFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-            >
-              <option value="all">All Departments</option>
-              {departments.map(d => (
-                <option key={d} value={d}>
-                  {d}
-                </option>
-              ))}
-            </select>
-
-            {/* Team */}
-            {FEATURES.teams && (
-              <select
-                value={teamFilter}
-                onChange={e => setTeamFilter(e.target.value)}
-                className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              >
-                <option value="all">All Squads</option>
-                {teams.map(t => (
-                  <option key={t.id} value={t.id}>
-                    {t.name}
-                  </option>
-                ))}
-              </select>
-            )}
-
             {/* Availability */}
             <select
               value={availabilityFilter}
@@ -226,7 +184,6 @@ function MembersDirectory() {
             >
               <option value="name">Sort by Name</option>
               <option value="workload">Sort by Active Tasks</option>
-              <option value="department">Sort by Department</option>
             </select>
 
             {/* Grid / List toggle */}
@@ -264,8 +221,6 @@ function MembersDirectory() {
             <button
               onClick={() => {
                 setSearch('');
-                setDepartmentFilter('all');
-                setTeamFilter('all');
                 setAvailabilityFilter('all');
               }}
               className="px-4 py-1.5 bg-mist hover:bg-line text-ink font-semibold rounded-lg text-xs transition-colors"
@@ -277,7 +232,6 @@ function MembersDirectory() {
           /* Grid View */
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
             {filteredMembers.map(member => {
-              const memberTeams = teams.filter(t => member.teamIds?.includes(t.id));
               const memberTasks = tasks.filter(t => t.assigneeId === member.id && t.status !== 'done');
               const memberProjects = projects.filter(p => member.projectIds?.includes(p.id));
 
@@ -299,9 +253,6 @@ function MembersDirectory() {
                             {member.name}
                           </Link>
                           <p className="text-xs text-muted truncate">{member.title || member.role}</p>
-                          <p className="text-[10px] uppercase font-semibold text-muted tracking-wider mt-0.5">
-                            {member.department}
-                          </p>
                         </div>
                       </div>
 
@@ -337,45 +288,6 @@ function MembersDirectory() {
                       {member.availability && <AvailabilityBadge status={member.availability} size="sm" />}
                     </div>
 
-                    {/* Squad Badges */}
-                    {FEATURES.teams && (
-                    <div className="space-y-1">
-                      <span className="text-[10px] text-muted font-medium">Assigned Squads:</span>
-                      <div className="flex flex-wrap gap-1">
-                        {memberTeams.length === 0 ? (
-                          <span className="text-[11px] text-muted italic">Unassigned squad</span>
-                        ) : (
-                          memberTeams.map(t => (
-                            <span
-                              key={t.id}
-                              className="px-2 py-0.5 rounded text-[10px] font-semibold bg-mist/60 border border-line text-ink"
-                            >
-                              {t.name}
-                            </span>
-                          ))
-                        )}
-                      </div>
-                    </div>
-                    )}
-
-                    {/* Skills pills */}
-                    {member.skills && member.skills.length > 0 && (
-                      <div className="flex flex-wrap gap-1">
-                        {member.skills.slice(0, 3).map((sk, idx) => (
-                          <span
-                            key={idx}
-                            className="px-2 py-0.5 rounded text-[10px] bg-paper border border-line text-muted"
-                          >
-                            {sk}
-                          </span>
-                        ))}
-                        {member.skills.length > 3 && (
-                          <span className="text-[10px] text-muted self-center">
-                            +{member.skills.length - 3}
-                          </span>
-                        )}
-                      </div>
-                    )}
                   </div>
 
                   {/* Card Bottom: Stats */}
@@ -406,8 +318,7 @@ function MembersDirectory() {
                 <thead className="bg-mist/40 border-b border-line text-muted uppercase text-[10px] font-semibold tracking-wider">
                   <tr>
                     <th className="py-3 px-4">Member</th>
-                    <th className="py-3 px-4">Department</th>
-                    {FEATURES.teams && <th className="py-3 px-4">Squads</th>}
+                    <th className="py-3 px-4">Job Title</th>
                     <th className="py-3 px-4">Availability</th>
                     <th className="py-3 px-4">Active Tasks</th>
                     <th className="py-3 px-4">Time Zone</th>
@@ -416,7 +327,6 @@ function MembersDirectory() {
                 </thead>
                 <tbody className="divide-y divide-line">
                   {filteredMembers.map(member => {
-                    const memberTeams = teams.filter(t => member.teamIds?.includes(t.id));
                     const memberTasks = tasks.filter(t => t.assigneeId === member.id && t.status !== 'done');
                     return (
                       <tr key={member.id} className="hover:bg-mist/20 transition-colors">
@@ -436,15 +346,7 @@ function MembersDirectory() {
                         </td>
                         <td className="py-3 px-4">
                           <p className="font-semibold text-ink">{member.title || member.role}</p>
-                          <p className="text-[10px] text-muted">{member.department}</p>
                         </td>
-                        {FEATURES.teams && (
-                          <td className="py-3 px-4">
-                            <span className="font-medium text-ink">
-                              {memberTeams.map(t => t.name).join(', ') || 'None'}
-                            </span>
-                          </td>
-                        )}
                         <td className="py-3 px-4">
                           {member.availability && <AvailabilityBadge status={member.availability} size="sm" />}
                         </td>

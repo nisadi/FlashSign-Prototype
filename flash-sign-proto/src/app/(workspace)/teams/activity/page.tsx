@@ -4,34 +4,31 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
   Activity, Search, Filter, Calendar, Users, CheckSquare,
-  Video, Palmtree, Megaphone, Flag, Building2, ChevronRight,
+  Video, Palmtree, Megaphone, Flag, ChevronRight,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
-import { FEATURES } from '@/lib/features';
 
 const CATEGORIES = [
   { id: 'all', label: 'All Activities' },
-  { id: 'team', label: 'Teams & Squads' },
   { id: 'member', label: 'Members & Roles' },
   { id: 'meeting', label: 'Meetings' },
   { id: 'time_off', label: 'Time Off' },
   { id: 'announcement', label: 'Announcements' },
   { id: 'task', label: 'Tasks & Projects' },
-].filter(cat => FEATURES.teams || cat.id !== 'team');
+];
 
 export default function TeamActivityPage() {
-  const { activities, users, teams } = useApp();
+  const { activities, users } = useApp();
 
   const [search, setSearch] = useState('');
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [selectedMember, setSelectedMember] = useState('all');
-  const [selectedTeam, setSelectedTeam] = useState('all');
 
   const filteredActivities = useMemo(() => {
     return activities.filter(act => {
-      // Team events are hidden along with the rest of the Teams feature
-      if (!FEATURES.teams && act.resource?.toLowerCase() === 'team') return false;
+      // Organizations have no sub-teams: hide any old team events saved in the browser
+      if (act.resource?.toLowerCase() === 'team') return false;
 
       const matchesSearch =
         act.action.toLowerCase().includes(search.toLowerCase()) ||
@@ -41,8 +38,7 @@ export default function TeamActivityPage() {
       const matchesMember = selectedMember === 'all' || act.actorId === selectedMember;
 
       let matchesCat = true;
-      if (selectedCategory === 'team') matchesCat = act.resource?.toLowerCase() === 'team';
-      else if (selectedCategory === 'member') matchesCat = act.resource?.toLowerCase() === 'member';
+      if (selectedCategory === 'member') matchesCat = act.resource?.toLowerCase() === 'member';
       else if (selectedCategory === 'meeting') matchesCat = act.resource?.toLowerCase() === 'meeting';
       else if (selectedCategory === 'time_off') matchesCat = act.resource?.toLowerCase().includes('time');
       else if (selectedCategory === 'announcement') matchesCat = act.resource?.toLowerCase() === 'announcement';
@@ -54,7 +50,6 @@ export default function TeamActivityPage() {
 
   const getActionIcon = (resource?: string) => {
     const r = resource?.toLowerCase() || '';
-    if (r === 'team') return <Building2 className="w-4 h-4 text-blue-500" />;
     if (r === 'member') return <Users className="w-4 h-4 text-emerald-500" />;
     if (r === 'meeting') return <Video className="w-4 h-4 text-flash-deep" />;
     if (r.includes('time')) return <Palmtree className="w-4 h-4 text-rose-500" />;
@@ -173,15 +168,7 @@ export default function TeamActivityPage() {
                     </div>
 
                     <div className="shrink-0 text-right">
-                      {act.resource?.toLowerCase() === 'team' ? (
-                        <Link
-                          href="/teams/directory"
-                          className="font-semibold text-flash-deep hover:underline flex items-center gap-1 text-[11px]"
-                        >
-                          <span>Teams</span>
-                          <ChevronRight className="w-3 h-3" />
-                        </Link>
-                      ) : act.resource?.toLowerCase() === 'meeting' ? (
+                      {act.resource?.toLowerCase() === 'meeting' ? (
                         <Link
                           href="/planner/meetings"
                           className="font-semibold text-flash-deep hover:underline flex items-center gap-1 text-[11px]"

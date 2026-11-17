@@ -3,7 +3,7 @@
 import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import {
-  Users, Building2, CheckSquare, Gauge, Palmtree, Plus, ArrowRight, Video,
+  Users, CheckSquare, Gauge, Palmtree, Plus, ArrowRight, Video,
   Megaphone, Activity, ChevronRight, OctagonAlert, CircleCheckBig,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
@@ -12,13 +12,11 @@ import { canViewTeamAnalytics } from '@/lib/rbac';
 import { AccessDenied } from '@/components/shared/access-denied';
 import { AvailabilityBadge, LeaveTypeBadge } from '@/components/collaboration/collaboration-badges';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
-import { CreateTeamDialog } from '@/components/collaboration/create-team-dialog';
 import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
 import { CreateMeetingDialog } from '@/components/collaboration/create-meeting-dialog';
 import { CreateAnnouncementDialog } from '@/components/collaboration/create-announcement-dialog';
 import { TaskFlowChart, AvailabilityNow, TaskStatusByMember, MeetingLoad } from '@/components/analytics/team-charts';
 import { WEEKLY_TASK_FLOW } from '@/data/mock-analytics';
-import { FEATURES } from '@/lib/features';
 import { TimeTrackingSection } from '@/components/analytics/time-tracking';
 
 // The demo data is anchored to this date (see data/mock-collaboration.ts)
@@ -35,7 +33,7 @@ const formatDate = (value: string) =>
 
 export default function TeamAnalyticsPage() {
   const {
-    users, teams, tasks, meetings, timeOffRequests, activities, announcements, milestones,
+    users, tasks, meetings, timeOffRequests, activities, announcements, milestones,
   } = useApp();
   const { currentRbacUser } = useDemoAuth();
 
@@ -53,7 +51,6 @@ export default function TeamAnalyticsPage() {
   }
 
   // Dialog states
-  const [createTeamOpen, setCreateTeamOpen] = useState(false);
   const [createMemberOpen, setCreateMemberOpen] = useState(false);
   const [scheduleMeetingOpen, setScheduleMeetingOpen] = useState(false);
   const [createAnnouncementOpen, setCreateAnnouncementOpen] = useState(false);
@@ -162,16 +159,6 @@ export default function TeamAnalyticsPage() {
               <Plus className="w-3.5 h-3.5 text-flash-deep" />
               <span>Add Member</span>
             </button>
-
-            {FEATURES.teams && (
-              <button
-                onClick={() => setCreateTeamOpen(true)}
-                className="flex items-center gap-1.5 px-3 py-1.5 bg-paper-elevated hover:bg-mist text-ink font-semibold rounded-lg border border-line shadow-2xs transition-colors text-xs"
-              >
-                <Building2 className="w-3.5 h-3.5 text-flash-deep" />
-                <span>Create Team</span>
-              </button>
-            )}
 
             <button
               onClick={() => setScheduleMeetingOpen(true)}
@@ -387,92 +374,6 @@ export default function TeamAnalyticsPage() {
           </div>
         </div>
 
-        {/* Teams Directory Preview (hidden while the Teams feature is off) */}
-        {FEATURES.teams && (
-          <div className="bg-paper-elevated border border-line rounded-xl shadow-xs overflow-hidden">
-            <div className="p-4 sm:p-5 border-b border-line flex items-center justify-between">
-              <div>
-                <h2 className="text-base font-bold text-ink">Active Teams Directory</h2>
-                <p className="text-xs text-muted">Core cross-functional groups driving deliverables</p>
-              </div>
-              <Link
-                href="/teams/directory"
-                className="flex items-center gap-1 text-xs font-semibold text-flash-deep hover:text-ink transition-colors"
-              >
-                <span>View All Teams</span>
-                <ArrowRight className="w-3.5 h-3.5" />
-              </Link>
-            </div>
-
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 sm:p-5">
-              {teams.map(team => {
-                const lead = users.find(u => u.id === team.leadId);
-                const memberUsers = users.filter(u => team.memberIds.includes(u.id));
-                const teamTasks = tasks.filter(t => memberUsers.some(m => m.id === t.assigneeId));
-                return (
-                  <div
-                    key={team.id}
-                    className="p-4 rounded-xl border border-line bg-paper hover:border-flash/50 transition-all flex flex-col justify-between"
-                  >
-                    <div>
-                      <div className="flex items-start justify-between gap-2">
-                        <div className="flex items-center gap-2.5">
-                          <div
-                            className="w-8 h-8 rounded-lg flex items-center justify-center font-bold text-white text-xs shrink-0 shadow-2xs"
-                            style={{ backgroundColor: team.color }}
-                          >
-                            {team.name.slice(0, 2).toUpperCase()}
-                          </div>
-                          <div>
-                            <Link
-                              href={`/teams/${team.id}`}
-                              className="font-bold text-sm text-ink hover:text-flash-deep transition-colors line-clamp-1"
-                            >
-                              {team.name}
-                            </Link>
-                            <span className="text-[10px] font-medium text-muted uppercase tracking-wider">
-                              {team.department}
-                            </span>
-                          </div>
-                        </div>
-                        <span className="px-2 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-500/10 text-emerald-700 border border-emerald-500/20">
-                          Active
-                        </span>
-                      </div>
-
-                      <p className="text-xs text-muted mt-2.5 line-clamp-2 leading-relaxed">
-                        {team.description}
-                      </p>
-                    </div>
-
-                    <div className="pt-4 mt-4 border-t border-line flex items-center justify-between">
-                      <div className="flex items-center -space-x-1.5 overflow-hidden">
-                        {memberUsers.slice(0, 4).map(m => (
-                          <MemberAvatar key={m.id} user={m} size="xs" showAvailability />
-                        ))}
-                        {memberUsers.length > 4 && (
-                          <span className="w-6 h-6 rounded-full bg-mist text-[10px] font-bold text-ink flex items-center justify-center border border-white shrink-0">
-                            +{memberUsers.length - 4}
-                          </span>
-                        )}
-                      </div>
-
-                      <div className="text-right text-[11px] text-muted">
-                        <span>{teamTasks.length} tasks</span>
-                        {lead && (
-                          <p className="text-[10px] font-medium text-ink truncate max-w-[120px]">
-                            Lead: {lead.name.split(' ')[0]}
-                          </p>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
-
         {/* Team members + recent activity */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
           {/* Team Members */}
@@ -495,10 +396,6 @@ export default function TeamAnalyticsPage() {
               {[recentMembers.slice(0, 3), recentMembers.slice(3, 6)].map((column, ci) => (
                 <div key={ci} className="divide-y divide-line">
                   {column.map(member => {
-                    const memberTeamNames = (FEATURES.teams && teams
-                      .filter(t => member.teamIds?.includes(t.id))
-                      .map(t => t.name)
-                      .join(', ')) || member.department;
                     const userTaskCount = tasks.filter(t => t.assigneeId === member.id && t.status !== 'done').length;
   
                     return (
@@ -513,7 +410,7 @@ export default function TeamAnalyticsPage() {
                               {member.name}
                             </Link>
                             <p className="text-[11px] text-muted truncate">
-                              {member.title || member.role} · <span className="text-ink-soft">{memberTeamNames}</span>
+                              {member.title || member.role}
                             </p>
                           </div>
                         </div>
@@ -571,7 +468,6 @@ export default function TeamAnalyticsPage() {
       </div>
 
       {/* Shared Modals */}
-      {FEATURES.teams && <CreateTeamDialog open={createTeamOpen} onOpenChange={setCreateTeamOpen} />}
       <CreateMemberDialog open={createMemberOpen} onOpenChange={setCreateMemberOpen} />
       <CreateMeetingDialog open={scheduleMeetingOpen} onOpenChange={setScheduleMeetingOpen} />
       <CreateAnnouncementDialog open={createAnnouncementOpen} onOpenChange={setCreateAnnouncementOpen} />

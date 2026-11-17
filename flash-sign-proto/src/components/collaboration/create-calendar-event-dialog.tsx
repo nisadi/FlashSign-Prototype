@@ -4,7 +4,6 @@ import React, { useState } from 'react';
 import { X, Calendar as CalendarIcon, Clock, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { CalendarEvent, EventCategory } from '@/types';
-import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
 
@@ -32,7 +31,7 @@ export function CreateCalendarEventDialog({
   defaultDate,
   onSuccess,
 }: CreateCalendarEventDialogProps) {
-  const { users, teams, projects, addCalendarEvent, updateCalendarEvent, currentUserId } = useApp();
+  const { users, projects, addCalendarEvent, updateCalendarEvent, currentUserId } = useApp();
 
   const [title, setTitle] = useState(eventToEdit?.title || '');
   const [description, setDescription] = useState(eventToEdit?.description || '');
@@ -48,7 +47,6 @@ export function CreateCalendarEventDialog({
   const [attendeeIds, setAttendeeIds] = useState<string[]>(
     eventToEdit?.attendeeIds || [currentUserId]
   );
-  const [teamId, setTeamId] = useState(eventToEdit?.teamId || '');
   const [projectId, setProjectId] = useState(eventToEdit?.projectId || '');
   const [location, setLocation] = useState(eventToEdit?.location || '');
   const [meetingLink, setMeetingLink] = useState(eventToEdit?.meetingLink || '');
@@ -89,7 +87,6 @@ export function CreateCalendarEventDialog({
         allDay,
         organizerId,
         attendeeIds,
-        teamId: teamId || undefined,
         projectId: projectId || undefined,
         location,
         meetingLink,
@@ -110,7 +107,6 @@ export function CreateCalendarEventDialog({
         allDay,
         organizerId,
         attendeeIds,
-        teamId: teamId || undefined,
         projectId: projectId || undefined,
         location,
         meetingLink,
@@ -254,25 +250,8 @@ export function CreateCalendarEventDialog({
             </div>
           </div>
 
-          {/* Team and Project */}
-          <div className={`grid grid-cols-1 ${FEATURES.teams ? 'sm:grid-cols-2' : ''} gap-3`}>
-            {FEATURES.teams && (
-              <div>
-                <label className="block font-semibold text-ink mb-1">Related Team</label>
-                <select
-                  value={teamId}
-                  onChange={e => setTeamId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                >
-                  <option value="">None</option>
-                  {teams.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          {/* Project */}
+          <div className="grid grid-cols-1 gap-3">
 
             <div>
               <label className="block font-semibold text-ink mb-1">Related Project</label>

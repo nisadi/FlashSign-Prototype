@@ -23,7 +23,6 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   const [selectedRoleId, setSelectedRoleId] = useState<string>('role-dev');
   const [assignedProjectIds, setAssignedProjectIds] = useState<string[]>([]);
   const [jobTitle, setJobTitle] = useState('');
-  const [department, setDepartment] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [sent, setSent] = useState<DemoInvitation | null>(null);
@@ -35,7 +34,6 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   // Archived projects can't take new members
   const assignableProjects = projects.filter(p => !p.archivedAt);
 
-  const departments = Array.from(new Set(users.map(u => u.department).filter(Boolean))) as string[];
   const inviter = currentUser?.fullName ?? 'Your workspace owner';
   const orgName = selectedWorkspace.name;
 
@@ -45,7 +43,6 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
     setSelectedRoleId('role-dev');
     setAssignedProjectIds([]);
     setJobTitle('');
-    setDepartment('');
     setMessage('');
     setError(null);
     setSent(null);
@@ -81,7 +78,6 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
       email: trimmed,
       fullName,
       jobTitle,
-      department,
       message,
       roleId: selectedCustomRole.id,
       assignedProjectIds: selectedCustomRole.projectAccess === 'user' ? assignedProjectIds : [],
@@ -180,29 +176,20 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
                 <span className="font-semibold text-ink">Full name <span className="text-muted font-normal">(optional)</span></span>
                 <input value={fullName} onChange={e => setFullName(e.target.value)} placeholder="They can change it when they join" className={inputClass} />
               </label>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="block space-y-1">
-                  <span className="font-semibold text-ink">Role <span className="text-danger">*</span></span>
-                  <select
-                    value={selectedCustomRole?.id ?? ''}
-                    onChange={e => { setSelectedRoleId(e.target.value); setError(null); }}
-                    className={inputClass}
-                  >
-                    {roleOptions.map(r => (
-                      <option key={r.id} value={r.id}>
-                        {r.name} ({r.projectAccess === 'management' ? 'All Projects' : 'User Access'})
-                      </option>
-                    ))}
-                  </select>
-                </label>
-                <label className="block space-y-1">
-                  <span className="font-semibold text-ink">Department</span>
-                  <input value={department} onChange={e => setDepartment(e.target.value)} list="invite-departments" placeholder="e.g. Engineering" className={inputClass} />
-                  <datalist id="invite-departments">
-                    {departments.map(d => <option key={d} value={d} />)}
-                  </datalist>
-                </label>
-              </div>
+              <label className="block space-y-1">
+                <span className="font-semibold text-ink">Role <span className="text-danger">*</span></span>
+                <select
+                  value={selectedCustomRole?.id ?? ''}
+                  onChange={e => { setSelectedRoleId(e.target.value); setError(null); }}
+                  className={inputClass}
+                >
+                  {roleOptions.map(r => (
+                    <option key={r.id} value={r.id}>
+                      {r.name} ({r.projectAccess === 'management' ? 'All Projects' : 'User Access'})
+                    </option>
+                  ))}
+                </select>
+              </label>
 
               {/* Project assignments for User Access */}
               {selectedCustomRole?.projectAccess === 'user' && (
@@ -263,7 +250,7 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
                   <p>Hi {fullName.trim().split(' ')[0] || 'there'},</p>
                   <p>
                     <strong>{inviter}</strong> has invited you to join <strong>{orgName}</strong> on Flash Sign as{' '}
-                    <strong>{selectedCustomRole?.name ?? 'a member'}</strong>{department.trim() && <> in {department.trim()}</>}.
+                    <strong>{selectedCustomRole?.name ?? 'a member'}</strong>.
                   </p>
                   {message.trim() && (
                     <blockquote className="border-l-2 border-flash pl-3 text-ink-soft italic whitespace-pre-line">{message.trim()}</blockquote>

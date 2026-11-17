@@ -18,11 +18,10 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
-import { FEATURES } from '@/lib/features';
 
 export default function NewMeetingPage() {
   const router = useRouter();
-  const { users, teams, projects, meetings, addMeeting } = useApp();
+  const { users, projects, meetings, addMeeting } = useApp();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');
@@ -39,7 +38,6 @@ export default function NewMeetingPage() {
     users[0]?.id || '',
     users[1]?.id || ''
   ]);
-  const [teamId, setTeamId] = useState<string>('');
   const [projectId, setProjectId] = useState<string>('');
   const [agendaText, setAgendaText] = useState('1. Sprint goals review\n2. Architecture blockers\n3. Action items');
   const [meetingLink, setMeetingLink] = useState('https://meet.flashsign.demo/sprint-sync');
@@ -110,7 +108,6 @@ export default function NewMeetingPage() {
       durationMinutes,
       organizerId,
       participantIds: selectedParticipantIds,
-      teamId: teamId || undefined,
       projectId: projectId || undefined,
       agenda,
       location: location.trim() || undefined,
@@ -338,25 +335,8 @@ export default function NewMeetingPage() {
               </div>
             </div>
 
-            {/* Squad & Project Association */}
-            <div className={`grid grid-cols-1 ${FEATURES.teams ? 'sm:grid-cols-2' : ''} gap-4`}>
-              {FEATURES.teams && (
-                <div className="space-y-1.5">
-                  <label className="text-xs font-semibold text-ink uppercase tracking-wider block">
-                    Related Squad (Optional)
-                  </label>
-                  <select
-                    value={teamId}
-                    onChange={e => setTeamId(e.target.value)}
-                    className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-lg text-ink focus:outline-none focus:ring-2 focus:ring-flash"
-                  >
-                    <option value="">None / Cross-functional</option>
-                    {teams.map(t => (
-                      <option key={t.id} value={t.id}>{t.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
+            {/* Project Association */}
+            <div className="grid grid-cols-1 gap-4">
 
               <div className="space-y-1.5">
                 <label className="text-xs font-semibold text-ink uppercase tracking-wider block">

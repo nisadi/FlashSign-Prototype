@@ -3,11 +3,10 @@
 import { useState } from 'react';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { Bell, Search, Plus, HelpCircle, ChevronRight, Menu, Check, LogOut, Building2, User as UserIcon, ChevronDown } from 'lucide-react';
+import { Bell, Search, HelpCircle, ChevronRight, Menu, Check, LogOut, Building2, User as UserIcon, ChevronDown } from 'lucide-react';
 import { cn, formatRelative } from '@/lib/utils';
 import { useApp, useCurrentUser, useNotifications } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { QuickCreateDialog } from '@/components/shared/quick-create-dialog';
 import { SearchCommand } from '@/components/shared/search-command';
 import { DashboardSwitcher } from '@/components/layout/dashboard-switcher';
 
@@ -61,7 +60,6 @@ function Breadcrumbs() {
 export function AppHeader() {
   const router = useRouter();
   const [searchOpen, setSearchOpen] = useState(false);
-  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
   const [notifOpen, setNotifOpen] = useState(false);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
 
@@ -115,15 +113,6 @@ export function AppHeader() {
             </kbd>
           </button>
         </div>
-
-        {/* Quick Create Action */}
-        <button
-          onClick={() => setQuickCreateOpen(true)}
-          className="flex items-center gap-1.5 bg-flash-deep text-white text-xs font-semibold px-3 py-1.5 rounded-lg hover:bg-flash hover:text-ink transition-all shadow-xs cursor-pointer"
-        >
-          <Plus className="w-3.5 h-3.5" />
-          <span>New</span>
-        </button>
 
         {/* Notifications Popover */}
         <div className="relative">
@@ -284,11 +273,6 @@ export function AppHeader() {
       </header>
 
       {/* Global Modals */}
-      <QuickCreateDialog
-        isOpen={quickCreateOpen}
-        onClose={() => setQuickCreateOpen(false)}
-      />
-
       <SearchCommand
         isOpen={searchOpen}
         onClose={() => setSearchOpen(false)}

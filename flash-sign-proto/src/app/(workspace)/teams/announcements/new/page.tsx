@@ -6,6 +6,9 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, Megaphone, Pin, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { AnnouncementPriority } from '@/types';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageTeam } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 
 const AUDIENCE_OPTIONS = [
   { id: 'all', label: 'Entire Organization' },
@@ -19,6 +22,7 @@ const AUDIENCE_OPTIONS = [
 export default function CreateAnnouncementPage() {
   const router = useRouter();
   const { addAnnouncement, currentUserId } = useApp();
+  const { currentRbacUser } = useDemoAuth();
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -29,6 +33,20 @@ export default function CreateAnnouncementPage() {
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+
+  // Only team managers post announcements
+  if (currentRbacUser && !canManageTeam(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Posting Announcements Restricted"
+          message="Your role can read announcements and mark them as seen on My Status, but can't post them."
+          requiredRole="Team Management Access"
+          backHref="/projects/home"
+        />
+      </div>
+    );
+  }
 
   const handleSubmit = (status: 'published' | 'draft') => {
     setError(null);

@@ -1,6 +1,6 @@
 // ─── Team Collaboration & Planning Types ─────────────────────────────────────
 
-import type { User, Team, Project, Task } from './index';
+import type { User, Project, Task } from './index';
 
 export type AvailabilityStatus = 'available' | 'busy' | 'focus_time' | 'out_of_office';
 
@@ -39,7 +39,6 @@ export interface CalendarEvent {
   allDay: boolean;
   organizerId?: string;
   attendeeIds?: string[];
-  teamId?: string;
   projectId?: string;
   taskId?: string;
   milestoneId?: string;
@@ -60,7 +59,6 @@ export interface Meeting {
   durationMinutes: number;
   organizerId: string;
   participantIds: string[];
-  teamId?: string;
   projectId?: string;
   agenda?: string[];
   location?: string;

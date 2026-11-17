@@ -9,7 +9,6 @@ import {
   Calendar,
   Users,
   Search,
-  Filter,
   ExternalLink,
   Copy,
   CheckCircle2,
@@ -25,13 +24,11 @@ import { MeetingStatusBadge } from '@/components/collaboration/collaboration-bad
 import { CreateMeetingDialog } from '@/components/collaboration/create-meeting-dialog';
 import { MeetingDetailDrawer } from '@/components/collaboration/meeting-detail-drawer';
 import { Meeting } from '@/types/collaboration';
-import { FEATURES } from '@/lib/features';
 
 export default function MeetingPlannerPage() {
   const {
     meetings,
     users,
-    teams,
     projects,
     cancelMeeting,
     deleteMeeting
@@ -39,7 +36,6 @@ export default function MeetingPlannerPage() {
 
   const [activeTab, setActiveTab] = useState<'all' | 'today' | 'upcoming' | 'past'>('upcoming');
   const [searchQuery, setSearchQuery] = useState('');
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
   const [selectedMeeting, setSelectedMeeting] = useState<Meeting | null>(null);
   const [isCreateOpen, setIsCreateOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
@@ -59,9 +55,6 @@ export default function MeetingPlannerPage() {
       if (activeTab === 'upcoming' && (m.date < todayStr || m.status === 'completed')) return false;
       if (activeTab === 'past' && m.date >= todayStr && m.status !== 'completed') return false;
 
-      // Squad filter
-      if (selectedTeamId !== 'all' && m.teamId !== selectedTeamId) return false;
-
       // Search query
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
@@ -80,7 +73,7 @@ export default function MeetingPlannerPage() {
       }
       return new Date(`${a.date} ${a.startTime}`).getTime() - new Date(`${b.date} ${b.startTime}`).getTime();
     });
-  }, [meetings, activeTab, selectedTeamId, searchQuery, todayStr, users]);
+  }, [meetings, activeTab, searchQuery, todayStr, users]);
 
   // Tab counts
   const counts = useMemo(() => {
@@ -210,22 +203,6 @@ export default function MeetingPlannerPage() {
               ))}
             </div>
 
-            {/* Squad Filter */}
-            {FEATURES.teams && (
-              <div className="flex items-center gap-2">
-                <Filter className="w-3.5 h-3.5 text-muted" />
-                <select
-                  value={selectedTeamId}
-                  onChange={e => setSelectedTeamId(e.target.value)}
-                  className="px-2.5 py-1 text-xs bg-paper border border-line rounded-lg text-ink focus:outline-none focus:ring-1 focus:ring-flash"
-                >
-                  <option value="all">All Squads & Projects</option>
-                  {teams.map(t => (
-                    <option key={t.id} value={t.id}>{t.name}</option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
 
           {/* Search Bar */}
@@ -248,7 +225,7 @@ export default function MeetingPlannerPage() {
               <Video className="w-8 h-8 text-muted/60 mx-auto mb-2" />
               <h3 className="text-sm font-semibold text-ink">No meetings found</h3>
               <p className="text-xs text-muted mt-1 max-w-sm mx-auto">
-                No sessions match the selected tab and filter criteria. You can schedule a new meeting with your squad anytime.
+                No sessions match the selected tab and filter criteria. You can schedule a new meeting anytime.
               </p>
               <button
                 onClick={() => setIsCreateOpen(true)}
@@ -260,7 +237,6 @@ export default function MeetingPlannerPage() {
           ) : (
             filteredMeetings.map(meeting => {
               const organizer = users.find(u => u.id === meeting.organizerId);
-              const team = teams.find(t => t.id === meeting.teamId);
               const project = projects.find(p => p.id === meeting.projectId);
               const participants = users.filter(u => meeting.participantIds.includes(u.id));
 
@@ -281,11 +257,6 @@ export default function MeetingPlannerPage() {
                         <Clock className="w-3 h-3" />
                         {meeting.durationMinutes} min
                       </span>
-                      {FEATURES.teams && team && (
-                        <span className="text-[11px] font-medium text-ink-soft bg-mist/40 px-2 py-0.5 rounded border border-line/40">
-                          {team.name}
-                        </span>
-                      )}
                       {project && (
                         <span className="text-[11px] font-medium text-muted bg-paper px-2 py-0.5 rounded border border-line/40">
                           {project.name}

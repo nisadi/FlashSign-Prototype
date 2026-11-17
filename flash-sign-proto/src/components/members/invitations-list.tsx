@@ -86,7 +86,7 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
                     </td>
                     <td className="py-3 px-4">
                       <p className="font-semibold text-ink">{invitationRoleName(inv, roles)}</p>
-                      <p className="text-[10px] text-muted">{[inv.jobTitle, inv.department].filter(Boolean).join(' · ')}</p>
+                      <p className="text-[10px] text-muted">{inv.jobTitle}</p>
                     </td>
                     <td className="py-3 px-4 text-muted max-w-[180px]">
                       {inv.projectIds.length === 0 ? (

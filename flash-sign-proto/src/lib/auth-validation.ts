@@ -117,7 +117,6 @@ export type WorkspaceCreateFormData = z.infer<typeof workspaceCreateSchema>;
 export const profileSetupSchema = z.object({
   fullName: z.string().min(2, 'Full name must be at least 2 characters'),
   jobTitle: z.string().min(1, 'Please enter or select your job title'),
-  department: z.string().min(1, 'Please select or enter your department'),
   bio: z.string().max(240, 'Bio must be under 240 characters').optional(),
   role: z.string().min(1, 'Please select a demo role for the workspace'),
   avatarColor: z.string().optional(),

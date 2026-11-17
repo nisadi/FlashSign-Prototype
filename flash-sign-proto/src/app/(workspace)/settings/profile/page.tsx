@@ -4,29 +4,21 @@
 import React, { useState } from 'react';
 import { Camera, Lock, UserRound } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
 import {
   SettingsPage, SettingsCard, SaveButton, SavedNote, useSavedFlash, inputClass,
 } from '@/components/settings/settings-layout';
 
 const MAX_PHOTO_BYTES = 400 * 1024;
 
-// Flash Sign's phone rule: digits, spaces and + ( ) -, '+' only first, max 24 chars, 1–15 digits
-function phoneError(phone: string): string | null {
-  const value = phone.trim();
-  if (!value) return null;
-  if (value.length > 24) return 'Use 24 characters or fewer.';
-  if (!/^\+?[\d\s()-]+$/.test(value)) return "Use digits, spaces and + ( ) - only, with '+' only at the start.";
-  const digits = value.replace(/\D/g, '').length;
-  if (digits < 1 || digits > 15) return 'A phone number has 1 to 15 digits.';
-  return null;
-}
-
 export default function ProfileSettingsPage() {
-  const { updateMember } = useApp();
+  const { updateMember, org } = useApp();
   const user = useCurrentUser();
+  const { selectedWorkspace } = useDemoAuth();
+  const companyName = selectedWorkspace?.name || org.name;
   const [saved, flashSaved] = useSavedFlash();
 
-  const [form, setForm] = useState({ name: '', title: '', department: '', company: '', bio: '', phone: '', address: '', avatar: '' });
+  const [form, setForm] = useState({ name: '', title: '', bio: '', avatar: '' });
   const [photoError, setPhotoError] = useState<string | null>(null);
 
   // Load the signed-in user's details (and reload when the demo role switches user)
@@ -36,11 +28,7 @@ export default function ProfileSettingsPage() {
     setForm({
       name: user.name,
       title: user.title ?? '',
-      department: user.department ?? '',
-      company: user.company ?? '',
       bio: user.bio ?? '',
-      phone: user.phone ?? '',
-      address: user.address ?? '',
       avatar: user.avatar ?? '',
     });
   }
@@ -50,9 +38,8 @@ export default function ProfileSettingsPage() {
   const set = (key: keyof typeof form) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) =>
     setForm(f => ({ ...f, [key]: e.target.value }));
 
-  const phoneProblem = phoneError(form.phone);
   const bioProblem = form.bio.length > 240 ? 'Keep your bio to 240 characters or fewer.' : null;
-  const canSave = form.name.trim().length > 0 && !phoneProblem && !bioProblem;
+  const canSave = form.name.trim().length > 0 && !bioProblem;
 
   const handlePhoto = (file: File | undefined) => {
     setPhotoError(null);
@@ -71,11 +58,7 @@ export default function ProfileSettingsPage() {
       name,
       initials: name.split(/\s+/).map(p => p[0]).join('').slice(0, 2).toUpperCase(),
       title: form.title.trim() || undefined,
-      department: form.department.trim() || undefined,
-      company: form.company.trim() || undefined,
       bio: form.bio.trim() || undefined,
-      phone: form.phone.trim() || undefined,
-      address: form.address.trim() || undefined,
       avatar: form.avatar || undefined,
     });
     flashSaved();
@@ -126,19 +109,14 @@ export default function ProfileSettingsPage() {
           <Field label="Job title" hint="Shown on your profile. It doesn't change your permissions.">
             <input className={inputClass} value={form.title} onChange={set('title')} />
           </Field>
-          <Field label="Department">
-            <input className={inputClass} value={form.department} onChange={set('department')} />
-          </Field>
-          <Field label="Company" hint="Fills the Company field when you sign your own documents.">
-            <input className={inputClass} value={form.company} onChange={set('company')} />
-          </Field>
-          <Field label="Phone" error={phoneProblem}>
-            <input className={inputClass} value={form.phone} onChange={set('phone')} placeholder="+94 77 123 4567" />
+          {/* Company is the organization you belong to: it fills the Company field when you sign */}
+          <Field label="Company" hint="Your organization. Fills the Company field when you sign documents.">
+            <div className="relative">
+              <input className={inputClass} value={companyName} disabled />
+              <Lock className="w-3.5 h-3.5 text-muted absolute right-3 top-1/2 -translate-y-1/2" />
+            </div>
           </Field>
         </div>
-        <Field label="Address">
-          <textarea className={inputClass} rows={2} value={form.address} onChange={set('address')} />
-        </Field>
         <Field label="Bio" hint={`${form.bio.length}/240 · A short line about you, shown on your profile.`} error={bioProblem}>
           <textarea className={inputClass} rows={2} value={form.bio} onChange={set('bio')} placeholder="e.g. Frontend lead for the e-sign product" />
         </Field>

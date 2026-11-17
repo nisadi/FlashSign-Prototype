@@ -16,6 +16,7 @@ import { naturalUnit } from '@/lib/durations';
 import { DateRangeField, type DateRange } from '@/components/shared/duration-fields';
 import { formatDate } from '@/lib/utils';
 import { Card, Button } from '@/components/shared/ui';
+import { Modal } from '@/components/shared/modal';
 import { Avatar } from '@/components/shared/avatar';
 import {
   Settings,
@@ -55,9 +56,8 @@ export default function ProjectSettingsPage({
   const isManager = canManageProjects(currentRbacUser);
   const showDangerZone = canAccessProjectDangerZone(currentRbacUser);
 
-  // Why the baseline is being changed (asked only when the baseline dates change)
-  const [baselineReason, setBaselineReason] = useState('');
-  const [baselineError, setBaselineError] = useState(false);
+  // Confirmation pop-up shown before the baseline dates are changed
+  const [confirmRebaseline, setConfirmRebaseline] = useState(false);
 
   const project = projects.find((p) => p.id === projectId);
   if (!project) return notFound();
@@ -87,12 +87,18 @@ export default function ProjectSettingsPage({
 
   const currentMembers = users.filter((u) => project.memberIds.includes(u.id));
 
+  // Changing the baseline asks for confirmation first; other edits save straight away
   const handleSaveGeneral = (e: React.FormEvent) => {
     e.preventDefault();
-    if (rebaselining && !baselineReason.trim()) {
-      setBaselineError(true);
+    if (rebaselining) {
+      setConfirmRebaseline(true);
       return;
     }
+    saveGeneral();
+  };
+
+  const saveGeneral = () => {
+    setConfirmRebaseline(false);
     updateProject(projectId, {
       name,
       description,
@@ -103,7 +109,7 @@ export default function ProjectSettingsPage({
       ownerId,
       accentColor,
       group,
-      // Re-baselining keeps the old plan in history, with who changed it and why
+      // Re-baselining keeps the old plan in history, with who changed it and when
       ...(rebaselining && {
         originalStartDate: startDate,
         originalEndDate: dueDate,
@@ -111,7 +117,7 @@ export default function ProjectSettingsPage({
         durationUnit: baseline.unit,
         baselineHistory: [
           ...(project.baselineHistory ?? []),
-          // baseline_change: the baseline before and after (reason kept for SRS FR-PLAN-002; not in the finalized table)
+          // baseline_change: the baseline before and after
           {
             at: new Date().toISOString(),
             byUserId: currentUserId,
@@ -119,13 +125,10 @@ export default function ProjectSettingsPage({
             oldEndDate: baselineEnd,
             newStartDate: startDate,
             newEndDate: dueDate,
-            reason: baselineReason.trim(),
           },
         ],
       }),
     });
-    setBaselineReason('');
-    setBaselineError(false);
     setShowSavedFeedback(true);
     setTimeout(() => setShowSavedFeedback(false), 3000);
   };
@@ -311,27 +314,6 @@ export default function ProjectSettingsPage({
                     })()}.`
                   : ''}
               </p>
-              {rebaselining && (
-                <div>
-                  <label className="block text-[11px] font-semibold text-ink mb-1">
-                    Why are you changing the baseline? <span className="text-danger">*</span>
-                  </label>
-                  <input
-                    value={baselineReason}
-                    onChange={(e) => {
-                      setBaselineReason(e.target.value);
-                      setBaselineError(false);
-                    }}
-                    placeholder="e.g. Client added the reporting module, scope agreed on 28 Oct"
-                    className={`w-full px-3 py-2 text-xs bg-paper-elevated border rounded-xl outline-none focus:border-flash text-ink ${
-                      baselineError ? 'border-danger' : 'border-line'
-                    }`}
-                  />
-                  {baselineError && (
-                    <p className="mt-1 text-danger">Add a reason; the old baseline is kept in history with it.</p>
-                  )}
-                </div>
-              )}
             </div>
 
             {isManager && (
@@ -437,6 +419,54 @@ export default function ProjectSettingsPage({
           </Card>
         )}
       </div>
+
+      {/* Confirm before changing the baseline (the original plan) */}
+      <Modal
+        isOpen={confirmRebaseline}
+        onClose={() => setConfirmRebaseline(false)}
+        size="sm"
+        aria-labelledby="confirm-rebaseline-title"
+      >
+        <div className="p-6 space-y-4">
+          <div className="flex items-start gap-3">
+            <div className="w-10 h-10 rounded-full bg-amber-50 text-amber-600 flex items-center justify-center shrink-0">
+              <Calendar className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 id="confirm-rebaseline-title" className="text-sm font-bold text-ink">
+                Change the baseline?
+              </h3>
+              <p className="text-xs text-muted mt-0.5">
+                The baseline is the project&apos;s original plan. The old dates are kept in the project history.
+              </p>
+            </div>
+          </div>
+
+          <div className="rounded-xl border border-line bg-paper px-3 py-2.5 text-xs space-y-1.5">
+            <div className="flex justify-between gap-3">
+              <span className="text-muted">From</span>
+              <span className="font-mono text-ink-soft line-through">
+                {formatDate(baselineStart)} – {formatDate(baselineEnd)}
+              </span>
+            </div>
+            <div className="flex justify-between gap-3">
+              <span className="text-muted">To</span>
+              <span className="font-mono font-semibold text-ink">
+                {formatDate(startDate)} – {formatDate(dueDate)}
+              </span>
+            </div>
+          </div>
+
+          <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
+            <Button type="button" variant="secondary" size="sm" onClick={() => setConfirmRebaseline(false)}>
+              Cancel
+            </Button>
+            <Button type="button" variant="primary" size="sm" onClick={saveGeneral}>
+              Change baseline
+            </Button>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 }

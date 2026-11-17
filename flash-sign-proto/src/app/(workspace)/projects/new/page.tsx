@@ -224,7 +224,6 @@ export default function CreateProjectPage() {
       status,
       health: 'on_track' as ProjectHealth,
       ownerId,
-      teamIds: ['t1'],
       memberIds: selectedMemberIds,
       startDate: new Date(startDate).toISOString(),
       endDate: new Date(endDate).toISOString(),

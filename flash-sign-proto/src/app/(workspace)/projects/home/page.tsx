@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React from 'react';
 import Link from 'next/link';
 import { useApp, useCurrentUser } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
@@ -9,10 +9,10 @@ import { AccessDenied } from '@/components/shared/access-denied';
 import { formatDate, formatRelative } from '@/lib/utils';
 import { TaskStatusBadge, PriorityBadge } from '@/components/shared/badges';
 import { Avatar } from '@/components/shared/avatar';
-import { QuickCreateDialog } from '@/components/shared/quick-create-dialog';
 import { MyWorkCard } from '@/components/agents/my-work-card';
+import { MyAnnouncementsCard } from '@/components/collaboration/my-announcements-card';
 import {
-  FolderKanban, CheckSquare, Clock, AlertTriangle, Plus, ArrowRight,
+  FolderKanban, CheckSquare, Clock, AlertTriangle, ArrowRight,
   TrendingUp, Users, Calendar, Sparkles, Activity, CheckCircle2,
 } from 'lucide-react';
 
@@ -33,8 +33,6 @@ export default function ProjectManagementHomePage() {
       </div>
     );
   }
-
-  const [quickCreateOpen, setQuickCreateOpen] = useState(false);
 
   // Metrics
   const totalProjects = projects.length;
@@ -66,24 +64,6 @@ export default function ProjectManagementHomePage() {
           <p className="text-xs sm:text-sm text-muted mt-1">
             {todayStr} • Here is your portfolio status and upcoming commitments.
           </p>
-        </div>
-
-        {/* Quick Action Buttons */}
-        <div className="flex items-center gap-2.5 shrink-0">
-          <Link
-            href="/projects"
-            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-paper-elevated border border-line text-ink hover:bg-mist/50 transition-colors shadow-xs"
-          >
-            All Projects
-          </Link>
-
-          <button
-            onClick={() => setQuickCreateOpen(true)}
-            className="px-4 py-2 text-xs font-semibold rounded-lg bg-flash-deep hover:bg-flash text-white hover:text-ink transition-all shadow-sm flex items-center gap-1.5 cursor-pointer"
-          >
-            <Plus className="w-4 h-4" />
-            <span>Create Item</span>
-          </button>
         </div>
       </div>
 
@@ -145,6 +125,9 @@ export default function ProjectManagementHomePage() {
           </span>
         </Link>
       </div>
+
+      {/* Announcements: read and mark as seen only */}
+      <MyAnnouncementsCard />
 
       {/* Running timer, hours and agent activity */}
       <MyWorkCard />
@@ -318,12 +301,6 @@ export default function ProjectManagementHomePage() {
           </div>
         </div>
       </div>
-
-      {/* Global Quick Create Modal */}
-      <QuickCreateDialog
-        isOpen={quickCreateOpen}
-        onClose={() => setQuickCreateOpen(false)}
-      />
     </div>
   );
 }

@@ -5,7 +5,6 @@ import { X, Video, Calendar, Clock, Copy, Check, Users, Ban, Edit3, ExternalLink
 import { useApp } from '@/context/app-context';
 import type { Meeting } from '@/types';
 import { MeetingStatusBadge, AvailabilityBadge } from './collaboration-badges';
-import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
 
 interface MeetingDetailDrawerProps {
@@ -19,14 +18,13 @@ export function MeetingDetailDrawer({
   onClose,
   onEdit,
 }: MeetingDetailDrawerProps) {
-  const { users, teams, projects, cancelMeeting } = useApp();
+  const { users, projects, cancelMeeting } = useApp();
   const [copied, setCopied] = useState(false);
   const [cancelled, setCancelled] = useState(false);
 
   if (!meeting) return null;
 
   const organizer = users.find(u => u.id === meeting.organizerId);
-  const team = teams.find(t => t.id === meeting.teamId);
   const project = projects.find(p => p.id === meeting.projectId);
   const participants = users.filter(u => meeting.participantIds.includes(u.id));
 
@@ -133,14 +131,8 @@ export function MeetingDetailDrawer({
             </div>
           )}
 
-          {/* Context: Team & Project */}
-          <div className={`grid ${FEATURES.teams ? 'grid-cols-2' : 'grid-cols-1'} gap-3`}>
-            {FEATURES.teams && (
-              <div className="p-3 rounded-xl bg-paper border border-line">
-                <p className="text-[10px] text-muted font-medium">Team</p>
-                <p className="font-semibold text-ink mt-0.5">{team?.name || 'General / Cross-functional'}</p>
-              </div>
-            )}
+          {/* Context: Project */}
+          <div className="grid grid-cols-1 gap-3">
             <div className="p-3 rounded-xl bg-paper border border-line">
               <p className="text-[10px] text-muted font-medium">Related Project</p>
               <p className="font-semibold text-ink mt-0.5">{project?.name || 'Workspace Level'}</p>
@@ -189,7 +181,7 @@ export function MeetingDetailDrawer({
                       <p className="font-medium text-ink truncate">
                         {p.name} {p.id === meeting.organizerId && <span className="text-flash-deep font-semibold">(Host)</span>}
                       </p>
-                      <p className="text-[10px] text-muted truncate">{p.title || p.department}</p>
+                      <p className="text-[10px] text-muted truncate">{p.title || p.role}</p>
                     </div>
                   </div>
                   {p.availability && <AvailabilityBadge status={p.availability} size="sm" />}

@@ -9,17 +9,7 @@ import { useDemoAuth } from '@/context/demo-auth-context';
 import { canManageTeam } from '@/lib/rbac';
 import { AccessDenied } from '@/components/shared/access-denied';
 import type { DemoRole, AvailabilityStatus } from '@/types';
-import { FEATURES } from '@/lib/features';
 import { notify } from '@/components/shared/toaster';
-
-const DEPARTMENTS = [
-  'Engineering',
-  'Product Design',
-  'Quality Assurance',
-  'Operations',
-  'Marketing & Growth',
-  'Legal & Compliance',
-];
 
 const TIMEZONES = [
   'America/New_York (EST)',
@@ -48,7 +38,7 @@ const MEMBER_COLORS = [
 
 export default function AddMemberPage() {
   const router = useRouter();
-  const { teams, projects, users, addMember } = useApp();
+  const { projects, users, addMember } = useApp();
   const { currentRbacUser } = useDemoAuth();
 
   if (currentRbacUser && !canManageTeam(currentRbacUser)) {
@@ -67,25 +57,16 @@ export default function AddMemberPage() {
   const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [title, setTitle] = useState('Senior Engineer');
-  const [department, setDepartment] = useState('Engineering');
   const [role, setRole] = useState<DemoRole>('developer');
   const [color, setColor] = useState(MEMBER_COLORS[0]);
   const [timeZone, setTimeZone] = useState(TIMEZONES[0]);
   const [workingHours, setWorkingHours] = useState('09:00 - 17:00 EST');
   const [availability, setAvailability] = useState<AvailabilityStatus>('available');
   const [weeklyCapacity, setWeeklyCapacity] = useState(40);
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>([]);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>([]);
-  const [skillsInput, setSkillsInput] = useState('React, TypeScript, GraphQL');
 
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
-
-  const toggleTeam = (tid: string) => {
-    setSelectedTeamIds(prev =>
-      prev.includes(tid) ? prev.filter(id => id !== tid) : [...prev, tid]
-    );
-  };
 
   const toggleProject = (pid: string) => {
     setSelectedProjectIds(prev =>
@@ -116,11 +97,6 @@ export default function AddMemberPage() {
       return;
     }
 
-    const skills = skillsInput
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-
     const initials = trimmedName
       .split(' ')
       .map(part => part[0])
@@ -133,16 +109,13 @@ export default function AddMemberPage() {
       email: trimmedEmail,
       initials,
       title: title.trim(),
-      department,
       role,
       color,
       timeZone,
       workingHours,
       availability,
       weeklyCapacity,
-      teamIds: selectedTeamIds,
       projectIds: selectedProjectIds,
-      skills,
     });
 
     notify(`${trimmedName} added to the team`);
@@ -218,32 +191,15 @@ export default function AddMemberPage() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-semibold text-ink mb-1">Job Title</label>
-                <input
-                  type="text"
-                  value={title}
-                  onChange={e => setTitle(e.target.value)}
-                  placeholder="Senior Full Stack Engineer"
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                />
-              </div>
-
-              <div>
-                <label className="block font-semibold text-ink mb-1">Department</label>
-                <select
-                  value={department}
-                  onChange={e => setDepartment(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                >
-                  {DEPARTMENTS.map(d => (
-                    <option key={d} value={d}>
-                      {d}
-                    </option>
-                  ))}
-                </select>
-              </div>
+            <div>
+              <label className="block font-semibold text-ink mb-1">Job Title</label>
+              <input
+                type="text"
+                value={title}
+                onChange={e => setTitle(e.target.value)}
+                placeholder="Senior Full Stack Engineer"
+                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+              />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -337,48 +293,6 @@ export default function AddMemberPage() {
                   className="w-full accent-flash cursor-pointer mt-2"
                 />
               </div>
-            </div>
-
-            {/* Squads */}
-            {FEATURES.teams && (
-            <div>
-              <label className="block font-semibold text-ink mb-1.5">
-                Assign to Teams ({selectedTeamIds.length})
-              </label>
-              <div className="flex flex-wrap gap-2 p-2 bg-paper rounded-lg border border-line">
-                {teams.map(t => {
-                  const isSelected = selectedTeamIds.includes(t.id);
-                  return (
-                    <button
-                      key={t.id}
-                      type="button"
-                      onClick={() => toggleTeam(t.id)}
-                      className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium transition-colors border ${
-                        isSelected
-                          ? 'bg-flash/15 border-flash/40 text-ink font-semibold'
-                          : 'bg-paper-elevated border-line text-muted hover:text-ink'
-                      }`}
-                    >
-                      <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
-                      {t.name}
-                      {isSelected && <Check className="w-3 h-3 text-flash-deep ml-1" />}
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-            )}
-
-            {/* Skills */}
-            <div>
-              <label className="block font-semibold text-ink mb-1">Technical Skills & Expertise</label>
-              <input
-                type="text"
-                value={skillsInput}
-                onChange={e => setSkillsInput(e.target.value)}
-                placeholder="React, TypeScript, Node.js, WebAssembly, Security"
-                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              />
             </div>
 
             <div className="pt-4 border-t border-line flex items-center justify-end gap-3">

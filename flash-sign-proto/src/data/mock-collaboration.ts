@@ -28,7 +28,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u4',
     attendeeIds: ['u4', 'u5', 'u6', 'u14'],
-    teamId: 't1',
     projectId: 'p1',
     location: 'Meeting Room Alpha',
     meetingLink: 'https://meet.flashsign.demo/core-standup',
@@ -43,7 +42,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u2',
     attendeeIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u9'],
-    teamId: 't1',
     projectId: 'p1',
     location: 'Town Hall Room',
     meetingLink: 'https://meet.flashsign.demo/sprint12-demo',
@@ -58,7 +56,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u2',
     attendeeIds: ['u2', 'u4', 'u10', 'u14'],
-    teamId: 't4',
     projectId: 'p2',
     location: 'Remote Zoom',
     meetingLink: 'https://meet.flashsign.demo/acme-sync',
@@ -85,7 +82,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u8',
     attendeeIds: ['u8', 'u9', 'u11'],
-    teamId: 't4',
     projectId: 'p5',
     location: 'Virtual Conference 2',
     meetingLink: 'https://meet.flashsign.demo/soc2-review',
@@ -100,7 +96,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: true,
     organizerId: 'u5',
     attendeeIds: ['u5'],
-    teamId: 't1',
   },
   {
     id: 'evt-7',
@@ -112,7 +107,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u3',
     attendeeIds: ['u3', 'u6'],
-    teamId: 't2',
     projectId: 'p1',
     meetingLink: 'https://meet.flashsign.demo/design-tokens',
   },
@@ -138,7 +132,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u7',
     attendeeIds: ['u6', 'u7'],
-    teamId: 't3',
     projectId: 'p1',
   },
   {
@@ -164,7 +157,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: true,
     organizerId: 'u9',
     attendeeIds: ['u9'],
-    teamId: 't4',
   },
   {
     id: 'evt-12',
@@ -200,7 +192,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u2',
     attendeeIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
-    teamId: 't1',
     projectId: 'p1',
     meetingLink: 'https://meet.flashsign.demo/sprint13-plan',
   },
@@ -214,7 +205,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: true,
     organizerId: 'u7',
     attendeeIds: ['u7'],
-    teamId: 't3',
   },
   {
     id: 'evt-16',
@@ -226,7 +216,6 @@ export const MOCK_CALENDAR_EVENTS: CalendarEvent[] = [
     allDay: false,
     organizerId: 'u8',
     attendeeIds: ['u8', 'u4'],
-    teamId: 't4',
     projectId: 'p5',
   },
 ];
@@ -339,7 +328,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 30,
     organizerId: 'u4',
     participantIds: ['u4', 'u5', 'u6', 'u14'],
-    teamId: 't1',
     projectId: 'p1',
     agenda: [
       'Canvas signature placement bugs review',
@@ -361,7 +349,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 60,
     organizerId: 'u3',
     participantIds: ['u3', 'u6'],
-    teamId: 't2',
     projectId: 'p1',
     agenda: [
       'Tailwind CSS v4 variable alignment',
@@ -383,7 +370,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 90,
     organizerId: 'u2',
     participantIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u9'],
-    teamId: 't1',
     projectId: 'p1',
     agenda: [
       'Live demo: Drag-and-drop document signature workflow',
@@ -406,7 +392,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 60,
     organizerId: 'u2',
     participantIds: ['u2', 'u4', 'u10', 'u14'],
-    teamId: 't4',
     projectId: 'p2',
     agenda: [
       'OAuth2 token exchange for white-label signers',
@@ -428,7 +413,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 60,
     organizerId: 'u8',
     participantIds: ['u8', 'u9', 'u11'],
-    teamId: 't4',
     projectId: 'p5',
     agenda: [
       'Database encryption at rest validation',
@@ -450,7 +434,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 90,
     organizerId: 'u2',
     participantIds: ['u2', 'u3', 'u4', 'u5', 'u6', 'u7'],
-    teamId: 't1',
     projectId: 'p1',
     agenda: [
       'Review team velocity and capacity considering time-offs',
@@ -492,7 +475,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 60,
     organizerId: 'u4',
     participantIds: ['u4', 'u5', 'u14'],
-    teamId: 't1',
     projectId: 'p3',
     agenda: [
       'Automated linting and test pass verification',
@@ -512,7 +494,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 60,
     organizerId: 'u9',
     participantIds: ['u1', 'u2', 'u9'],
-    teamId: 't4',
     status: 'completed',
     createdAt: d(-6),
   },
@@ -526,7 +507,6 @@ export const MOCK_MEETINGS: Meeting[] = [
     durationMinutes: 60,
     organizerId: 'u4',
     participantIds: ['u4', 'u5', 'u14'],
-    teamId: 't1',
     status: 'cancelled',
     createdAt: d(-3),
   },

@@ -210,7 +210,7 @@ export function CreateTimeOffDialog({
             >
               {users.map(u => (
                 <option key={u.id} value={u.id}>
-                  {u.name} — {u.title || u.role} ({u.department})
+                  {u.name} — {u.title || u.role}
                 </option>
               ))}
             </select>

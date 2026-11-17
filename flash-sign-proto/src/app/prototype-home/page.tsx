@@ -116,7 +116,7 @@ export default function PrototypeHomePage() {
                   Welcome, {currentUser.fullName}
                 </h1>
                 <p className="text-xs text-[var(--muted)] mt-0.5">
-                  {currentUser.jobTitle} • {currentUser.department}
+                  {currentUser.jobTitle}
                 </p>
               </div>
             </div>
@@ -172,7 +172,7 @@ export default function PrototypeHomePage() {
                 {currentUser.email}
               </p>
               <p className="text-[11px] text-[var(--muted)] truncate">
-                {currentUser.company ? `Company: ${currentUser.company}` : 'Profile saved'}
+                {selectedWorkspace?.name ? `Company: ${selectedWorkspace.name}` : 'Profile saved'}
               </p>
               <span className="inline-block text-[10px] px-2 py-0.5 rounded-md bg-[var(--paper-elevated)] border border-[var(--line)] text-[var(--ink-soft)] font-medium">
                 Initial Setup Complete

@@ -99,7 +99,6 @@ export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCr
       status: 'active' as ProjectStatus,
       health: 'on_track' as ProjectHealth,
       ownerId: currentUser?.id || 'u2',
-      teamIds: ['t1'],
       memberIds: [currentUser?.id || 'u2'],
       startDate: new Date().toISOString(),
       endDate: new Date(Date.now() + 60 * 24 * 3600 * 1000).toISOString(),

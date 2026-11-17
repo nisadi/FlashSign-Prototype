@@ -21,23 +21,16 @@ export interface User {
   avatar?: string;
   initials: string;
   role: DemoRole;
-  department?: string;
   title?: string;
   color: string;
   isActive: boolean;
-  teamIds?: string[];
   projectIds?: string[];
   timeZone?: string;
   workingHours?: string;
-  skills?: string[];
   availability?: 'available' | 'busy' | 'focus_time' | 'out_of_office';
   weeklyCapacity?: number;
-  /** Profile details edited in Settings > Profile (users.bio, users.company) */
+  /** Profile details edited in Settings > Profile (users.bio) */
   bio?: string;
-  company?: string;
-  /** Not in the finalized users table; kept because SRS FR-AUTH-003 asks for them (see Frontend_Changes_List.md §9) */
-  phone?: string;
-  address?: string;
   createdAt: string;
 }
 
@@ -89,7 +82,6 @@ export interface Project {
   status: ProjectStatus;
   health: ProjectHealth;
   ownerId: string;
-  teamIds: string[];
   memberIds: string[];
   startDate: string;
   endDate: string;
@@ -185,24 +177,6 @@ export interface ProjectBoard {
   name: string;
   /** Its own columns. Missing = mirrors the main board's columns, following any change to them. */
   columns?: BoardColumn[];
-}
-
-// ─── Teams ──────────────────────────────────────────────────────────────────
-
-export interface Team {
-  id: string;
-  name: string;
-  description: string;
-  leadId: string;
-  memberIds: string[];
-  color: string;
-  department?: string;
-  category?: string;
-  goals?: string[];
-  status?: 'active' | 'archived';
-  projectIds?: string[];
-  icon?: string;
-  createdAt: string;
 }
 
 // ─── Tasks ──────────────────────────────────────────────────────────────────

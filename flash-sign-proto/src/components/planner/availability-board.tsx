@@ -5,7 +5,6 @@ import Link from 'next/link';
 import {
   Clock,
   Globe,
-  Filter,
   Search,
   CheckCircle2,
   ChevronLeft,
@@ -16,21 +15,18 @@ import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
 import { AvailabilityStatus } from '@/types/collaboration';
-import { FEATURES } from '@/lib/features';
 import { Modal } from '@/components/shared/modal';
 
 /** Team availability: status summary, weekly schedule grid and member detail modal. */
 export function AvailabilityBoard() {
   const {
     users,
-    teams,
     meetings,
     timeOffRequests,
     calendarEvents,
     updateMemberAvailability
   } = useApp();
 
-  const [selectedTeamId, setSelectedTeamId] = useState<string>('all');
   const [selectedStatus, setSelectedStatus] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState('');
   const [viewMode, setViewMode] = useState<'day' | 'week'>('week');
@@ -67,9 +63,6 @@ export function AvailabilityBoard() {
   // Filtered members
   const filteredMembers = useMemo(() => {
     return users.filter(user => {
-      if (selectedTeamId !== 'all' && !(user.teamIds || []).includes(selectedTeamId)) {
-        return false;
-      }
       if (selectedStatus !== 'all' && user.availability !== selectedStatus) {
         return false;
       }
@@ -82,7 +75,7 @@ export function AvailabilityBoard() {
       }
       return true;
     });
-  }, [users, selectedTeamId, selectedStatus, searchQuery]);
+  }, [users, selectedStatus, searchQuery]);
 
   // Aggregate stats
   const stats = useMemo(() => {
@@ -255,38 +248,8 @@ export function AvailabilityBoard() {
         </div>
 
         {/* Secondary Filters */}
-        {(FEATURES.teams || selectedStatus !== 'all') && (
+        {selectedStatus !== 'all' && (
         <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-line/40 text-xs">
-          {FEATURES.teams && (
-            <>
-              <span className="text-muted font-medium flex items-center gap-1 mr-1">
-                <Filter className="w-3.5 h-3.5" /> Filter Squad:
-              </span>
-              <button
-                onClick={() => setSelectedTeamId('all')}
-                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                  selectedTeamId === 'all'
-                    ? 'bg-ink text-white'
-                    : 'bg-paper text-muted hover:text-ink border border-line/60'
-                }`}
-              >
-                All Squads
-              </button>
-              {teams.map(t => (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedTeamId(t.id)}
-                  className={`px-2.5 py-1 rounded-md text-xs font-medium transition-colors ${
-                    selectedTeamId === t.id
-                      ? 'bg-ink text-white'
-                      : 'bg-paper text-muted hover:text-ink border border-line/60'
-                  }`}
-                >
-                  {t.name}
-                </button>
-              ))}
-            </>
-          )}
 
           {selectedStatus !== 'all' && (
             <button
@@ -331,7 +294,6 @@ export function AvailabilityBoard() {
                 </tr>
               ) : (
                 filteredMembers.map(member => {
-                  const memberTeams = FEATURES.teams ? teams.filter(t => (member.teamIds || []).includes(t.id)) : [];
                   return (
                     <tr key={member.id} className="hover:bg-paper/40 transition-colors">
                       {/* Member Profile Info */}
@@ -346,16 +308,6 @@ export function AvailabilityBoard() {
                               {member.name}
                             </Link>
                             <div className="text-[11px] text-muted truncate">{member.role}</div>
-                            <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                              {memberTeams.slice(0, 2).map(t => (
-                                <span
-                                  key={t.id}
-                                  className="px-1.5 py-0.5 rounded text-[10px] font-medium bg-mist/40 text-ink-soft border border-line/40"
-                                >
-                                  {t.name}
-                                </span>
-                              ))}
-                            </div>
                           </div>
                         </div>
                       </td>
@@ -510,7 +462,7 @@ export function AvailabilityBoard() {
               <div className="p-3 bg-white border border-line rounded-xl">
                 <span className="text-muted block text-[11px] mb-1">Weekly Commitment</span>
                 <span className="font-semibold text-ink">{selectedMember.weeklyCapacity || 40} Hours</span>
-                <span className="text-[10px] text-muted block mt-0.5">Full-time Core Squad</span>
+                <span className="text-[10px] text-muted block mt-0.5">Full-time member</span>
               </div>
             </div>
 

@@ -5,7 +5,6 @@ import { X, UserPlus, Check, AlertCircle } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
 import type { User, DemoRole, AvailabilityStatus } from '@/types';
-import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
 
@@ -15,15 +14,6 @@ interface CreateMemberDialogProps {
   memberToEdit?: User | null;
   onSuccess?: (user: User) => void;
 }
-
-const DEPARTMENTS = [
-  'Engineering',
-  'Product Design',
-  'Quality Assurance',
-  'Operations',
-  'Marketing & Growth',
-  'Legal & Compliance',
-];
 
 const TIMEZONES = [
   'America/New_York (EST)',
@@ -56,13 +46,12 @@ export function CreateMemberDialog({
   memberToEdit,
   onSuccess,
 }: CreateMemberDialogProps) {
-  const { teams, projects, addMember, updateMember, users } = useApp();
+  const { projects, addMember, updateMember, users } = useApp();
   const { roles, updateMemberRoleAndProjects } = useDemoAuth();
 
   const [name, setName] = useState(memberToEdit?.name || '');
   const [email, setEmail] = useState(memberToEdit?.email || '');
   const [title, setTitle] = useState(memberToEdit?.title || 'Senior Engineer');
-  const [department, setDepartment] = useState(memberToEdit?.department || 'Engineering');
   const [role, setRole] = useState<DemoRole>(memberToEdit?.role || 'developer');
   const [selectedRoleId, setSelectedRoleId] = useState<string>('role-dev');
   const [color, setColor] = useState(memberToEdit?.color || MEMBER_COLORS[0]);
@@ -70,20 +59,12 @@ export function CreateMemberDialog({
   const [workingHours, setWorkingHours] = useState(memberToEdit?.workingHours || '09:00 - 17:00 EST');
   const [availability, setAvailability] = useState<AvailabilityStatus>(memberToEdit?.availability || 'available');
   const [weeklyCapacity, setWeeklyCapacity] = useState(memberToEdit?.weeklyCapacity || 40);
-  const [selectedTeamIds, setSelectedTeamIds] = useState<string[]>(memberToEdit?.teamIds || []);
   const [selectedProjectIds, setSelectedProjectIds] = useState<string[]>(memberToEdit?.projectIds || []);
-  const [skillsInput, setSkillsInput] = useState((memberToEdit?.skills || ['React', 'TypeScript']).join(', '));
 
   const [error, setError] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
 
   if (!open) return null;
-
-  const toggleTeam = (tid: string) => {
-    setSelectedTeamIds(prev =>
-      prev.includes(tid) ? prev.filter(id => id !== tid) : [...prev, tid]
-    );
-  };
 
   const toggleProject = (pid: string) => {
     setSelectedProjectIds(prev =>
@@ -116,11 +97,6 @@ export function CreateMemberDialog({
       return;
     }
 
-    const skills = skillsInput
-      .split(',')
-      .map(s => s.trim())
-      .filter(Boolean);
-
     const initials = trimmedName
       .split(' ')
       .map(part => part[0])
@@ -133,16 +109,13 @@ export function CreateMemberDialog({
         name: trimmedName,
         email: trimmedEmail,
         title: title.trim(),
-        department,
         role,
         color,
         timeZone,
         workingHours,
         availability,
         weeklyCapacity,
-        teamIds: selectedTeamIds,
         projectIds: selectedProjectIds,
-        skills,
       });
       updateMemberRoleAndProjects(memberToEdit.id, selectedRoleId, selectedProjectIds);
       setSuccessMsg('Member profile updated!');
@@ -157,16 +130,13 @@ export function CreateMemberDialog({
         email: trimmedEmail,
         initials,
         title: title.trim(),
-        department,
         role,
         color,
         timeZone,
         workingHours,
         availability,
         weeklyCapacity,
-        teamIds: selectedTeamIds,
         projectIds: selectedProjectIds,
-        skills,
       });
       setSuccessMsg('Team member added successfully!');
       notify(`${trimmedName} added to the team`);
@@ -199,7 +169,7 @@ export function CreateMemberDialog({
                 {memberToEdit ? 'Edit Team Member' : 'Add Team Member'}
               </h2>
               <p className="text-xs text-muted">
-                Create demonstration profile with role, working hours, capacity, and team assignments.
+                Create demonstration profile with role, working hours, capacity, and project assignments.
               </p>
             </div>
           </div>
@@ -258,33 +228,16 @@ export function CreateMemberDialog({
             </div>
           </div>
 
-          {/* Title & Department */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <div>
-              <label className="block font-semibold text-ink mb-1">Job Title</label>
-              <input
-                type="text"
-                value={title}
-                onChange={e => setTitle(e.target.value)}
-                placeholder="e.g. Lead Systems Architect"
-                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block font-semibold text-ink mb-1">Department</label>
-              <select
-                value={department}
-                onChange={e => setDepartment(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              >
-                {DEPARTMENTS.map(d => (
-                  <option key={d} value={d}>
-                    {d}
-                  </option>
-                ))}
-              </select>
-            </div>
+          {/* Job Title */}
+          <div>
+            <label className="block font-semibold text-ink mb-1">Job Title</label>
+            <input
+              type="text"
+              value={title}
+              onChange={e => setTitle(e.target.value)}
+              placeholder="e.g. Lead Systems Architect"
+              className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
+            />
           </div>
 
           {/* Role & Avatar Color */}
@@ -394,36 +347,6 @@ export function CreateMemberDialog({
             </div>
           </div>
 
-          {/* Team Assignments */}
-          {FEATURES.teams && (
-          <div>
-            <label className="block font-semibold text-ink mb-1.5">
-              Assigned Teams ({selectedTeamIds.length})
-            </label>
-            <div className="flex flex-wrap gap-2 p-2 bg-paper rounded-lg border border-line">
-              {teams.map(t => {
-                const isSelected = selectedTeamIds.includes(t.id);
-                return (
-                  <button
-                    key={t.id}
-                    type="button"
-                    onClick={() => toggleTeam(t.id)}
-                    className={`flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-medium transition-colors border ${
-                      isSelected
-                        ? 'bg-flash/15 border-flash/40 text-ink font-semibold'
-                        : 'bg-paper-elevated border-line text-muted hover:text-ink'
-                    }`}
-                  >
-                    <span className="w-2 h-2 rounded-full" style={{ backgroundColor: t.color }} />
-                    {t.name}
-                    {isSelected && <Check className="w-3 h-3 text-flash-deep ml-1" />}
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          )}
-
           {/* Project Assignments */}
           <div>
             <label className="block font-semibold text-ink mb-1.5">
@@ -448,20 +371,6 @@ export function CreateMemberDialog({
                 );
               })}
             </div>
-          </div>
-
-          {/* Skills */}
-          <div>
-            <label className="block font-semibold text-ink mb-1">
-              Skills (comma separated)
-            </label>
-            <input
-              type="text"
-              value={skillsInput}
-              onChange={e => setSkillsInput(e.target.value)}
-              placeholder="React, TypeScript, GraphQL, Node.js"
-              className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-            />
           </div>
 
           {/* Footer Actions */}

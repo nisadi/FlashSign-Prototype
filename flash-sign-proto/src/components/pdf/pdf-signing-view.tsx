@@ -8,6 +8,7 @@ import {
   PenTool, CheckCircle2, XCircle, Clock, Download, ArrowLeft, Mail, Ban, AlertTriangle, FileText, Loader2,
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
 import type { SignatureField, SignatureRequest, SignatureSigner } from '@/types';
 import { Button, Card } from '@/components/shared/ui';
 import { Modal } from '@/components/shared/modal';
@@ -97,8 +98,16 @@ function SignerScreen({ request, signer, viaLink }: { request: SignatureRequest;
   const { markPdfSignerViewed, completePdfSigning, declineSignatureRequest, savedSignatures, saveSignature, signingDefaults, users } = useApp();
   const currentUser = useCurrentUser();
   const docs = requestPdfs(request);
-  // The signer's account (by email): fills company and title, and starts the signature pad
+  // The signer's account (by email): fills title, and starts the signature pad
   const signerUser = users.find(u => u.email.toLowerCase() === signer.email.toLowerCase());
+  // Company = the organization the signer belongs to. Outside signers with no account type it themselves.
+  const { users: accounts, demoAccounts, organizations, selectedWorkspace } = useDemoAuth();
+  const signerEmail = signer.email.toLowerCase();
+  const signerOrgId =
+    accounts.find(a => a.email.toLowerCase() === signerEmail)?.organizationId ||
+    demoAccounts.find(a => a.email.toLowerCase() === signerEmail)?.organizationId ||
+    (signerUser ? selectedWorkspace.id : undefined);
+  const signerCompany = organizations.find(o => o.id === signerOrgId)?.name;
 
   const myFields = useMemo(() => request.fields.filter(f => f.signerId === signer.id), [request.fields, signer.id]);
   const otherFields = useMemo(() => request.fields.filter(f => f.signerId !== signer.id && f.value), [request.fields, signer.id]);
@@ -109,7 +118,7 @@ function SignerScreen({ request, signer, viaLink }: { request: SignatureRequest;
       date: todayLabel(),
       name: signer.name,
       email: signer.email,
-      company: signerUser?.company,
+      company: signerCompany,
       title: signerUser?.title,
     };
     return Object.fromEntries(myFields.flatMap(f => (known[f.type] ? [[f.id, known[f.type]!]] : [])));

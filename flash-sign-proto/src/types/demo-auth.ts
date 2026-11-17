@@ -16,11 +16,8 @@ export interface DemoUser {
   email: string;
   password?: string;
   jobTitle?: string;
-  department?: string;
   /** users.bio */
   bio?: string;
-  /** users.company: fills the Company field when signing */
-  company?: string;
   /** users.avatar_file_id (shown as a data URL in the prototype) */
   avatarUrl?: string;
   /** users.is_active: false = disabled by a platform admin */
@@ -72,8 +69,6 @@ export interface DemoInvitation {
   roleName?: string;
   /** invitation.title (job title; never grants access) */
   jobTitle?: string;
-  /** invitation.department_id, shown by name */
-  department?: string;
   message?: string;
   /** invitation_project rows */
   projectIds: string[];
@@ -332,7 +327,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     email: 'demo@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Product Director',
-    department: 'Product Delivery',
     bio: 'Primary demo account for evaluating Flash Sign onboarding, management, and e-signatures.',
     role: 'org_admin',
     organizationId: 'ws-flash',
@@ -348,7 +342,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     email: 'sarah.chen@acmedigital.com',
     password: 'Demo123!',
     jobTitle: 'VP of Product',
-    department: 'Product & Design',
     bio: 'Overseeing core platform roadmap, cross-functional sprints, and customer deliverables.',
     role: 'product_owner',
     organizationId: 'ws-acme',
@@ -364,7 +357,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     email: 'alex.rivera@acmedigital.com',
     password: 'Demo123!',
     jobTitle: 'Staff Software Architect',
-    department: 'Engineering',
     bio: 'Lead architect building AI-agent workflows and high-concurrency microservices.',
     role: 'engineering_lead',
     organizationId: 'ws-acme',
@@ -380,7 +372,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     email: 'elena.r@acmedigital.com',
     password: 'Demo123!',
     jobTitle: 'Head of Legal & Compliance',
-    department: 'Legal Operations',
     bio: 'Managing enterprise agreements, digital signature audit trails, and data governance.',
     role: 'document_manager',
     organizationId: 'ws-acme',
@@ -396,7 +387,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     email: 'incomplete@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Founder & CEO',
-    department: 'Executive',
     bio: 'New user registered without completing organization setup.',
     role: 'org_admin',
     organizationId: null,
@@ -420,7 +410,6 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     roleName: 'Developer',
     projectIds: ['p1', 'p3'],
     jobTitle: 'Frontend Developer',
-    department: 'Engineering',
     message: 'Welcome aboard! You will be working with Priya on the signing canvas.',
     organizationId: 'ws-flash',
     organizationName: 'Flash Technologies',
@@ -438,7 +427,6 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     roleName: 'QA Tester',
     projectIds: ['p1', 'p4'],
     jobTitle: 'QA Engineer',
-    department: 'Quality',
     organizationId: 'ws-flash',
     organizationName: 'Flash Technologies',
     invitedById: 'demo-owner',
@@ -453,7 +441,6 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     roleId: 'role-pm',
     roleName: 'Project Manager',
     projectIds: [],
-    department: 'Delivery',
     organizationId: 'ws-flash',
     organizationName: 'Flash Technologies',
     invitedById: 'demo-owner',

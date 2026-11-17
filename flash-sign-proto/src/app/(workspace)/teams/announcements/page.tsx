@@ -12,12 +12,16 @@ import { AnnouncementPriorityBadge } from '@/components/collaboration/collaborat
 import { CreateAnnouncementDialog } from '@/components/collaboration/create-announcement-dialog';
 import type { Announcement } from '@/types';
 import { Modal } from '@/components/shared/modal';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { canManageTeam } from '@/lib/rbac';
+import { AccessDenied } from '@/components/shared/access-denied';
 
 export default function AnnouncementsPage() {
   const {
     announcements, users, currentUserId, markAnnouncementRead,
     togglePinAnnouncement, deleteAnnouncement,
   } = useApp();
+  const { currentRbacUser } = useDemoAuth();
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'important' | 'pinned'>('all');
@@ -58,6 +62,20 @@ export default function AnnouncementsPage() {
         return new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime();
       });
   }, [announcements, search, filter, audienceFilter, currentUserId]);
+
+  // Only team managers create, edit, pin and delete; everyone else reads on My Status
+  if (currentRbacUser && !canManageTeam(currentRbacUser)) {
+    return (
+      <div className="p-6 max-w-4xl mx-auto">
+        <AccessDenied
+          title="Announcements Board Restricted"
+          message="Your role can read announcements and mark them as seen on My Status, but can't manage them."
+          requiredRole="Team Management Access"
+          backHref="/projects/home"
+        />
+      </div>
+    );
+  }
 
   const handleDelete = (ann: Announcement) => {
     deleteAnnouncement(ann.id);

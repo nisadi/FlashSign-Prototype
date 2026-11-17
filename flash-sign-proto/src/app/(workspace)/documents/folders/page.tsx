@@ -109,7 +109,7 @@ export default function FoldersManagementPage() {
               Folder Management
             </h1>
             <p className="text-sm text-muted mt-1">
-              Group documents by department, confidentiality tier, and business engagement.
+              Group documents by confidentiality tier and business engagement.
             </p>
           </div>
 

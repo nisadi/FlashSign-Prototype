@@ -246,7 +246,6 @@ export interface DemoAuthContextType {
     email: string;
     fullName?: string;
     jobTitle?: string;
-    department?: string;
     message?: string;
     roleId: string;
     assignedProjectIds?: string[];
@@ -468,7 +467,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         fullName: account.name,
         email: account.email,
         jobTitle: account.jobTitle,
-        department: account.department,
         role: mappedRole,
         organizationId: account.organizationId || 'ws-flash',
         avatarColor: account.avatarColor,
@@ -992,7 +990,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         email: normalizedEmail,
         password: data.password,
         jobTitle: data.jobTitle?.trim() || 'Founder & CEO',
-        department: 'Executive',
         role: 'executive',
         organizationId: null,
         registrationCompleted: true,
@@ -1263,7 +1260,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         roleId: role.id,
         roleName: role.name,
         jobTitle: data.jobTitle?.trim() || undefined,
-        department: data.department?.trim() || undefined,
         message: data.message?.trim() || undefined,
         projectIds,
         organizationId: org.id,
@@ -1338,7 +1334,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         email: invite.email.toLowerCase(),
         password: data.password,
         jobTitle: data.jobTitle?.trim() || invite.jobTitle || 'Team Member',
-        department: invite.department || 'Engineering',
         role: legacyRoleFor(role.id),
         organizationId: org.id,
         registrationCompleted: true,
@@ -1357,7 +1352,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         name: newUser.fullName,
         email: newUser.email,
         jobTitle: newUser.jobTitle,
-        department: newUser.department,
         organizationId: org.id,
         roleId: role.id,
         roleName: role.name,

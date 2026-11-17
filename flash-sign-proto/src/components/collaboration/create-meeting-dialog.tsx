@@ -4,7 +4,6 @@ import React, { useState, useMemo } from 'react';
 import { X, Video, Calendar, Clock, Check, AlertTriangle, AlertCircle, Plus, Trash2 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import type { Meeting } from '@/types';
-import { FEATURES } from '@/lib/features';
 import { ClientPortal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
 
@@ -23,7 +22,7 @@ export function CreateMeetingDialog({
   defaultDate,
   onSuccess,
 }: CreateMeetingDialogProps) {
-  const { users, teams, projects, meetings, addMeeting, updateMeeting, currentUserId } = useApp();
+  const { users, projects, meetings, addMeeting, updateMeeting, currentUserId } = useApp();
 
   const [title, setTitle] = useState(meetingToEdit?.title || '');
   const [description, setDescription] = useState(meetingToEdit?.description || '');
@@ -36,7 +35,6 @@ export function CreateMeetingDialog({
   const [participantIds, setParticipantIds] = useState<string[]>(
     meetingToEdit?.participantIds || [currentUserId]
   );
-  const [teamId, setTeamId] = useState(meetingToEdit?.teamId || '');
   const [projectId, setProjectId] = useState(meetingToEdit?.projectId || '');
   const [location, setLocation] = useState(
     meetingToEdit?.location || 'Meeting Room Alpha'
@@ -145,7 +143,6 @@ export function CreateMeetingDialog({
         durationMinutes,
         organizerId,
         participantIds: finalParticipants,
-        teamId: teamId || undefined,
         projectId: projectId || undefined,
         location,
         meetingLink,
@@ -167,7 +164,6 @@ export function CreateMeetingDialog({
         durationMinutes,
         organizerId,
         participantIds: finalParticipants,
-        teamId: teamId || undefined,
         projectId: projectId || undefined,
         location,
         meetingLink,
@@ -326,25 +322,8 @@ export function CreateMeetingDialog({
             </div>
           </div>
 
-          {/* Team & Project Associations */}
-          <div className={`grid grid-cols-1 ${FEATURES.teams ? 'sm:grid-cols-2' : ''} gap-3`}>
-            {FEATURES.teams && (
-              <div>
-                <label className="block font-semibold text-ink mb-1">Related Team (Optional)</label>
-                <select
-                  value={teamId}
-                  onChange={e => setTeamId(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                >
-                  <option value="">No specific team</option>
-                  {teams.map(t => (
-                    <option key={t.id} value={t.id}>
-                      {t.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
+          {/* Project Association */}
+          <div className="grid grid-cols-1 gap-3">
 
             <div>
               <label className="block font-semibold text-ink mb-1">Related Project (Optional)</label>

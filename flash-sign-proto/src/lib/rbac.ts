@@ -62,7 +62,6 @@ export interface DemoUserAccount {
   email: string;
   password?: string;
   jobTitle?: string;
-  department?: string;
   organizationId?: string;
   roleId: string;
   roleName: string;
@@ -186,7 +185,7 @@ export function orgInviteDisplayStatus(
   return inv.status;
 }
 
-export type FeatureKey = 'teams' | 'contracts' | 'ai_agents' | 'srs_analysis';
+export type FeatureKey = 'contracts' | 'ai_agents' | 'srs_analysis';
 
 /** organization_feature: one switch per organisation and feature key. */
 export interface OrganizationFeature {
@@ -198,7 +197,6 @@ export interface OrganizationFeature {
 }
 
 export const FEATURE_DEFINITIONS: { key: FeatureKey; label: string; description: string; defaultEnabled: boolean }[] = [
-  { key: 'teams', label: 'Teams', description: 'Teams directory, team cards and team pickers.', defaultEnabled: false },
   { key: 'contracts', label: 'Contracts', description: 'Contracts as their own record type under Documents.', defaultEnabled: false },
   { key: 'ai_agents', label: 'AI Agent Hub', description: 'AI coding-agent connections, tokens and activity (Phase 2).', defaultEnabled: true },
   { key: 'srs_analysis', label: 'SRS analysis', description: 'Analyse uploaded SRS files into proposed tasks (Phase 2).', defaultEnabled: true },
@@ -306,7 +304,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     email: 'superadmin@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Super Administrator',
-    department: 'Platform Governance',
     organizationId: 'platform',
     roleId: 'super-admin',
     roleName: 'Super Admin',
@@ -330,7 +327,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     email: 'owner@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Chief Executive Officer & Founder',
-    department: 'Executive Leadership',
     organizationId: 'ws-flash',
     roleId: 'role-owner',
     roleName: 'Organization Owner',
@@ -354,7 +350,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     email: 'pm@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Senior Project Delivery Manager',
-    department: 'Operations & Delivery',
     organizationId: 'ws-flash',
     roleId: 'role-pm',
     roleName: 'Project Manager',
@@ -378,7 +373,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     email: 'teamlead@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Engineering Team Lead',
-    department: 'Engineering',
     organizationId: 'ws-flash',
     roleId: 'role-team-lead',
     roleName: 'Team Lead',
@@ -402,7 +396,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     email: 'dev@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Senior Fullstack Engineer',
-    department: 'Engineering',
     organizationId: 'ws-flash',
     roleId: 'role-dev',
     roleName: 'Developer',
@@ -426,7 +419,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     email: 'qa@flashsign.com',
     password: 'Demo123!',
     jobTitle: 'Lead QA Automation Engineer',
-    department: 'Quality Engineering',
     organizationId: 'ws-flash',
     roleId: 'role-qa',
     roleName: 'QA Tester',

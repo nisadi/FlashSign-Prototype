@@ -124,7 +124,7 @@ export function ReassignTaskDialog({
                       </span>
                       <div className="truncate">
                         <p className="text-xs font-medium text-ink truncate">{u.name}</p>
-                        <p className="text-[10px] text-muted truncate">{u.title || u.role} · {u.department}</p>
+                        <p className="text-[10px] text-muted truncate">{u.title || u.role}</p>
                       </div>
                     </div>
                     {isSelected && <Check className="w-4 h-4 text-flash-deep shrink-0 ml-2" />}
