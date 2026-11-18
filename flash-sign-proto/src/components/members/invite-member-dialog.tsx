@@ -1,12 +1,13 @@
 'use client';
 
 import React, { useState } from 'react';
-import { Send, Copy, Check, Mail, UserPlus, X, CheckCircle2 } from 'lucide-react';
+import { Send, Mail, UserPlus, X, CheckCircle2, KeyRound } from 'lucide-react';
 import { Modal } from '@/components/shared/modal';
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { INVITE_VALID_DAYS, inviteLink, invitableRoles, invitationRoleName } from '@/lib/invitations';
+import { INVITE_VALID_DAYS, invitableRoles, invitationRoleName } from '@/lib/invitations';
 import type { DemoInvitation } from '@/types/demo-auth';
+import { InvitationEmailCard } from '@/components/members/invitation-email';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -25,8 +26,8 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
   const [jobTitle, setJobTitle] = useState('');
   const [message, setMessage] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const [sent, setSent] = useState<DemoInvitation | null>(null);
-  const [copied, setCopied] = useState(false);
+  // The sent invitation and its temporary password (shown once; only its hash is stored)
+  const [sent, setSent] = useState<{ invitation: DemoInvitation; tempPassword: string } | null>(null);
 
   // invitation.role_id: one of this organisation's roles, never the Organization Owner role
   const roleOptions = invitableRoles(roles);
@@ -46,7 +47,6 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
     setMessage('');
     setError(null);
     setSent(null);
-    setCopied(false);
   };
 
   const close = () => {
@@ -82,23 +82,12 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
       roleId: selectedCustomRole.id,
       assignedProjectIds: selectedCustomRole.projectAccess === 'user' ? assignedProjectIds : [],
     });
-    if (!result.success || !result.invitation) {
+    if (!result.success || !result.invitation || !result.tempPassword) {
       setError(result.error ?? 'Could not send the invitation.');
       return;
     }
     setError(null);
-    setSent(result.invitation);
-  };
-
-  const copyLink = async () => {
-    if (!sent) return;
-    try {
-      await navigator.clipboard.writeText(inviteLink(sent));
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    } catch {
-      // Clipboard blocked: the link is still visible to select by hand
-    }
+    setSent({ invitation: result.invitation, tempPassword: result.tempPassword });
   };
 
   return (
@@ -110,32 +99,17 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
             <div>
               <h2 id="invite-title" className="text-base font-bold text-ink">Invitation sent</h2>
               <p className="text-muted mt-0.5">
-                {sent.fullName ?? sent.email} will get an email to join {orgName} as {invitationRoleName(sent, roles)}.
-                {sent.projectIds.length > 0 && (
-                  <> They&apos;ll be added to {sent.projectIds.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')}.</>
+                {sent.invitation.fullName ?? sent.invitation.email} will get an email with a temporary password to join {orgName} as{' '}
+                {invitationRoleName(sent.invitation, roles)}.
+                {sent.invitation.projectIds.length > 0 && (
+                  <> They&apos;ll be added to {sent.invitation.projectIds.map(id => projects.find(p => p.id === id)?.name ?? id).join(', ')}.</>
                 )}
-                They&apos;ll appear under Members once they create their account; until then they&apos;re in the Invited tab.
+                They&apos;ll appear under Members once they sign in and set their own password; until then they&apos;re in the Invited tab.
               </p>
             </div>
           </div>
 
-          <div className="space-y-1.5">
-            <p className="font-semibold text-ink">Invitation link</p>
-            <div className="flex items-center gap-2">
-              <input readOnly value={inviteLink(sent)} onFocus={e => e.target.select()} className={`${inputClass} font-mono text-[11px]`} aria-label="Invitation link" />
-              <button
-                type="button"
-                onClick={copyLink}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-line bg-paper-elevated font-semibold text-ink hover:bg-mist shrink-0"
-              >
-                {copied ? <Check className="w-3.5 h-3.5 text-flash-deep" /> : <Copy className="w-3.5 h-3.5" />}
-                {copied ? 'Copied' : 'Copy link'}
-              </button>
-            </div>
-            <p className="text-[11px] text-muted">
-              Prototype: no email is actually sent. Open this link in a private window to join as the invited person.
-            </p>
-          </div>
+          <InvitationEmailCard invitation={sent.invitation} tempPassword={sent.tempPassword} roleName={invitationRoleName(sent.invitation, roles)} />
 
           <div className="flex items-center justify-end gap-2 pt-3 border-t border-line">
             <button type="button" onClick={reset} className="flex items-center gap-1.5 px-3.5 py-2 rounded-lg text-ink hover:bg-mist font-semibold">
@@ -151,7 +125,7 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
           <div className="flex items-center justify-between px-6 pt-5 pb-4 border-b border-line">
             <div>
               <h2 id="invite-title" className="text-base font-bold text-ink">Invite people to {orgName}</h2>
-              <p className="text-muted mt-0.5">They get an email with a link to create their account and join straight away.</p>
+              <p className="text-muted mt-0.5">They get an email with a one-time temporary password. At their first sign-in they set their own password and join.</p>
             </div>
             <button type="button" onClick={close} className="p-1.5 rounded-lg text-muted hover:text-ink hover:bg-mist" aria-label="Close">
               <X className="w-4 h-4" />
@@ -255,9 +229,12 @@ export function InviteMemberDialog({ open, onClose }: { open: boolean; onClose: 
                   {message.trim() && (
                     <blockquote className="border-l-2 border-flash pl-3 text-ink-soft italic whitespace-pre-line">{message.trim()}</blockquote>
                   )}
-                  <span className="inline-block px-4 py-2 rounded-lg bg-flash-deep text-white font-semibold">Accept invitation</span>
+                  <div className="rounded-lg bg-mist/50 border border-line p-3 space-y-1 text-[11px]">
+                    <p><span className="text-muted">Email:</span> <span className="font-mono">{email.trim() || 'name@company.com'}</span></p>
+                    <p className="flex items-center gap-1"><KeyRound className="w-3 h-3 text-muted" /><span className="text-muted">Temporary password:</span> <span className="font-mono">made when you send</span></p>
+                  </div>
                   <p className="text-[11px] text-muted">
-                    The link expires in {INVITE_VALID_DAYS} days. You&apos;ll set your name and password, then go straight to the {orgName} workspace.
+                    It works once, for {INVITE_VALID_DAYS} days. At the first sign-in you&apos;ll set your own password, then go straight to the {orgName} workspace.
                   </p>
                 </div>
               </div>

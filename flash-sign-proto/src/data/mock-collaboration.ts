@@ -520,7 +520,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'We are thrilled to announce that Flash Sign v2.0 public beta testing will officially kick off on November 4th. All team leads are requested to review outstanding release blockers in the Milestones tab.',
     authorId: 'u1', // Aria Chen
     publishedDate: d(-1),
-    audience: 'all',
     priority: 'important',
     isPinned: true,
     readByUserIds: ['u2', 'u3', 'u4'],
@@ -533,7 +532,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'Our external auditor Ethan Mwangi will begin on-site evidence interviews next week. IT and Engineering teams please ensure all IAM policies and PR approvals are documented and up to date.',
     authorId: 'u8', // Rachel Kim
     publishedDate: d(-2),
-    audience: 'all',
     priority: 'important',
     isPinned: true,
     readByUserIds: ['u1', 'u2', 'u4', 'u8', 'u9'],
@@ -546,7 +544,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'Claude and Codex autonomous PR generation now requires passing all automated lint and unit checks before human review requests are triggered. Check out the updated guidelines in the engineering wiki.',
     authorId: 'u4', // James Okafor
     publishedDate: d(-3),
-    audience: 'engineering',
     priority: 'normal',
     isPinned: false,
     readByUserIds: ['u4', 'u5', 'u6', 'u14'],
@@ -559,7 +556,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'To help project managers balance capacity and prevent delivery bottlenecks during November and December launches, please submit any upcoming PTO requests through the Time-Off portal this week.',
     authorId: 'u2', // Marcus Webb
     publishedDate: d(-5),
-    audience: 'all',
     priority: 'normal',
     isPinned: false,
     readByUserIds: ['u2', 'u3', 'u5', 'u6', 'u7'],
@@ -572,7 +568,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'The product design team has published new interactive component variants for signature widgets, avatar stacks, and tablet density modes. Run library sync in your Figma files.',
     authorId: 'u3', // Sofia Reyes
     publishedDate: d(-6),
-    audience: 'design',
     priority: 'normal',
     isPinned: false,
     readByUserIds: ['u3', 'u6'],
@@ -585,7 +580,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'Draft outline of the upcoming CAB session discussing white-label electronic signatures with ACME Corporation and strategic enterprise partners.',
     authorId: 'u1',
     publishedDate: d(0),
-    audience: 'operations',
     priority: 'normal',
     isPinned: false,
     readByUserIds: [],
@@ -598,7 +592,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'Infrastructure team completed an out-of-band security patch across all development and staging clusters last night. Zero downtime observed.',
     authorId: 'u8',
     publishedDate: d(-8),
-    audience: 'engineering',
     priority: 'normal',
     isPinned: false,
     readByUserIds: ['u4', 'u8', 'u12', 'u14'],
@@ -611,7 +604,6 @@ export const MOCK_ANNOUNCEMENTS: Announcement[] = [
     content: 'Please give a warm welcome to Aditya Sharma, who joined our backend engineering team. Aditya brings deep expertise in distributed event queues and webhook pipelines.',
     authorId: 'u1',
     publishedDate: d(-12),
-    audience: 'all',
     priority: 'normal',
     isPinned: false,
     readByUserIds: ['u1', 'u2', 'u3', 'u4', 'u5', 'u6', 'u7', 'u8', 'u9', 'u14'],

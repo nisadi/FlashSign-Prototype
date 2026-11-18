@@ -34,7 +34,7 @@ import { ClientPortal, Modal } from '@/components/shared/modal';
 export function TaskDetailDrawer() {
   const {
     activeTaskDrawerId, closeTaskDrawer, tasks, updateTask, deleteTask,
-    users, projects, sprints, milestones, addTask, openTaskDrawer, addActivity, taskStatusChanges, workSessions,
+    users, members, projects, sprints, milestones, addTask, openTaskDrawer, addActivity, taskStatusChanges, workSessions,
     epics, stories, setTaskPlan
   } = useApp();
   const now = useNow();
@@ -272,7 +272,7 @@ export function TaskDetailDrawer() {
               className="w-full text-xs font-medium px-2 py-1 rounded border border-line bg-paper text-ink focus:ring-1 focus:ring-flash"
             >
               <option value="">Unassigned</option>
-              {users.map(u => (
+              {members.map(u => (
                 <option key={u.id} value={u.id}>{u.name}</option>
               ))}
             </select>
@@ -630,7 +630,7 @@ export function TaskDetailDrawer() {
                       aria-label="Assignee for the new subtask"
                     >
                       <option value="">Unassigned</option>
-                      {users.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
+                      {members.map(u => <option key={u.id} value={u.id}>{u.name}</option>)}
                     </select>
                   </div>
                   <SubtaskTimeFields value={newSubtaskTime} onChange={setNewSubtaskTime} window={subtaskTime} />

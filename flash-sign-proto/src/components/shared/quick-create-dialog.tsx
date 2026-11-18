@@ -16,7 +16,7 @@ interface QuickCreateDialogProps {
 
 export function QuickCreateDialog({ isOpen, onClose, defaultProjectId }: QuickCreateDialogProps) {
   const router = useRouter();
-  const { projects, users, sprints, addTask, addProject, addMilestone, addSprint } = useApp();
+  const { projects, members: users, sprints, addTask, addProject, addMilestone, addSprint } = useApp();
   const currentUser = useCurrentUser();
 
   const [activeTab, setActiveTab] = useState<'task' | 'project' | 'milestone' | 'sprint'>('task');

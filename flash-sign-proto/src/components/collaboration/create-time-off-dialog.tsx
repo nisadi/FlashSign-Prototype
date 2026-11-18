@@ -31,7 +31,7 @@ export function CreateTimeOffDialog({
   defaultMemberId,
   onSuccess,
 }: CreateTimeOffDialogProps) {
-  const { users, timeOffRequests, addTimeOffRequest, updateTimeOffRequest, currentUserId } = useApp();
+  const { members: users, timeOffRequests, addTimeOffRequest, updateTimeOffRequest, currentUserId } = useApp();
 
   const [memberId, setMemberId] = useState(
     requestToEdit?.memberId || defaultMemberId || currentUserId

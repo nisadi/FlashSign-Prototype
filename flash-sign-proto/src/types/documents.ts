@@ -1,4 +1,4 @@
-// ─── Documents, Contracts & Electronic Signature Types ────────────────────────
+// ─── Documents & Electronic Signature Types ────────────────────────
 
 export type DocumentType =
   | 'pdf'
@@ -60,7 +60,6 @@ export interface DocumentItem {
   ownerName?: string;
   folderId?: string | null;
   relatedProjectId?: string;
-  relatedContractId?: string;
   content: string;
   fileSize?: string;
   pages?: number;
@@ -101,80 +100,7 @@ export interface DocumentTemplate {
   lastUpdated: string;
 }
 
-export type RenewalType = 'auto' | 'manual' | 'none' | 'auto_renew' | 'one_time';
 export type SigningOrder = 'sequential' | 'parallel';
-
-export type ContractType =
-  | 'agreement'
-  | 'sow'
-  | 'msa'
-  | 'nda'
-  | 'proposal'
-  | 'specification'
-  | 'master_services_agreement'
-  | 'statement_of_work'
-  | 'non_disclosure_agreement'
-  | 'software_license'
-  | 'consulting_agreement'
-  | 'vendor_contract'
-  | 'service_level_agreement'
-  | 'change_request'
-  | 'other';
-
-export type ContractStatus =
-  | 'draft'
-  | 'pending_review'
-  | 'awaiting_signature'
-  | 'active'
-  | 'expiring'
-  | 'completed'
-  | 'expired'
-  | 'archived';
-
-export interface ContractReviewComment {
-  id: string;
-  authorId: string;
-  authorName: string;
-  text?: string;
-  content?: string;
-  createdAt: string;
-  actionRequested?: 'changes' | 'approved';
-}
-
-export interface Contract {
-  id: string;
-  title: string;
-  contractType: ContractType;
-  counterparty: string;
-  ownerId: string;
-  ownerName?: string;
-  reviewerName?: string;
-  relatedProjectId?: string;
-  documentId?: string;
-  effectiveDate: string; // YYYY-MM-DD
-  expiryDate?: string;    // YYYY-MM-DD
-  renewalType: RenewalType;
-  contractValue?: number; // USD
-  value?: number; // convenience alias
-  paymentTerms?: string;
-  specialConditions?: string;
-  description?: string;
-  status: ContractStatus;
-  reviewerId?: string;
-  signatureRequestId?: string;
-  reviewComments?: ContractReviewComment[];
-  activity?: {
-    id: string;
-    action?: string;
-    actor?: string;
-    actorName?: string;
-    description?: string;
-    type?: string;
-    timestamp: string;
-  }[];
-  createdAt: string;
-  updatedAt: string;
-}
 
 // ─── Electronic Signatures Types ─────────────────────────────────────────────
 
@@ -252,7 +178,6 @@ export interface AuditEvent {
   id: string;
   requestId?: string;
   documentId?: string;
-  contractId?: string;
   name?: string;
   eventName?: string;
   actorName: string;
@@ -267,7 +192,6 @@ export interface AuditEvent {
 export interface SignatureRequest {
   id: string;
   documentId?: string;
-  contractId?: string;
   title: string;
   senderId: string;
   senderName?: string;
@@ -411,8 +335,8 @@ export interface CompanySeal {
   description?: string;
   /** PNG/SVG/JPEG data URL */
   image: string;
-  /** App roles allowed to apply this seal (DemoRole ids) */
-  allowedRoles: string[];
+  /** company_seal_role rows: the organisation's roles (role.role_id) allowed to apply this seal */
+  allowedRoleIds: string[];
   isActive: boolean;
   createdBy: string;
   createdAt: string;

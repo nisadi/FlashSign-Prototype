@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { avatarColorFor } from '@/lib/avatar';
 import { usePathname, useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { Bell, Search, HelpCircle, ChevronRight, Menu, Check, LogOut, Building2, User as UserIcon, ChevronDown } from 'lucide-react';
@@ -235,7 +236,7 @@ export function AppHeader() {
                           <div className="flex items-center gap-2 truncate">
                             <span
                               className="w-2 h-2 rounded-full shrink-0"
-                              style={{ backgroundColor: account.avatarColor }}
+                              style={{ backgroundColor: avatarColorFor(account.id) }}
                             />
                             <span className="truncate text-[11px]">
                               {account.name} ({account.roleName})

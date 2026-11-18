@@ -14,15 +14,6 @@ interface CreateAnnouncementDialogProps {
   onSuccess?: (ann: Announcement) => void;
 }
 
-const AUDIENCE_OPTIONS = [
-  { id: 'all', label: 'Entire Organization' },
-  { id: 'engineering', label: 'Engineering' },
-  { id: 'design', label: 'Product Design' },
-  { id: 'operations', label: 'Operations & DevOps' },
-  { id: 'quality', label: 'Quality Assurance' },
-  { id: 'legal', label: 'Legal & Compliance' },
-];
-
 export function CreateAnnouncementDialog({
   open,
   onOpenChange,
@@ -33,7 +24,6 @@ export function CreateAnnouncementDialog({
 
   const [title, setTitle] = useState(announcementToEdit?.title || '');
   const [content, setContent] = useState(announcementToEdit?.content || '');
-  const [audience, setAudience] = useState(announcementToEdit?.audience || 'all');
   const [priority, setPriority] = useState<AnnouncementPriority>(
     announcementToEdit?.priority || 'normal'
   );
@@ -68,7 +58,6 @@ export function CreateAnnouncementDialog({
       updateAnnouncement(announcementToEdit.id, {
         title: trimmedTitle,
         content: trimmedContent,
-        audience,
         priority,
         isPinned,
         publishedDate: `${publishedDate}T10:00:00Z`,
@@ -83,7 +72,6 @@ export function CreateAnnouncementDialog({
       addAnnouncement({
         title: trimmedTitle,
         content: trimmedContent,
-        audience,
         priority,
         isPinned,
         authorId: currentUserId,
@@ -162,23 +150,8 @@ export function CreateAnnouncementDialog({
             />
           </div>
 
-          {/* Audience & Priority */}
+          {/* Priority */}
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className="block font-semibold text-ink mb-1">Target Audience</label>
-              <select
-                value={audience}
-                onChange={e => setAudience(e.target.value)}
-                className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-              >
-                {AUDIENCE_OPTIONS.map(opt => (
-                  <option key={opt.id} value={opt.id}>
-                    {opt.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
             <div>
               <label className="block font-semibold text-ink mb-1">Priority</label>
               <select

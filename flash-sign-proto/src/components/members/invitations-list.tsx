@@ -1,9 +1,11 @@
 'use client';
 
 import React, { useMemo, useState } from 'react';
-import { Copy, Check, RotateCw, XCircle, ExternalLink, MailPlus, Clock, AlertTriangle } from 'lucide-react';
+import { RotateCw, XCircle, MailPlus, Clock, AlertTriangle, Lock } from 'lucide-react';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { daysLeftText, inviteLink, invitationRoleName, isInviteExpired } from '@/lib/invitations';
+import { daysLeftText, invitationRoleName, isInviteExpired, isOwnerInvitation } from '@/lib/invitations';
+import { MAX_TEMP_PASSWORD_ATTEMPTS } from '@/lib/temp-password';
+import { InvitationEmailCard } from '@/components/members/invitation-email';
 import { useApp } from '@/context/app-context';
 import { formatDate } from '@/lib/utils';
 import { Modal } from '@/components/shared/modal';
@@ -13,25 +15,17 @@ import type { DemoInvitation } from '@/types/demo-auth';
 export function InvitationsList({ onInvite, canManage }: { onInvite: () => void; canManage: boolean }) {
   const { invitations, selectedWorkspace, resendInvitation, revokeInvitation, roles } = useDemoAuth();
   const { projects } = useApp();
-  const [copiedId, setCopiedId] = useState<string | null>(null);
   const [toRevoke, setToRevoke] = useState<DemoInvitation | null>(null);
+  // A resend makes a new temporary password, shown once in the email
+  const [resent, setResent] = useState<{ invitation: DemoInvitation; tempPassword: string } | null>(null);
 
   const rows = useMemo(
     () => invitations
-      .filter(i => i.organizationId === selectedWorkspace.id && i.status === 'pending')
+      // Owner invitations are the Super Admin's
+      .filter(i => i.organizationId === selectedWorkspace.id && i.status === 'pending' && !isOwnerInvitation(i))
       .sort((a, b) => b.sentAt.localeCompare(a.sentAt)),
     [invitations, selectedWorkspace.id]
   );
-
-  const copy = async (inv: DemoInvitation) => {
-    try {
-      await navigator.clipboard.writeText(inviteLink(inv));
-      setCopiedId(inv.id);
-      setTimeout(() => setCopiedId(null), 2000);
-    } catch {
-      // Clipboard blocked: "Open" still gives the link
-    }
-  };
 
   if (rows.length === 0) {
     return (
@@ -71,6 +65,7 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
             <tbody className="divide-y divide-line">
               {rows.map(inv => {
                 const expired = isInviteExpired(inv);
+                const locked = (inv.failedAttempts ?? 0) >= MAX_TEMP_PASSWORD_ATTEMPTS;
                 return (
                   <tr key={inv.id} className="hover:bg-mist/20 transition-colors">
                     <td className="py-3 px-4">
@@ -102,6 +97,13 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-amber-50 text-amber-800 border border-amber-200">
                           <AlertTriangle className="w-3 h-3" /> Expired {daysLeftText(inv.expiresAt)}
                         </span>
+                      ) : locked ? (
+                        <span
+                          className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-rose-50 text-rose-700 border border-rose-200"
+                          title="Too many wrong temporary passwords. Resend to unlock it."
+                        >
+                          <Lock className="w-3 h-3" /> Locked · resend to unlock
+                        </span>
                       ) : (
                         <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[10px] font-semibold bg-blue-50 text-blue-700 border border-blue-200">
                           <Clock className="w-3 h-3" /> Pending · expires {daysLeftText(inv.expiresAt)}
@@ -111,18 +113,15 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
                     {canManage && (
                       <td className="py-3 px-4">
                         <div className="flex items-center justify-end gap-0.5 whitespace-nowrap">
-                          {!expired && (
-                            <>
-                              <button type="button" onClick={() => copy(inv)} className={actionClass} title="Copy invitation link">
-                                {copiedId === inv.id ? <Check className="w-3.5 h-3.5 text-flash-deep" /> : <Copy className="w-3.5 h-3.5" />}
-                                {copiedId === inv.id ? 'Copied' : 'Copy link'}
-                              </button>
-                              <a href={inviteLink(inv)} target="_blank" rel="noreferrer" className={actionClass} title="Open the invitation as the invited person would">
-                                <ExternalLink className="w-3.5 h-3.5" /> Open
-                              </a>
-                            </>
-                          )}
-                          <button type="button" onClick={() => resendInvitation(inv.id)} className={actionClass} title="Send the email again with a fresh 7-day link">
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const result = resendInvitation(inv.id);
+                              if (result) setResent(result);
+                            }}
+                            className={actionClass}
+                            title="Send the email again with a new temporary password, valid for 7 days"
+                          >
                             <RotateCw className="w-3.5 h-3.5" /> Resend
                           </button>
                           <button type="button" onClick={() => setToRevoke(inv)} className={`${actionClass} hover:!text-danger hover:!bg-danger/10`} title="Cancel this invitation">
@@ -144,7 +143,7 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
           <div className="p-6 space-y-4 text-xs">
             <h3 className="text-sm font-bold text-ink">Revoke invitation</h3>
             <p className="text-muted leading-relaxed">
-              The link sent to <strong>{toRevoke.email}</strong> will stop working. You can invite them again later.
+              The temporary password sent to <strong>{toRevoke.email}</strong> will stop working. You can invite them again later.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
               <button onClick={() => setToRevoke(null)} className="px-3.5 py-1.5 rounded-lg text-muted hover:text-ink hover:bg-mist transition-colors font-medium">
@@ -156,6 +155,21 @@ export function InvitationsList({ onInvite, canManage }: { onInvite: () => void;
               >
                 Revoke
               </button>
+            </div>
+          </div>
+        )}
+      </Modal>
+
+      <Modal isOpen={!!resent} onClose={() => setResent(null)} size="lg">
+        {resent && (
+          <div className="p-6 space-y-4 text-xs">
+            <h3 className="text-sm font-bold text-ink">Invitation sent again</h3>
+            <p className="text-muted">
+              {resent.invitation.email} gets a new temporary password, valid for 7 days. The old one no longer works.
+            </p>
+            <InvitationEmailCard invitation={resent.invitation} tempPassword={resent.tempPassword} roleName={invitationRoleName(resent.invitation, roles)} />
+            <div className="flex justify-end pt-2 border-t border-line">
+              <button onClick={() => setResent(null)} className="px-4 py-1.5 rounded-lg bg-ink text-white font-semibold">Done</button>
             </div>
           </div>
         )}

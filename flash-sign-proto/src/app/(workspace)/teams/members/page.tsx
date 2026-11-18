@@ -17,8 +17,8 @@ import { InviteMemberDialog } from '@/components/members/invite-member-dialog';
 import { InvitationsList } from '@/components/members/invitations-list';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
-import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
-import type { User, AvailabilityStatus } from '@/types';
+import { EditMemberDialog } from '@/components/collaboration/edit-member-dialog';
+import { canRemoveMember, type User, type AvailabilityStatus } from '@/types';
 import { Modal } from '@/components/shared/modal';
 
 type MembersTab = 'members' | 'invited';
@@ -34,7 +34,7 @@ export default function MembersDirectoryPage() {
 function MembersDirectory() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { users, projects, tasks, deleteMember, demoRole } = useApp();
+  const { members: users, projects, tasks, removeMember, demoRole, org, currentUserId } = useApp();
   const { invitations, selectedWorkspace, currentRbacUser } = useDemoAuth();
   const canManage = canManageTeam(currentRbacUser);
   const canInvite = canManage;
@@ -80,7 +80,7 @@ function MembersDirectory() {
   }, [users, search, availabilityFilter, sortBy, tasks]);
 
   const handleDelete = (member: User) => {
-    deleteMember(member.id);
+    removeMember(member.id);
     setDeleteConfirmMember(null);
   };
 
@@ -268,13 +268,23 @@ function MembersDirectory() {
                           >
                             <Edit3 className="w-3.5 h-3.5" />
                           </button>
-                          <button
-                            onClick={() => setDeleteConfirmMember(member)}
-                            className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-                            title="Remove Member"
-                          >
-                            <Trash2 className="w-3.5 h-3.5" />
-                          </button>
+                          {/* The Owner and the person themselves can't be removed */}
+                          {canRemoveMember(member.id, org.ownerUserId, currentUserId) ? (
+                            <button
+                              onClick={() => setDeleteConfirmMember(member)}
+                              className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                              title="Remove Member"
+                            >
+                              <Trash2 className="w-3.5 h-3.5" />
+                            </button>
+                          ) : member.id === org.ownerUserId ? (
+                            <span
+                              className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-flash/10 text-flash-deep border border-flash/30"
+                              title="The Organization Owner can't be removed"
+                            >
+                              Owner
+                            </span>
+                          ) : null}
                         </div>
                       )}
                     </div>
@@ -321,7 +331,6 @@ function MembersDirectory() {
                     <th className="py-3 px-4">Job Title</th>
                     <th className="py-3 px-4">Availability</th>
                     <th className="py-3 px-4">Active Tasks</th>
-                    <th className="py-3 px-4">Time Zone</th>
                     <th className="py-3 px-4 text-right">Actions</th>
                   </tr>
                 </thead>
@@ -351,7 +360,6 @@ function MembersDirectory() {
                           {member.availability && <AvailabilityBadge status={member.availability} size="sm" />}
                         </td>
                         <td className="py-3 px-4 font-bold text-ink">{memberTasks.length} tasks</td>
-                        <td className="py-3 px-4 text-muted font-mono text-[11px]">{member.timeZone || 'EST'}</td>
                         <td className="py-3 px-4 text-right">
                           {canManage ? (
                             <div className="flex items-center justify-end gap-1">
@@ -365,13 +373,23 @@ function MembersDirectory() {
                               >
                                 <Edit3 className="w-3.5 h-3.5" />
                               </button>
-                              <button
-                                onClick={() => setDeleteConfirmMember(member)}
-                                className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
-                                title="Remove Member"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                              {/* The Owner and the person themselves can't be removed */}
+                              {canRemoveMember(member.id, org.ownerUserId, currentUserId) ? (
+                                <button
+                                  onClick={() => setDeleteConfirmMember(member)}
+                                  className="p-1 rounded text-muted hover:text-danger hover:bg-danger/10 transition-colors"
+                                  title="Remove Member"
+                                >
+                                  <Trash2 className="w-3.5 h-3.5" />
+                                </button>
+                              ) : member.id === org.ownerUserId ? (
+                                <span
+                                  className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wider bg-flash/10 text-flash-deep border border-flash/30"
+                                  title="The Organization Owner can't be removed"
+                                >
+                                  Owner
+                                </span>
+                              ) : null}
                             </div>
                           ) : (
                             <span className="text-[11px] text-muted italic">Read-only</span>
@@ -392,11 +410,14 @@ function MembersDirectory() {
       <InviteMemberDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
 
       {/* Edit Member Dialog */}
-      <CreateMemberDialog
-        open={createMemberOpen}
-        onOpenChange={setCreateMemberOpen}
-        memberToEdit={memberToEdit}
-      />
+      {memberToEdit && (
+        <EditMemberDialog
+          key={memberToEdit.id}
+          open={createMemberOpen}
+          onOpenChange={setCreateMemberOpen}
+          member={memberToEdit}
+        />
+      )}
 
       {/* Delete Confirmation */}
       <Modal
@@ -408,7 +429,7 @@ function MembersDirectory() {
           <div className="p-6 space-y-4 text-xs">
             <h3 className="text-sm font-bold text-ink">Remove Member</h3>
             <p className="text-muted leading-relaxed">
-              Are you sure you want to remove <strong>{deleteConfirmMember.name}</strong> from the organization? Their task assignments will be unlinked.
+              Are you sure you want to remove <strong>{deleteConfirmMember.name}</strong> from the organization? They lose access to every project. Their past tasks, comments and logged time are kept and show them as a former member.
             </p>
             <div className="flex items-center justify-end gap-2 pt-2 border-t border-line">
               <button

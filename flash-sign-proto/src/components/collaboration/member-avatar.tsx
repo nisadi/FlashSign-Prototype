@@ -2,7 +2,7 @@
 
 import React from 'react';
 import { cn } from '@/lib/utils';
-import type { User, AvailabilityStatus } from '@/types';
+import { isRemovedMember, type User, type AvailabilityStatus } from '@/types';
 
 interface MemberAvatarProps {
   user?: Partial<User> | null;
@@ -38,8 +38,11 @@ export function MemberAvatar({
       .join('')
       .slice(0, 2)
       .toUpperCase();
-  const resolvedColor = user?.color || color || '#00c2a8';
-  const resolvedAvailability = user?.availability || availability;
+  // A removed member keeps their name on past work, greyed out and labelled
+  const removed = isRemovedMember(user);
+  const resolvedColor = removed ? '#9ca3af' : user?.color || color || '#00c2a8';
+  const resolvedTitle = removed ? `${resolvedName} (former member)` : resolvedName;
+  const resolvedAvailability = removed ? undefined : user?.availability || availability;
 
   const sizeClasses = {
     xs: 'w-6 h-6 text-[10px]',
@@ -69,8 +72,9 @@ export function MemberAvatar({
       {resolvedAvatar ? (
         <img
           src={resolvedAvatar}
-          alt={resolvedName}
-          className={cn('rounded-full object-cover border border-line/60', sizeClasses[size])}
+          alt={resolvedTitle}
+          title={resolvedTitle}
+          className={cn('rounded-full object-cover border border-line/60', removed && 'grayscale opacity-70', sizeClasses[size])}
         />
       ) : (
         <div
@@ -79,7 +83,7 @@ export function MemberAvatar({
             sizeClasses[size]
           )}
           style={{ backgroundColor: resolvedColor }}
-          title={resolvedName}
+          title={resolvedTitle}
         >
           {resolvedInitials}
         </div>

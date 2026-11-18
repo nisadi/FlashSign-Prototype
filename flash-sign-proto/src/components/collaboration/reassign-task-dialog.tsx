@@ -20,8 +20,8 @@ export function ReassignTaskDialog({
   task,
   onSuccess,
 }: ReassignTaskDialogProps) {
-  const { users, reassignTask } = useApp();
-  const [selectedUserId, setSelectedUserId] = useState<string>(task?.assigneeId || users[0]?.id || '');
+  const { users, members, reassignTask } = useApp();
+  const [selectedUserId, setSelectedUserId] = useState<string>(task?.assigneeId || members[0]?.id || '');
   const [success, setSuccess] = useState(false);
 
   if (!open || !task) return null;
@@ -105,7 +105,7 @@ export function ReassignTaskDialog({
           <div>
             <label className="block font-semibold text-ink mb-1.5">New Assignee</label>
             <div className="space-y-1.5 max-h-48 overflow-y-auto p-1.5 bg-paper rounded-lg border border-line">
-              {users.map(u => {
+              {members.map(u => {
                 const isSelected = u.id === selectedUserId;
                 return (
                   <button

@@ -15,7 +15,6 @@ import {
   RotateCcw,
   Users,
   FolderKanban,
-  Send,
   Eye,
   SlidersHorizontal,
   ToggleRight,
@@ -26,21 +25,21 @@ import { useApp } from '@/context/app-context';
 import { AccessDenied } from '@/components/shared/access-denied';
 import {
   type SuperAdminOrg,
-  type SuperAdminOrgInvitation,
   type OrgPlan,
   type OrgStatus,
   ORG_PLANS,
   ORG_STATUSES,
   IANA_TIMEZONES,
-  ORG_INVITE_VALID_DAYS,
   FEATURE_DEFINITIONS,
   MOCK_ORG_COUNTS,
   PLATFORM_USERS,
   featuresFor,
-  orgInviteDisplayStatus,
   planLabel,
 } from '@/lib/rbac';
 import { cn, slugify } from '@/lib/utils';
+import { INVITE_VALID_DAYS, inviteDisplayStatus, isOwnerInvitation, type InviteDisplayStatus } from '@/lib/invitations';
+import type { DemoInvitation } from '@/types/demo-auth';
+import { InvitationEmailCard } from '@/components/members/invitation-email';
 
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const SLUG_RE = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
@@ -75,7 +74,7 @@ function statusSelectClass(status: OrgStatus) {
     : 'bg-rose-50 text-rose-800 border-rose-200';
 }
 
-const INVITE_STATUS_STYLE: Record<ReturnType<typeof orgInviteDisplayStatus>, string> = {
+const INVITE_STATUS_STYLE: Record<InviteDisplayStatus, string> = {
   pending: 'bg-amber-100 text-amber-800',
   accepted: 'bg-emerald-100 text-emerald-800',
   expired: 'bg-slate-100 text-slate-700',
@@ -120,16 +119,15 @@ export default function SuperAdminPage() {
     demoAccounts,
     superAdmins,
     superAdminOrgs,
-    superAdminOrgInvitations,
+    invitations,
     organizationFeatures,
     createSuperAdminOrg,
     updateSuperAdminOrg,
     updateSuperAdminOrgStatus,
     deleteSuperAdminOrg,
-    inviteSuperAdminOrg,
-    updateSuperAdminOrgInvite,
-    resendSuperAdminOrgInvite,
-    revokeSuperAdminOrgInvite,
+    resendInvitation,
+    revokeInvitation,
+    updateInvitation,
     setOrganizationFeature,
   } = useDemoAuth();
   const { projects } = useApp();
@@ -138,13 +136,14 @@ export default function SuperAdminPage() {
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | OrgStatus>('all');
   const [planFilter, setPlanFilter] = useState<'all' | OrgPlan>('all');
-  const [inviteStatusFilter, setInviteStatusFilter] = useState<'all' | ReturnType<typeof orgInviteDisplayStatus>>('all');
+  const [inviteStatusFilter, setInviteStatusFilter] = useState<'all' | InviteDisplayStatus>('all');
 
   // Modals
   const [createForm, setCreateForm] = useState<CreateForm | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
-  const [inviteForm, setInviteForm] = useState<{ organizationName: string; ownerName: string; ownerEmail: string; plan: OrgPlan } | null>(null);
-  const [inviteError, setInviteError] = useState<string | null>(null);
+  // The Owner's invitation email after creating an organisation or resending: the temporary
+  // password is shown once (only its hash is stored)
+  const [sentEmail, setSentEmail] = useState<{ invitation: DemoInvitation; tempPassword: string } | null>(null);
   const [detailsOrgId, setDetailsOrgId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<EditForm | null>(null);
   const [editError, setEditError] = useState<string | null>(null);
@@ -157,6 +156,9 @@ export default function SuperAdminPage() {
   };
 
   const liveOrgs = useMemo(() => superAdminOrgs.filter((o) => !o.deletedAt), [superAdminOrgs]);
+
+  /** Owner invitations: rows of the one invitation table whose role is the Organization Owner role */
+  const ownerInvites = useMemo(() => invitations.filter(isOwnerInvitation), [invitations]);
 
   /** users lookup: platform users plus the demo accounts */
   const userById = useMemo(() => {
@@ -172,10 +174,10 @@ export default function SuperAdminPage() {
       const u = userById.get(org.ownerUserId);
       return { name: u?.name ?? 'Unknown user', email: u?.email ?? '', accepted: true, invite: undefined };
     }
-    const invite = superAdminOrgInvitations
-      .filter((i) => i.organizationId === org.id && !i.revokedAt && i.status !== 'accepted')
+    const invite = ownerInvites
+      .filter((i) => i.organizationId === org.id && i.status === 'pending')
       .sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
-    return { name: invite?.ownerName ?? 'No Owner yet', email: invite?.ownerEmail ?? '', accepted: false, invite };
+    return { name: invite?.fullName ?? 'No Owner yet', email: invite?.email ?? '', accepted: false, invite };
   };
 
   /** Counted, never stored: members from the demo accounts and projects from the project list */
@@ -201,14 +203,14 @@ export default function SuperAdminPage() {
     });
     // ownerOf reads invitations and users; both are in the deps through their sources
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [liveOrgs, search, statusFilter, planFilter, superAdminOrgInvitations, userById]);
+  }, [liveOrgs, search, statusFilter, planFilter, ownerInvites, userById]);
 
   const filteredInvites = useMemo(
     () =>
-      [...superAdminOrgInvitations]
-        .filter((i) => inviteStatusFilter === 'all' || orgInviteDisplayStatus(i) === inviteStatusFilter)
+      [...ownerInvites]
+        .filter((i) => inviteStatusFilter === 'all' || inviteDisplayStatus(i) === inviteStatusFilter)
         .sort((a, b) => b.sentAt.localeCompare(a.sentAt)),
-    [superAdminOrgInvitations, inviteStatusFilter]
+    [ownerInvites, inviteStatusFilter]
   );
 
   // Guard: Only Super Admin can access this page (after all hooks)
@@ -226,7 +228,7 @@ export default function SuperAdminPage() {
   const totalOrgsCount = liveOrgs.length;
   const activeOrgsCount = liveOrgs.filter((o) => o.status === 'active').length;
   const pendingOrgsCount = liveOrgs.filter((o) => o.status === 'pending').length;
-  const pendingInvitesCount = superAdminOrgInvitations.filter((i) => orgInviteDisplayStatus(i) === 'pending').length;
+  const pendingInvitesCount = ownerInvites.filter((i) => inviteDisplayStatus(i) === 'pending').length;
 
   const detailsOrg = detailsOrgId ? superAdminOrgs.find((o) => o.id === detailsOrgId) ?? null : null;
 
@@ -243,20 +245,8 @@ export default function SuperAdminPage() {
     if (!result.success) return setCreateError(result.error ?? 'Could not create the organisation.');
     setCreateForm(null);
     setCreateError(null);
+    if (result.invitation && result.tempPassword) setSentEmail({ invitation: result.invitation, tempPassword: result.tempPassword });
     showToast(`"${createForm.name}" created. An invitation was sent to ${createForm.ownerEmail}.`);
-  };
-
-  const handleInviteOrg = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!inviteForm) return;
-    if (!inviteForm.organizationName.trim()) return setInviteError('Enter the organisation name.');
-    if (!inviteForm.ownerName.trim()) return setInviteError("Enter the Owner's name.");
-    if (!EMAIL_RE.test(inviteForm.ownerEmail.trim())) return setInviteError('Enter a valid Owner email address.');
-    const result = inviteSuperAdminOrg(inviteForm);
-    if (!result.success) return setInviteError(result.error ?? 'Could not send the invitation.');
-    setInviteForm(null);
-    setInviteError(null);
-    showToast(`Invitation sent to ${inviteForm.ownerEmail}.`);
   };
 
   const openEdit = (org: SuperAdminOrg) => {
@@ -288,14 +278,10 @@ export default function SuperAdminPage() {
       timezone: org.timezone,
     });
     if (!result.success) return setEditError(result.error ?? 'Could not save the organisation.');
-    // The Owner's name and email live on the pending invitation until the Owner accepts
+    // The Owner's name and email live on their pending invitation until they sign in
     if (owner.invite) {
-      updateSuperAdminOrgInvite(owner.invite.id, {
-        ownerName: editForm.ownerName.trim(),
-        ownerEmail: editForm.ownerEmail.trim(),
-        organizationName: org.name.trim(),
-        plan: org.plan,
-      });
+      const changed = updateInvitation(owner.invite.id, { fullName: editForm.ownerName, email: editForm.ownerEmail });
+      if (!changed.success) return setEditError(changed.error ?? "Could not update the Owner's invitation.");
     }
     setEditForm(null);
     showToast(`"${org.name}" updated.`);
@@ -348,17 +334,6 @@ export default function SuperAdminPage() {
           <button
             type="button"
             onClick={() => {
-              setInviteError(null);
-              setInviteForm({ organizationName: '', ownerName: '', ownerEmail: '', plan: 'enterprise' });
-            }}
-            className="px-3.5 py-2 text-xs font-semibold rounded-lg bg-paper-elevated border border-line text-ink hover:bg-mist transition-colors shadow-xs flex items-center gap-1.5 cursor-pointer"
-          >
-            <MailPlus className="w-3.5 h-3.5 text-flash-deep" />
-            <span>Invite Organization</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => {
               setCreateError(null);
               setCreateForm({ ...EMPTY_CREATE });
             }}
@@ -381,7 +356,7 @@ export default function SuperAdminPage() {
       {/* Tabs */}
       <div className="flex items-center gap-2 border-b border-line pb-px text-xs font-semibold overflow-x-auto">
         {tabButton('organizations', <Building2 className="w-3.5 h-3.5" />, `Organizations (${totalOrgsCount})`)}
-        {tabButton('invitations', <MailPlus className="w-3.5 h-3.5" />, `Invitations (${superAdminOrgInvitations.length})`)}
+        {tabButton('invitations', <MailPlus className="w-3.5 h-3.5" />, `Owner Invitations (${ownerInvites.length})`)}
         {tabButton('audit', <SlidersHorizontal className="w-3.5 h-3.5" />, 'Platform Overview')}
       </div>
 
@@ -521,7 +496,7 @@ export default function SuperAdminPage() {
         <div className="space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <p className="text-xs text-muted">
-              Invitations for an Owner to take over or create an organisation. Each link is valid for {ORG_INVITE_VALID_DAYS} days; resending starts a new {ORG_INVITE_VALID_DAYS}-day period.
+              Invitations for an Owner to take over an organisation you created. The email carries a one-time temporary password, valid for {INVITE_VALID_DAYS} days; resending makes a new one.
             </p>
             <div className="flex items-center gap-2 shrink-0">
               <select
@@ -538,13 +513,13 @@ export default function SuperAdminPage() {
               <button
                 type="button"
                 onClick={() => {
-                  setInviteError(null);
-                  setInviteForm({ organizationName: '', ownerName: '', ownerEmail: '', plan: 'enterprise' });
+                  setCreateError(null);
+                  setCreateForm({ ...EMPTY_CREATE });
                 }}
                 className="px-3.5 py-1.5 text-xs font-semibold rounded-lg bg-flash-deep text-white hover:bg-flash hover:text-ink transition-all shadow-xs flex items-center gap-1.5"
               >
-                <MailPlus className="w-3.5 h-3.5" />
-                <span>Send New Invitation</span>
+                <Plus className="w-3.5 h-3.5" />
+                <span>New Organization</span>
               </button>
             </div>
           </div>
@@ -568,26 +543,24 @@ export default function SuperAdminPage() {
                       <td colSpan={6} className="py-12 text-center text-muted text-xs">No invitations match this filter.</td>
                     </tr>
                   ) : (
-                    filteredInvites.map((inv: SuperAdminOrgInvitation) => {
-                      const display = orgInviteDisplayStatus(inv);
-                      const linkedOrg = inv.organizationId ? superAdminOrgs.find((o) => o.id === inv.organizationId) : undefined;
+                    filteredInvites.map((inv) => {
+                      const display = inviteDisplayStatus(inv);
+                      const linkedOrg = superAdminOrgs.find((o) => o.id === inv.organizationId);
                       return (
                         <tr key={inv.id} className="hover:bg-mist/30 transition-colors">
                           <td className="py-3.5 px-4">
-                            <p className="font-bold text-ink">{inv.organizationName}</p>
-                            <span className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
-                              {linkedOrg ? (
-                                <><Link2 className="w-3 h-3" /> {linkedOrg.deletedAt ? 'Organisation deleted' : 'Organisation already created'}</>
-                              ) : (
-                                'Organisation created when the Owner accepts'
-                              )}
-                            </span>
+                            <p className="font-bold text-ink">{linkedOrg?.name ?? inv.organizationName}</p>
+                            {linkedOrg?.deletedAt && (
+                              <span className="text-[11px] text-muted flex items-center gap-1 mt-0.5">
+                                <Link2 className="w-3 h-3" /> Organisation deleted
+                              </span>
+                            )}
                           </td>
                           <td className="py-3.5 px-3">
-                            <p className="font-semibold text-ink">{inv.ownerName}</p>
-                            <p className="font-mono text-muted text-[11px]">{inv.ownerEmail}</p>
+                            <p className="font-semibold text-ink">{inv.fullName}</p>
+                            <p className="font-mono text-muted text-[11px]">{inv.email}</p>
                           </td>
-                          <td className="py-3.5 px-3 font-semibold text-ink">{planLabel(inv.plan)}</td>
+                          <td className="py-3.5 px-3 font-semibold text-ink">{linkedOrg ? planLabel(linkedOrg.plan) : '—'}</td>
                           <td className="py-3.5 px-3">
                             <span className={cn('px-2 py-0.5 rounded-full font-semibold text-[10px] uppercase', INVITE_STATUS_STYLE[display])}>{display}</span>
                             {inv.acceptedAt && (
@@ -603,12 +576,14 @@ export default function SuperAdminPage() {
                           </td>
                           <td className="py-3.5 px-4 text-right">
                             <div className="flex items-center justify-end gap-2">
-                              {display !== 'accepted' && !linkedOrg?.deletedAt && (
+                              {/* Only while the organisation has no Owner (organization.owner_user_id empty) */}
+                              {display !== 'accepted' && linkedOrg && !linkedOrg.deletedAt && !linkedOrg.ownerUserId && (
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    resendSuperAdminOrgInvite(inv.id);
-                                    showToast(`Invitation resent to ${inv.ownerEmail}.`);
+                                    const result = resendInvitation(inv.id);
+                                    if (result) setSentEmail(result);
+                                    showToast(`Invitation resent to ${inv.email}.`);
                                   }}
                                   className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-line bg-paper hover:bg-mist text-ink transition-colors flex items-center gap-1"
                                 >
@@ -620,7 +595,7 @@ export default function SuperAdminPage() {
                                 <button
                                   type="button"
                                   onClick={() => {
-                                    revokeSuperAdminOrgInvite(inv.id);
+                                    revokeInvitation(inv.id);
                                     showToast('Invitation revoked.');
                                   }}
                                   className="px-2.5 py-1 text-[11px] font-semibold rounded-md border border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100 transition-colors"
@@ -760,7 +735,7 @@ export default function SuperAdminPage() {
                 </Field>
               </div>
               <p className="text-[11px] text-muted">
-                The Owner gets an invitation valid for {ORG_INVITE_VALID_DAYS} days. They become the Owner when they accept it.
+                The Owner gets an email with a one-time temporary password, valid for {INVITE_VALID_DAYS} days. They become the Owner at their first sign-in, when they set their own password.
               </p>
             </div>
 
@@ -770,30 +745,17 @@ export default function SuperAdminPage() {
         </ModalShell>
       )}
 
-      {/* MODAL: Invite organization */}
-      {inviteForm && (
-        <ModalShell title="Invite Organization" icon={<MailPlus className="w-4 h-4" />} onClose={() => setInviteForm(null)}>
-          <form onSubmit={handleInviteOrg} className="space-y-3.5 text-xs" noValidate>
-            <Field label="Organization Name" required>
-              <input type="text" value={inviteForm.organizationName} onChange={(e) => setInviteForm({ ...inviteForm, organizationName: e.target.value })} placeholder="e.g. NextGen Robotics" className={inputClass} />
-            </Field>
-            <Field label="Owner Full Name" required>
-              <input type="text" value={inviteForm.ownerName} onChange={(e) => setInviteForm({ ...inviteForm, ownerName: e.target.value })} placeholder="e.g. Nimal Perera" className={inputClass} />
-            </Field>
-            <Field label="Owner Email" required>
-              <input type="email" value={inviteForm.ownerEmail} onChange={(e) => setInviteForm({ ...inviteForm, ownerEmail: e.target.value })} placeholder="founder@nextgen.io" className={cn(inputClass, 'font-mono')} />
-            </Field>
-            <Field label="Plan">
-              <select value={inviteForm.plan} onChange={(e) => setInviteForm({ ...inviteForm, plan: e.target.value as OrgPlan })} className={inputClass}>
-                {ORG_PLANS.map((p) => <option key={p} value={p}>{planLabel(p)}</option>)}
-              </select>
-            </Field>
-            <p className="text-[11px] text-muted">
-              The organisation is created when the Owner accepts. The link is valid for {ORG_INVITE_VALID_DAYS} days.
-            </p>
-            {inviteError && <p className="text-danger font-medium" role="alert">{inviteError}</p>}
-            <ModalActions onCancel={() => setInviteForm(null)} submitLabel="Send Invitation" submitIcon={<Send className="w-3.5 h-3.5" />} />
-          </form>
+      {/* MODAL: the Owner's invitation email (temporary password shown once) */}
+      {sentEmail && (
+        <ModalShell title="Owner invitation sent" icon={<MailPlus className="w-4 h-4" />} onClose={() => setSentEmail(null)} wide>
+          <div className="space-y-4">
+            <InvitationEmailCard invitation={sentEmail.invitation} tempPassword={sentEmail.tempPassword} roleName="Organization Owner" />
+            <div className="flex justify-end pt-2 border-t border-line">
+              <button type="button" onClick={() => setSentEmail(null)} className="px-4 py-2 text-xs rounded-lg bg-ink text-white font-semibold">
+                Done
+              </button>
+            </div>
+          </div>
         </ModalShell>
       )}
 
@@ -932,7 +894,7 @@ export default function SuperAdminPage() {
                     <p className="text-muted">
                       {owner.accepted
                         ? <>{owner.name} <span className="font-mono">({owner.email})</span> accepted the invitation. The Owner&apos;s own account details can&apos;t be changed here.</>
-                        : 'No pending Owner invitation. Send one from the Invitations tab.'}
+                        : 'No pending Owner invitation. Resend the last one from the Owner Invitations tab.'}
                     </p>
                   )}
                 </div>

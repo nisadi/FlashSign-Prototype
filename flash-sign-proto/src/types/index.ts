@@ -22,16 +22,30 @@ export interface User {
   initials: string;
   role: DemoRole;
   title?: string;
+  /** Avatar colour behind the initials: avatarColorFor(id), never stored (users has no colour column) */
   color: string;
   isActive: boolean;
   projectIds?: string[];
-  timeZone?: string;
-  workingHours?: string;
   availability?: 'available' | 'busy' | 'focus_time' | 'out_of_office';
   weeklyCapacity?: number;
   /** Profile details edited in Settings > Profile (users.bio) */
   bio?: string;
+  /**
+   * users.removed_at: set when the Owner removes them; empty = current member.
+   * Members are never deleted: the row is kept so past work still shows their name.
+   */
+  removedAt?: string;
   createdAt: string;
+}
+
+/** A removed member (removed_at is set): hidden from member lists and pickers, shown as "former member" on past work */
+export function isRemovedMember(user: Pick<User, 'removedAt'> | null | undefined): boolean {
+  return !!user?.removedAt;
+}
+
+/** The Organization Owner and the person themselves can't be removed */
+export function canRemoveMember(memberId: string, ownerUserId: string | undefined, currentUserId: string): boolean {
+  return memberId !== ownerUserId && memberId !== currentUserId;
 }
 
 // ─── Organization ───────────────────────────────────────────────────────────
@@ -43,6 +57,8 @@ export interface Organization {
   plan: 'starter' | 'pro' | 'enterprise';
   memberCount: number;
   logoUrl?: string;
+  /** organization.owner_user_id: the Owner, who can't be removed */
+  ownerUserId?: string;
   createdAt: string;
 }
 
@@ -142,11 +158,6 @@ export interface BaselineChange {
   /** The baseline after the change (new_start_date, new_end_date) */
   newStartDate: string;
   newEndDate: string;
-  /**
-   * Not in the finalized baseline_change table; SRS FR-PLAN-002 makes it mandatory.
-   * Kept in the prototype until the conflict is resolved (Frontend_Changes_List.md §9).
-   */
-  reason?: string;
 }
 
 /** user_favorite_project: favourites are personal, one row per person and project */
@@ -371,51 +382,6 @@ export interface Story {
 
 // ─── AI Agents ───────────────────────────────────────────────────────────────
 
-export type AgentProviderType = 'claude' | 'codex' | 'gemini';
-export type AgentRunStatus = 'queued' | 'running' | 'completed' | 'failed' | 'needs_review';
-
-export interface AgentProvider {
-  id: string;
-  name: string;
-  provider: AgentProviderType;
-  model: string;
-  isConfigured: boolean;
-  isEnabled: boolean;
-  scope: string[];
-  color: string;
-}
-
-export interface AgentRunEvent {
-  timestamp: string;
-  type: 'info' | 'success' | 'warning' | 'error' | 'code';
-  message: string;
-  detail?: string;
-}
-
-export interface AgentRun {
-  id: string;
-  taskId: string;
-  agentProviderId: string;
-  status: AgentRunStatus;
-  startedAt: string;
-  completedAt?: string;
-  triggeredBy: string;
-  events: AgentRunEvent[];
-  output?: string;
-  tokensUsed?: number;
-  costEstimate?: number;
-  verificationChecks: VerificationCheck[];
-  approvedBy?: string;
-  approvedAt?: string;
-}
-
-export interface VerificationCheck {
-  id: string;
-  label: string;
-  status: 'pending' | 'passed' | 'failed';
-  detail?: string;
-}
-
 // ─── Documents ───────────────────────────────────────────────────────────────
 
 export type DocumentStatus = 'draft' | 'pending' | 'in_review' | 'approved' | 'rejected' | 'signed' | 'expired';
@@ -495,7 +461,7 @@ export interface Notification {
 /** activity_log.category */
 export type ActivityCategory =
   | 'project' | 'task' | 'time' | 'planning' | 'team' | 'member' | 'role'
-  | 'document' | 'contract' | 'agreement' | 'agent' | 'settings' | 'security';
+  | 'document' | 'agreement' | 'agent' | 'settings' | 'security';
 
 export interface AuditLog {
   id: string;

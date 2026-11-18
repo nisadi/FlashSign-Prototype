@@ -11,7 +11,6 @@ import {
   Folder,
   Download,
   FileSignature,
-  Building2,
   Archive,
   Star,
   Clock,
@@ -24,10 +23,8 @@ import {
   Calendar,
   Layers,
   ChevronRight,
-  ExternalLink
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
-import { FEATURES } from '@/lib/features';
 import { DocumentStatusBadge, DocumentTypeBadge } from '@/components/documents/document-badges';
 import { MoveFolderDialog } from '@/components/documents/move-folder-dialog';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
@@ -49,7 +46,6 @@ export default function DocumentDetailsPage({
     documentFolders,
     projects,
     users,
-    contracts,
     toggleFavoriteDocument,
     duplicateDocument,
     archiveDocumentItem,
@@ -76,7 +72,6 @@ export default function DocumentDetailsPage({
   const owner = users.find(u => u.id === doc.ownerId);
   const folder = documentFolders.find(f => f.id === doc.folderId);
   const project = projects.find(p => p.id === doc.relatedProjectId);
-  const contract = contracts.find(c => c.documentId === doc.id || c.id === doc.relatedContractId);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -458,39 +453,6 @@ export default function DocumentDetailsPage({
                 )}
               </div>
             </div>
-
-            {/* Related Contract Card */}
-            {FEATURES.contracts && (contract ? (
-              <div className="bg-white border border-line/70 rounded-2xl p-5 shadow-xs space-y-3">
-                <div className="flex items-center gap-2">
-                  <Building2 className="w-4 h-4 text-flash-deep" />
-                  <h3 className="text-xs font-bold text-ink uppercase tracking-wider">Associated Contract</h3>
-                </div>
-                <div className="p-3 bg-paper rounded-xl border border-line text-xs space-y-1.5">
-                  <div className="font-bold text-ink">{contract.title}</div>
-                  <div className="text-[11px] text-muted">Counterparty: {contract.counterparty}</div>
-                  <Link
-                    href={`/contracts/${contract.id}`}
-                    className="text-xs text-flash-deep font-semibold hover:underline inline-flex items-center gap-1 pt-1"
-                  >
-                    View Contract Record <ExternalLink className="w-3 h-3" />
-                  </Link>
-                </div>
-              </div>
-            ) : (
-              <div className="p-4 bg-mist/20 rounded-2xl border border-line text-xs space-y-2">
-                <span className="font-bold text-ink block">Need a formal contract record?</span>
-                <p className="text-muted text-[11px]">
-                  Turn this document into an active contract with commercial terms and renewal dates.
-                </p>
-                <Link
-                  href={`/contracts/new?docId=${doc.id}&title=${encodeURIComponent(doc.title)}`}
-                  className="inline-block px-3 py-1.5 rounded-lg bg-ink text-white font-semibold text-xs hover:bg-ink-soft transition-colors"
-                >
-                  Create Contract Record
-                </Link>
-              </div>
-            ))}
           </div>
         </div>
 

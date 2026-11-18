@@ -76,7 +76,6 @@ export interface Announcement {
   content: string;
   authorId: string;
   publishedDate: string;
-  audience: 'all' | 'engineering' | 'design' | 'operations' | 'quality' | 'legal' | string;
   priority: AnnouncementPriority;
   isPinned: boolean;
   readByUserIds: string[];

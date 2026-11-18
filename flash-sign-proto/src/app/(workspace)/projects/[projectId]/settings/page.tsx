@@ -50,7 +50,7 @@ export default function ProjectSettingsPage({
 }) {
   const { projectId } = use(params);
   const router = useRouter();
-  const { projects, users, tasks, demoRole, currentUserId, updateProject, deleteProject, archiveProject } = useApp();
+  const { projects, users, members, tasks, demoRole, currentUserId, updateProject, deleteProject, archiveProject } = useApp();
   const { currentRbacUser } = useDemoAuth();
 
   const isManager = canManageProjects(currentRbacUser);
@@ -288,7 +288,7 @@ export default function ProjectSettingsPage({
                   onChange={(e) => setOwnerId(e.target.value)}
                   className="w-full px-3 py-2 text-xs bg-paper border border-line rounded-xl outline-none focus:border-flash text-ink"
                 >
-                  {users.map((u) => (
+                  {members.map((u) => (
                     <option key={u.id} value={u.id}>
                       {u.name} ({u.role})
                     </option>
@@ -310,7 +310,7 @@ export default function ProjectSettingsPage({
                       users.find((u) => u.id === project.baselineHistory!.at(-1)!.byUserId)?.name ?? 'someone'
                     }${(() => {
                       const last = project.baselineHistory!.at(-1)!;
-                      return ` (${formatDate(last.oldStartDate)} – ${formatDate(last.oldEndDate)} → ${formatDate(last.newStartDate)} – ${formatDate(last.newEndDate)})${last.reason ? `: "${last.reason}"` : ''}`;
+                      return ` (${formatDate(last.oldStartDate)} – ${formatDate(last.oldEndDate)} → ${formatDate(last.newStartDate)} – ${formatDate(last.newEndDate)})`;
                     })()}.`
                   : ''}
               </p>

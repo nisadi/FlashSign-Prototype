@@ -27,7 +27,6 @@ import { useApp, useCurrentUser } from '@/context/app-context';
 import { SignatureSigner, SignatureField, SigningOrder, ReminderFrequency } from '@/types/documents';
 import { REMINDER_OPTIONS, EXPIRY_PRESETS, reminderIntervalDays } from '@/lib/signing-options';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
-import { FEATURES } from '@/lib/features';
 
 interface SignerForm {
   id: string;
@@ -41,14 +40,11 @@ interface SignerForm {
 function WizardContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const preselectedContractId = searchParams?.get('contractId') || '';
   const preselectedDocId = searchParams?.get('documentId') || '';
 
   const {
     documentItems,
-    contracts,
     addSignatureRequest,
-    updateContract,
     signingDefaults
   } = useApp();
   const currentUser = useCurrentUser();
@@ -57,7 +53,6 @@ function WizardContent() {
 
   // Step 1: Document Selection
   const [selectedDocId, setSelectedDocId] = useState(preselectedDocId);
-  const [selectedContractId, setSelectedContractId] = useState(preselectedContractId);
   const [requestTitle, setRequestTitle] = useState('');
 
   // Step 2: Signers
@@ -144,26 +139,18 @@ function WizardContent() {
     setReminderSchedule(signingDefaults.reminderFrequency);
   }
 
-  // Pre-fill title if contract or document is selected
+  // Pre-fill title if a document is selected
   useEffect(() => {
-    if (preselectedContractId) {
-      const c = contracts.find(item => item.id === preselectedContractId);
-      if (c) {
-        setRequestTitle(`Signature Request: ${c.title}`);
-        setSelectedContractId(c.id);
-        if (c.documentId) setSelectedDocId(c.documentId);
-      }
-    } else if (preselectedDocId) {
+    if (preselectedDocId) {
       const d = documentItems.find(item => item.id === preselectedDocId);
       if (d) {
         setRequestTitle(`Signature Request: ${d.title}`);
         setSelectedDocId(d.id);
       }
     }
-  }, [preselectedContractId, preselectedDocId, contracts, documentItems]);
+  }, [preselectedDocId, documentItems]);
 
   const selectedDocument = documentItems.find(d => d.id === selectedDocId);
-  const selectedContract = contracts.find(c => c.id === selectedContractId);
 
   // Signer management
   const addSigner = () => {
@@ -205,7 +192,6 @@ function WizardContent() {
   const validateStep1 = () => {
     if (!requestTitle.trim()) {
       if (selectedDocument) setRequestTitle(`Signature Package: ${selectedDocument.title}`);
-      else if (selectedContract) setRequestTitle(`Signature Package: ${selectedContract.title}`);
       else setRequestTitle('New Digital Signature Package');
     }
     return true;
@@ -254,7 +240,6 @@ function WizardContent() {
       id: newReqId,
       title: requestTitle.trim() || 'Electronic Signature Package',
       documentId: selectedDocId || '',
-      contractId: selectedContractId || undefined,
       senderId: currentUser?.id || 'usr-1',
       senderName: currentUser?.name || 'Alex Morgan',
       signingOrder,
@@ -276,13 +261,6 @@ function WizardContent() {
         }
       ]
     });
-
-    if (selectedContractId) {
-      updateContract(selectedContractId, {
-        status: 'awaiting_signature',
-        signatureRequestId: newReqId
-      });
-    }
 
     router.push(`/signatures/${newReqId}`);
   };
@@ -344,7 +322,7 @@ function WizardContent() {
         {/* Step 1: Select Document */}
         {currentStep === 1 && (
           <div className="bg-paper-elevated border border-line rounded-xl p-6 shadow-sm space-y-5">
-            <h3 className="text-lg font-bold text-ink">Step 1 — Select Document{FEATURES.contracts && ' or Contract'}</h3>
+            <h3 className="text-lg font-bold text-ink">Step 1 — Select Document</h3>
 
             <div className="space-y-4">
               <div>
@@ -360,7 +338,7 @@ function WizardContent() {
                 />
               </div>
 
-              <div className={`grid grid-cols-1 gap-4 ${FEATURES.contracts ? 'sm:grid-cols-2' : ''}`}>
+              <div className="grid grid-cols-1 gap-4">
                 <div>
                   <label className="text-xs font-bold uppercase tracking-wider text-muted block mb-1.5">
                     Link Existing Document
@@ -376,24 +354,6 @@ function WizardContent() {
                     ))}
                   </select>
                 </div>
-
-                {FEATURES.contracts && (
-                <div>
-                  <label className="text-xs font-bold uppercase tracking-wider text-muted block mb-1.5">
-                    Link Contract Record
-                  </label>
-                  <select
-                    value={selectedContractId}
-                    onChange={(e) => setSelectedContractId(e.target.value)}
-                    className="w-full px-3.5 py-2.5 bg-paper border border-line rounded-lg text-sm text-ink focus:outline-none focus:border-flash"
-                  >
-                    <option value="">Choose a contract...</option>
-                    {contracts.map(c => (
-                      <option key={c.id} value={c.id}>{c.title} ({c.id})</option>
-                    ))}
-                  </select>
-                </div>
-                )}
               </div>
 
               {selectedDocument && (
@@ -669,7 +629,7 @@ function WizardContent() {
             <div className="p-4 bg-flash/10 border border-flash/30 rounded-xl text-xs text-ink-soft space-y-1">
               <span className="font-bold text-flash-deep block">🚀 Ready to Dispatch (Simulated)</span>
               <p>
-                Sending will record this request in local state, transition linked contracts to &quot;Awaiting Signature&quot;, and enable interactive demo signing.
+                Sending will record this request in local state and enable interactive demo signing.
               </p>
             </div>
           </div>

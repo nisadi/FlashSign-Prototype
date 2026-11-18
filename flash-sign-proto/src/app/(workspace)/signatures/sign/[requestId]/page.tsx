@@ -5,6 +5,7 @@ import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { PenTool, Check, Stamp, RefreshCw, Undo2 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
+import { useDemoAuth } from '@/context/demo-auth-context';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 import { SignatureEditor, isCompleteDraft, initialsFromName } from '@/components/signature/signature-editor';
 import { SignatureMark, type SignatureDraft } from '@/components/signature/signature-mark';
@@ -38,15 +39,15 @@ function DemoSigningExperiencePage() {
     signDocumentSimulated,
     declineSignatureRequest,
     documentItems,
-    contracts,
     users,
     savedSignatures,
     saveSignature,
     signingDefaults,
     companySeals,
-    demoRole
   } = useApp();
   const currentUser = useCurrentUser();
+  // The signer's role in the organisation (users.role_id)
+  const { currentRbacUser } = useDemoAuth();
 
   const request = useMemo(() => {
     return signatureRequests.find(r => r.id === requestId);
@@ -56,11 +57,6 @@ function DemoSigningExperiencePage() {
     if (!request?.documentId) return null;
     return documentItems.find(d => d.id === request.documentId);
   }, [request, documentItems]);
-
-  const linkedContract = useMemo(() => {
-    if (!request?.contractId) return null;
-    return contracts.find(c => c.id === request.contractId);
-  }, [request, contracts]);
 
   // Find eligible signer for the current user or default to first pending signer
   const pendingSigners = useMemo(() => {
@@ -87,9 +83,9 @@ function DemoSigningExperiencePage() {
   const isSelf = !!signerUser && signerUser.id === currentUser?.id;
   const savedSignature = savedSignatures.find(sig => sig.userId === signerUser?.id);
 
-  // Seals the signed-in user's role may apply (only when signing as themselves)
-  const availableSeals = isSelf
-    ? companySeals.filter(seal => seal.isActive && seal.allowedRoles.includes(demoRole))
+  // Seals the signed-in user's role may apply (company_seal_role; only when signing as themselves)
+  const availableSeals = isSelf && currentRbacUser
+    ? companySeals.filter(seal => seal.isActive && seal.allowedRoleIds.includes(currentRbacUser.roleId))
     : [];
 
   // Signing inputs: start from the saved signature; "Change signature" edits a copy for this document
@@ -250,7 +246,7 @@ function DemoSigningExperiencePage() {
           <div className="prose prose-sm max-w-none text-ink-soft leading-relaxed space-y-4 font-serif text-sm">
             <p>
               {linkedDoc?.content || `
-                THIS MASTER SERVICES AND INTELLECTUAL PROPERTY AGREEMENT is entered into as of ${currentDate}, by and between Flash Sign Inc., and ${linkedContract?.counterparty || 'Authorized Counterparty'}.
+                THIS MASTER SERVICES AND INTELLECTUAL PROPERTY AGREEMENT is entered into as of ${currentDate}, by and between Flash Sign Inc., and Authorized Counterparty.
               `}
             </p>
             <p>

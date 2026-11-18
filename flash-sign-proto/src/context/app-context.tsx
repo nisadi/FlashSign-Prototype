@@ -3,14 +3,16 @@
 import React, { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import type {
   DemoRole, User, Project, Task, Sprint, Document, ApprovalRequest,
-  Notification, AuditLog, AgentRun, Milestone, ProjectFile,
+  Notification, AuditLog, Milestone, ProjectFile,
   CalendarEvent, TimeOffRequest, Meeting, Announcement,
   AvailabilityStatus, LeaveType, EventCategory, SrsGeneratedTaskRecord, AgentAccessToken,
   AgentClient, AgentEvent, AgentSettings, WorkSession, TaskStatus, UserFavoriteProject, BaselineChange, TaskStatusChange, BoardColumn, Epic, Story, ProjectStructure,
 } from '@/types';
+import { isRemovedMember, canRemoveMember } from '@/types';
+import { avatarColorFor } from '@/lib/avatar';
 import {
   MOCK_USERS, MOCK_PROJECTS, MOCK_TASKS, MOCK_SPRINTS, MOCK_DOCUMENTS,
-  MOCK_APPROVALS, MOCK_NOTIFICATIONS, MOCK_AUDIT_LOGS, MOCK_AGENT_RUNS,
+  MOCK_APPROVALS, MOCK_NOTIFICATIONS, MOCK_AUDIT_LOGS,
   MOCK_MILESTONES, MOCK_PROJECT_FILES, DEMO_ROLE_USERS, MOCK_ORG, MOCK_EPICS, MOCK_STORIES,
   INITIAL_SRS_TASK_HISTORY, MOCK_FAVORITE_PROJECTS,
 } from '@/data/mock-data';
@@ -18,13 +20,13 @@ import {
   MOCK_CALENDAR_EVENTS, MOCK_TIME_OFF, MOCK_MEETINGS, MOCK_ANNOUNCEMENTS,
 } from '@/data/mock-collaboration';
 import {
-  MOCK_DOCUMENT_ITEMS, MOCK_FOLDERS, MOCK_TEMPLATES, MOCK_CONTRACTS,
+  MOCK_DOCUMENT_ITEMS, MOCK_FOLDERS, MOCK_TEMPLATES,
   MOCK_SIGNATURE_REQUESTS,
 } from '@/data/mock-documents';
 import type {
-  DocumentItem, DocumentFolder, DocumentTemplate, Contract,
+  DocumentItem, DocumentFolder, DocumentTemplate,
   SignatureRequest, SignatureSigner, SignatureReviewer, SignatureField, AuditEvent,
-  DocumentComment, ContractReviewComment,
+  DocumentComment,
   SavedSignature, SigningDefaults, CompanySeal,
   PdfAttachment, CopyRecipient, DemoEmail, SigningOrder, ReminderFrequency, PdfRequestDraft,
 } from '@/types/documents';
@@ -51,7 +53,6 @@ export type CreateMilestoneInput = Partial<Milestone> & { name: string; projectI
 export type CreateEpicInput = Partial<Epic> & { name: string; projectId: string };
 export type CreateStoryInput = Partial<Story> & { title: string; projectId: string };
 export type CreateFileInput = Partial<ProjectFile> & { name: string; projectId: string };
-export type CreateMemberInput = Partial<User> & { name: string; email: string };
 export type CreateCalendarEventInput = Partial<CalendarEvent> & { title: string; category: EventCategory; startDate: string; endDate: string };
 export type CreateTimeOffInput = Partial<TimeOffRequest> & { memberId: string; leaveType: LeaveType; startDate: string; endDate: string; durationDays: number };
 export type CreateMeetingInput = Partial<Meeting> & { title: string; date: string; startTime: string; endTime: string };
@@ -101,13 +102,11 @@ export interface AppState {
   documentItems: DocumentItem[];
   documentFolders: DocumentFolder[];
   documentTemplates: DocumentTemplate[];
-  contracts: Contract[];
   signatureRequests: SignatureRequest[];
   approvals: ApprovalRequest[];
   notifications: Notification[];
   auditLogs: AuditLog[];
   activities: AuditLog[];
-  agentRuns: AgentRun[];
   calendarEvents: CalendarEvent[];
   timeOffRequests: TimeOffRequest[];
   meetings: Meeting[];
@@ -500,9 +499,9 @@ interface AppActions {
    */
   setProjectStructure: (projectId: string, structure: ProjectStructure) => void;
   // Members
-  addMember: (user: CreateMemberInput) => void;
   updateMember: (id: string, updates: Partial<User>) => void;
-  deleteMember: (id: string) => void;
+  /** Soft remove (users.member_status = removed): the row stays so past work keeps their name */
+  removeMember: (id: string) => void;
   updateMemberAvailability: (id: string, availability: AvailabilityStatus) => void;
   // Calendar Events
   addCalendarEvent: (event: CreateCalendarEventInput) => void;
@@ -574,14 +573,6 @@ interface AppActions {
   addTemplate: (tpl: Partial<DocumentTemplate> & { title: string; category: any; content: string }) => void;
   updateTemplate: (id: string, updates: Partial<DocumentTemplate>) => void;
   toggleFavoriteTemplate: (id: string) => void;
-  // Contracts
-  addContract: (contract: Partial<Contract> & { title: string; counterparty: string; contractType: any }) => string;
-  updateContract: (id: string, updates: Partial<Contract>) => void;
-  deleteContract: (id: string) => void;
-  archiveContract: (id: string) => void;
-  submitContractForReview: (contractId: string, reviewerId?: string) => void;
-  addContractReviewComment: (contractId: string, commentOrText: string | { authorId?: string; authorName?: string; content?: string; text?: string; actionRequested?: 'changes' | 'approved' }, actionRequested?: 'changes' | 'approved') => void;
-  markContractReviewed: (contractId: string, status?: 'approved' | 'changes_requested') => void;
   // Electronic Signatures
   addSignatureRequest: (req: Partial<SignatureRequest> & { title: string; signers: SignatureSigner[] }) => string;
   updateSignatureRequest: (id: string, updates: Partial<SignatureRequest>) => void;
@@ -616,8 +607,6 @@ interface AppActions {
   // Approvals
   updateApproval: (id: string, updates: Partial<ApprovalRequest>) => void;
   // Agent Runs
-  addAgentRun: (run: AgentRun) => void;
-  updateAgentRun: (id: string, updates: Partial<AgentRun>) => void;
   // Notifications
   markNotificationRead: (id: string) => void;
   markAllNotificationsRead: () => void;
@@ -638,6 +627,11 @@ export type AppContextValue = AppState & AppActions & {
   isHydrated: boolean;
   /** The signed-in person's favourite projects (user_favorite_project) */
   favoriteProjectIds: string[];
+  /**
+   * Current members (member_status is not removed): use this to list or pick people.
+   * `users` still has everyone, so names on past work (tasks, comments, time) keep resolving.
+   */
+  members: User[];
 };
 
 const AppContext = createContext<AppContextValue | null>(null);
@@ -664,13 +658,11 @@ function getInitialState(): AppState {
     documentItems: MOCK_DOCUMENT_ITEMS,
     documentFolders: MOCK_FOLDERS,
     documentTemplates: MOCK_TEMPLATES,
-    contracts: MOCK_CONTRACTS,
     signatureRequests: MOCK_SIGNATURE_REQUESTS,
     approvals: MOCK_APPROVALS,
     notifications: MOCK_NOTIFICATIONS,
     auditLogs: MOCK_AUDIT_LOGS,
     activities: MOCK_AUDIT_LOGS,
-    agentRuns: MOCK_AGENT_RUNS,
     calendarEvents: MOCK_CALENDAR_EVENTS,
     timeOffRequests: MOCK_TIME_OFF,
     meetings: MOCK_MEETINGS,
@@ -717,7 +709,6 @@ function migrateProject(p: Project): Project {
         : {
             at: old.at,
             byUserId: old.byUserId,
-            reason: old.reason,
             oldStartDate: old.startDate ?? '',
             oldEndDate: old.endDate ?? '',
             newStartDate: old.startDate ?? '',
@@ -748,10 +739,28 @@ function loadState(): AppState {
       // A role saved from an earlier session is ignored while the switcher is hidden
       ...(FEATURES.roleSwitcher ? {} : { demoRole: FIXED_DEMO_ROLE, currentUserId: DEMO_ROLE_USERS[FIXED_DEMO_ROLE] }),
       srsTaskHistories: saved.srsTaskHistories || INITIAL_SRS_TASK_HISTORY,
+      companySeals: (saved.companySeals ?? initial.companySeals).map(migrateSeal),
+      // The avatar colour is never stored: always worked out from the id
+      users: (saved.users ?? initial.users).map(u => ({ ...u, color: avatarColorFor(u.id) })),
     };
   } catch {
     return getInitialState();
   }
+}
+
+/** Seals saved before company_seal_role: their persona names become role ids where one matches */
+function migrateSeal(seal: CompanySeal): CompanySeal {
+  if (Array.isArray(seal.allowedRoleIds)) return seal;
+  const legacy = (seal as CompanySeal & { allowedRoles?: string[] }).allowedRoles ?? [];
+  const ROLE_ID_FOR: Record<string, string> = {
+    ceo: 'role-owner',
+    project_manager: 'role-pm',
+    engineering_lead: 'role-team-lead',
+    developer: 'role-dev',
+    qa_tester: 'role-qa',
+  };
+  const allowedRoleIds = Array.from(new Set(legacy.map(r => ROLE_ID_FOR[r]).filter(Boolean)));
+  return { ...seal, allowedRoleIds: allowedRoleIds.length ? allowedRoleIds : ['role-owner'] };
 }
 
 function saveState(state: AppState): void {
@@ -783,7 +792,6 @@ function saveState(state: AppState): void {
       agentEvents: state.agentEvents,
       agentSettings: state.agentSettings,
       taskStatusChanges: state.taskStatusChanges,
-      agentRuns: state.agentRuns,
       // Signature requests, including uploaded-PDF ones (their files are in IndexedDB)
       signatureRequests: state.signatureRequests,
       // The Documents library and its folders (uploaded PDFs are kept in IndexedDB)
@@ -865,7 +873,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     };
   }, [hydrated]);
 
-  const { currentUser: authUser, selectedWorkspace: authOrg, isAuthenticated, currentRbacUser } = useDemoAuth();
+  const { currentUser: authUser, selectedWorkspace: authOrg, isAuthenticated, currentRbacUser, superAdminOrgs } = useDemoAuth();
 
   useEffect(() => {
     if (!isAuthenticated) return;
@@ -876,7 +884,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       let userName = currentRbacUser?.name || authUser?.fullName || 'Aria Chen';
       let userEmail = currentRbacUser?.email || authUser?.email || 'owner@flashsign.com';
       let userInitials = currentRbacUser?.avatarInitials || authUser?.avatarInitials || 'AC';
-      let userColor = currentRbacUser?.avatarColor || authUser?.avatarColor || '#009882';
       let userTitle = currentRbacUser?.jobTitle || authUser?.jobTitle || 'Executive';
 
       if (currentRbacUser) {
@@ -884,7 +891,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         userName = currentRbacUser.name;
         userEmail = currentRbacUser.email;
         userInitials = currentRbacUser.avatarInitials;
-        userColor = currentRbacUser.avatarColor;
         userTitle = currentRbacUser.jobTitle || 'Team Member';
 
         if (currentRbacUser.isSuperAdmin) {
@@ -924,11 +930,9 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         initials: userInitials,
         role: mappedRole,
         title: userTitle,
-        color: userColor,
+        color: avatarColorFor(userId),
         isActive: true,
         projectIds: currentRbacUser?.assignedProjectIds || ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
-        // users has no time zone column: keep the member's existing value (org_member data, not in scope)
-        timeZone: prev.users[existingUserIdx]?.timeZone,
         createdAt: authUser?.createdAt || new Date().toISOString(),
       };
 
@@ -943,6 +947,8 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         ...prev.org,
         name: authOrg?.name || prev.org.name,
         slug: authOrg?.slug || prev.org.slug,
+        // organization.owner_user_id, from the organisation record
+        ownerUserId: superAdminOrgs.find(o => o.id === authOrg?.id)?.ownerUserId ?? prev.org.ownerUserId,
       };
 
       return {
@@ -953,7 +959,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         org: nextOrg,
       };
     });
-  }, [authUser, authOrg, isAuthenticated, currentRbacUser]);
+  }, [authUser, authOrg, isAuthenticated, currentRbacUser, superAdminOrgs]);
 
   const update = useCallback((updater: (prev: AppState) => AppState) => {
     setState(updater);
@@ -1553,50 +1559,41 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     }),
 
     // Members
-    addMember: (u) => update(s => {
-      const initials = u.initials || u.name.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || 'TM';
-      const newMember: User = {
-        id: u.id || `u-${Date.now()}`,
-        name: u.name,
-        email: u.email,
-        initials,
-        color: u.color || '#00c2a8',
-        role: u.role || 'developer',
-        title: u.title || 'Specialist',
-        avatar: u.avatar,
-        isActive: u.isActive ?? true,
-        timeZone: u.timeZone || 'America/New_York (EST)',
-        workingHours: u.workingHours || '09:00 - 17:00 EST',
-        availability: u.availability || 'available',
-        weeklyCapacity: u.weeklyCapacity || 40,
-        projectIds: u.projectIds || [],
-        createdAt: new Date().toISOString(),
-      };
-      const log: AuditLog = {
-        id: `act-${Date.now()}`,
-        actorId: s.currentUserId,
-        actorName: s.users.find(usr => usr.id === s.currentUserId)?.name || 'User',
-        action: 'added a team member',
-        resource: 'Member',
-        resourceId: newMember.id,
-        detail: `Added ${newMember.name} (${newMember.title})`,
-        timestamp: new Date().toISOString(),
-      };
-      return {
-        ...s,
-        users: [...s.users, newMember],
-        auditLogs: [log, ...s.auditLogs],
-        activities: [log, ...s.activities],
-      };
-    }),
     updateMember: (id, updates) => update(s => ({
       ...s,
       users: s.users.map(u => u.id === id ? { ...u, ...updates } : u),
     })),
-    deleteMember: (id) => update(s => ({
-      ...s,
-      users: s.users.filter(u => u.id !== id),
-    })),
+    // Members are never deleted: their tasks, comments, time and audit rows still point to them.
+    // Removing sets removed_at and drops their project_member rows (project access).
+    removeMember: (id) => update(s => {
+      const member = s.users.find(u => u.id === id);
+      if (!member || isRemovedMember(member)) return s;
+      // The Owner (organization.owner_user_id) and the person themselves can't be removed
+      if (!canRemoveMember(id, s.org.ownerUserId, s.currentUserId)) return s;
+      const now = new Date().toISOString();
+      const log: AuditLog = {
+        id: `act-${Date.now()}`,
+        actorId: s.currentUserId,
+        actorName: s.users.find(u => u.id === s.currentUserId)?.name || 'User',
+        category: 'member',
+        action: 'member.removed',
+        resource: 'Member',
+        resourceId: id,
+        detail: `Removed ${member.name} from the organisation`,
+        timestamp: now,
+      };
+      return {
+        ...s,
+        users: s.users.map(u =>
+          u.id === id ? { ...u, removedAt: now, projectIds: [] } : u
+        ),
+        projects: s.projects.map(p =>
+          p.memberIds.includes(id) ? { ...p, memberIds: p.memberIds.filter(m => m !== id) } : p
+        ),
+        auditLogs: [log, ...s.auditLogs],
+        activities: [log, ...s.activities],
+      };
+    }),
     updateMemberAvailability: (id, availability) => update(s => {
       const user = s.users.find(u => u.id === id);
       const log: AuditLog = {
@@ -1895,7 +1892,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         content: ann.content,
         authorId: ann.authorId || s.currentUserId,
         publishedDate: ann.publishedDate || new Date().toISOString(),
-        audience: ann.audience || 'all',
         priority: ann.priority || 'normal',
         isPinned: ann.isPinned ?? false,
         readByUserIds: ann.readByUserIds || [s.currentUserId],
@@ -1910,7 +1906,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         action: 'posted announcement',
         resource: 'Announcement',
         resourceId: newAnn.id,
-        detail: `"${newAnn.title}" to ${newAnn.audience}`,
+        detail: `"${newAnn.title}"`,
         timestamp: new Date().toISOString(),
       };
       const notif: Notification = {
@@ -2131,7 +2127,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ownerId: doc.ownerId || s.currentUserId,
           folderId: doc.folderId || null,
           relatedProjectId: doc.relatedProjectId,
-          relatedContractId: doc.relatedContractId,
           content: doc.content || '# ' + doc.title + '\n\nDraft content initialized.',
           fileSize: doc.fileSize || '1.2 MB',
           pages: doc.pages || 1,
@@ -2286,162 +2281,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       ),
     })),
 
-    // Contracts
-    addContract: (contract) => {
-      const newId = contract.id || `cnt-${Date.now()}`;
-      update(s => {
-        const user = s.users.find(u => u.id === s.currentUserId);
-        const newContract: Contract = {
-          id: newId,
-          title: contract.title,
-          contractType: contract.contractType || 'agreement',
-          counterparty: contract.counterparty,
-          ownerId: contract.ownerId || s.currentUserId,
-          ownerName: contract.ownerName || user?.name || 'User',
-          relatedProjectId: contract.relatedProjectId,
-          documentId: contract.documentId,
-          effectiveDate: contract.effectiveDate || new Date().toISOString().split('T')[0],
-          expiryDate: contract.expiryDate || new Date(Date.now() + 365 * 86400000).toISOString().split('T')[0],
-          renewalType: contract.renewalType || 'manual',
-          contractValue: contract.contractValue || contract.value || 0,
-          value: contract.value || contract.contractValue || 0,
-          paymentTerms: contract.paymentTerms || 'Net 30 days',
-          specialConditions: contract.specialConditions,
-          description: contract.description,
-          status: contract.status || 'draft',
-          reviewerId: contract.reviewerId,
-          signatureRequestId: contract.signatureRequestId,
-          reviewComments: contract.reviewComments || [],
-          activity: contract.activity || [
-            {
-              id: `ca-${Date.now()}`,
-              action: 'Contract record created',
-              actor: user?.name || 'User',
-              timestamp: new Date().toISOString(),
-            },
-          ],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        const log: AuditLog = {
-          id: `act-${Date.now()}`,
-          actorId: s.currentUserId,
-          actorName: user?.name || 'User',
-          action: 'created contract',
-          resource: 'Contract',
-          resourceId: newId,
-          detail: `"${newContract.title}" with ${newContract.counterparty}`,
-          timestamp: new Date().toISOString(),
-        };
-        return {
-          ...s,
-          contracts: [newContract, ...s.contracts],
-          auditLogs: [log, ...s.auditLogs],
-          activities: [log, ...s.activities],
-        };
-      });
-      return newId;
-    },
-    updateContract: (id, updates) => update(s => ({
-      ...s,
-      contracts: s.contracts.map(c =>
-        c.id === id ? { ...c, ...updates, updatedAt: new Date().toISOString() } : c
-      ),
-    })),
-    deleteContract: (id) => update(s => ({
-      ...s,
-      contracts: s.contracts.filter(c => c.id !== id),
-    })),
-    archiveContract: (id) => update(s => ({
-      ...s,
-      contracts: s.contracts.map(c =>
-        c.id === id ? { ...c, status: 'archived', updatedAt: new Date().toISOString() } : c
-      ),
-    })),
-    submitContractForReview: (contractId, reviewerId) => update(s => {
-      const user = s.users.find(u => u.id === s.currentUserId);
-      return {
-        ...s,
-        contracts: s.contracts.map(c => {
-          if (c.id === contractId) {
-            return {
-              ...c,
-              status: 'pending_review',
-              reviewerId: reviewerId || c.reviewerId,
-              updatedAt: new Date().toISOString(),
-              activity: [
-                ...(c.activity || []),
-                {
-                  id: `ca-${Date.now()}`,
-                  action: 'Submitted for internal review',
-                  actor: user?.name || 'User',
-                  timestamp: new Date().toISOString(),
-                },
-              ],
-            };
-          }
-          return c;
-        }),
-      };
-    }),
-    addContractReviewComment: (contractId, commentOrText, actionRequested) => update(s => {
-      const user = s.users.find(u => u.id === s.currentUserId);
-      const isObj = typeof commentOrText === 'object' && commentOrText !== null;
-      const textVal = isObj ? (commentOrText.text || commentOrText.content || '') : commentOrText;
-      const authorIdVal = (isObj && commentOrText.authorId) ? commentOrText.authorId : s.currentUserId;
-      const authorNameVal = (isObj && commentOrText.authorName) ? commentOrText.authorName : (user?.name || 'User');
-      const actionVal = (isObj && commentOrText.actionRequested) ? commentOrText.actionRequested : actionRequested;
-
-      const newComment: ContractReviewComment = {
-        id: `rc-${Date.now()}`,
-        authorId: authorIdVal,
-        authorName: authorNameVal,
-        text: textVal,
-        content: textVal,
-        createdAt: new Date().toISOString(),
-        actionRequested: actionVal,
-      };
-      return {
-        ...s,
-        contracts: s.contracts.map(c => {
-          if (c.id === contractId) {
-            return {
-              ...c,
-              reviewComments: [...(c.reviewComments || []), newComment],
-              updatedAt: new Date().toISOString(),
-            };
-          }
-          return c;
-        }),
-      };
-    }),
-    markContractReviewed: (contractId, status = 'approved') => update(s => {
-      const user = s.users.find(u => u.id === s.currentUserId);
-      const nextStatus = status === 'approved' ? 'awaiting_signature' : 'draft';
-      return {
-        ...s,
-        contracts: s.contracts.map(c => {
-          if (c.id === contractId) {
-            return {
-              ...c,
-              status: nextStatus,
-              updatedAt: new Date().toISOString(),
-              activity: [
-                ...(c.activity || []),
-                {
-                  id: `ca-${Date.now()}`,
-                  action: status === 'approved' ? 'Approved internal review' : 'Changes requested during review',
-                  actor: user?.name || 'User',
-                  timestamp: new Date().toISOString(),
-                },
-              ],
-            };
-          }
-          return c;
-        }),
-      };
-    }),
-
     // Electronic Signatures
     addSignatureRequest: (req) => {
       const newId = req.id || `sig-${Date.now()}`;
@@ -2450,7 +2289,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         const newReq: SignatureRequest = {
           id: newId,
           documentId: req.documentId,
-          contractId: req.contractId,
           title: req.title,
           senderId: req.senderId || s.currentUserId,
           signers: req.signers,
@@ -2477,14 +2315,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
           ],
         };
 
-        // If linked to contract, update contract status
-        const updatedContracts = s.contracts.map(c => {
-          if (c.id === req.contractId || (req.documentId && c.documentId === req.documentId)) {
-            return { ...c, status: 'awaiting_signature' as const, signatureRequestId: newId };
-          }
-          return c;
-        });
-
         // Update document status
         const updatedDocs = s.documentItems.map(d => {
           if (d.id === req.documentId) {
@@ -2507,7 +2337,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         return {
           ...s,
           signatureRequests: [newReq, ...s.signatureRequests],
-          contracts: updatedContracts,
           documentItems: updatedDocs,
           auditLogs: [log, ...s.auditLogs],
           activities: [log, ...s.activities],
@@ -2627,13 +2456,11 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     signDocumentSimulated: (requestId, signerId, signatureValue, seal) => update(s => {
       let reqTitle = '';
       let isAllCompleted = false;
-      let linkedContractId: string | undefined;
       let linkedDocumentId: string | undefined;
 
       const updatedRequests = s.signatureRequests.map(r => {
         if (r.id !== requestId) return r;
         reqTitle = r.title;
-        linkedContractId = r.contractId;
         linkedDocumentId = r.documentId;
 
         const updatedSigners = r.signers.map(sgn => {
@@ -2711,14 +2538,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
         };
       });
 
-      // If all completed, also update linked contract to active and document to signed!
-      const updatedContracts = s.contracts.map(c => {
-        if (isAllCompleted && (c.id === linkedContractId || c.signatureRequestId === requestId)) {
-          return { ...c, status: 'active' as const, updatedAt: new Date().toISOString() };
-        }
-        return c;
-      });
-
+      // If all completed, mark the linked document signed
       const updatedDocs = s.documentItems.map(d => {
         if (isAllCompleted && d.id === linkedDocumentId) {
           return { ...d, status: 'signed' as const, updatedAt: new Date().toISOString() };
@@ -2730,7 +2550,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       return {
         ...s,
         signatureRequests: updatedRequests,
-        contracts: updatedContracts,
         documentItems: updatedDocs,
         companySeals: seal
           ? s.companySeals.map(cs => (cs.id === seal.id ? { ...cs, usageCount: cs.usageCount + 1, lastUsedAt: now } : cs))
@@ -3100,11 +2919,6 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
     })),
 
     // Agent Runs
-    addAgentRun: (run) => update(s => ({ ...s, agentRuns: [...s.agentRuns, run] })),
-    updateAgentRun: (id, updates) => update(s => ({
-      ...s,
-      agentRuns: s.agentRuns.map(r => r.id === id ? { ...r, ...updates } : r),
-    })),
 
     // Notifications
     markNotificationRead: (id) => update(s => ({
@@ -3140,6 +2954,7 @@ export function AppProvider({ children }: { children: React.ReactNode }) {
       allSignatureRequests: state.signatureRequests,
       isHydrated: hydrated,
       favoriteProjectIds: state.favoriteProjects.filter(f => f.userId === state.currentUserId).map(f => f.projectId),
+      members: state.users.filter(u => !isRemovedMember(u)),
     };
   }, [state, actions, hydrated]);
 
@@ -3223,10 +3038,6 @@ export function useDocumentFolders() {
 
 export function useDocumentTemplates() {
   return useApp().documentTemplates;
-}
-
-export function useContracts() {
-  return useApp().contracts;
 }
 
 export function useSignatureRequests() {

@@ -31,7 +31,7 @@ export function CreateCalendarEventDialog({
   defaultDate,
   onSuccess,
 }: CreateCalendarEventDialogProps) {
-  const { users, projects, addCalendarEvent, updateCalendarEvent, currentUserId } = useApp();
+  const { members: users, projects, addCalendarEvent, updateCalendarEvent, currentUserId } = useApp();
 
   const [title, setTitle] = useState(eventToEdit?.title || '');
   const [description, setDescription] = useState(eventToEdit?.description || '');

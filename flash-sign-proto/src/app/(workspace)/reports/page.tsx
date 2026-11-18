@@ -39,7 +39,7 @@ const AI_USAGE_DATA = [
 ];
 
 export default function ReportsPage() {
-  const { projects, tasks, documents, agentRuns } = useApp();
+  const { projects, tasks, documents, agentEvents, workSessions } = useApp();
   const activeProjects = projects.filter(p => p.status === 'active');
   const avgProgress = Math.round(activeProjects.reduce((sum, p) => sum + p.progress, 0) / Math.max(activeProjects.length, 1));
 
@@ -71,7 +71,7 @@ export default function ReportsPage() {
         <StatCard label="Active Projects" value={activeProjects.length} icon={FolderKanban} iconColor="var(--flash)" delta="Portfolio health" />
         <StatCard label="Avg Completion" value={`${avgProgress}%`} icon={BarChart3} iconColor="#42a5f5" delta="Across active projects" deltaPositive />
         <StatCard label="Documents Signed" value={documents.filter(d => d.status === 'signed').length} icon={FileText} iconColor="#00c2a8" delta="This month" deltaPositive />
-        <StatCard label="AI Runs Total" value={agentRuns.length} icon={Bot} iconColor="#ab47bc" delta={`${agentRuns.filter(r => r.status === 'completed').length} completed`} deltaPositive />
+        <StatCard label="AI Agent Actions" value={agentEvents.length} icon={Bot} iconColor="#ab47bc" delta={`${workSessions.filter(w => w.source !== 'web' && w.source !== 'manual').length} agent work sessions`} deltaPositive />
       </div>
 
       {/* Charts grid */}

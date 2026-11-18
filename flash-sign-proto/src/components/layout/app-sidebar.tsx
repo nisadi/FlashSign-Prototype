@@ -144,8 +144,7 @@ export function AppSidebar() {
           href: '/documents/all',
           icon: FileText,
           activeWhen: (path: string) =>
-            (path.startsWith('/documents') && !path.startsWith('/documents/templates')) ||
-            path.startsWith('/contracts'),
+            path.startsWith('/documents') && !path.startsWith('/documents/templates'),
         },
         { label: 'Templates', href: '/documents/templates', icon: ScrollText },
         { label: 'Reports', href: '/agreements/reports', icon: BarChart3 },
@@ -206,7 +205,7 @@ export function AppSidebar() {
       'ai-agents': false,
       'super-admin-core': true,
     };
-    if (['/agreements', '/documents', '/contracts', '/signatures'].some(p => pathname.startsWith(p))) initial.agreements = true;
+    if (['/agreements', '/documents', '/signatures'].some(p => pathname.startsWith(p))) initial.agreements = true;
     else if (pathname.startsWith('/ai-agents')) initial['ai-agents'] = true;
     else if (pathname.startsWith('/teams')) initial.collaboration = true;
     else initial.workspace = true;

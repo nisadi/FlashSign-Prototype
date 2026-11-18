@@ -27,7 +27,7 @@ export default function ProjectTeamPage({
   params: Promise<{ projectId: string }>;
 }) {
   const { projectId } = use(params);
-  const { projects, users, tasks, updateProject, openTaskDrawer } = useApp();
+  const { projects, users, members, tasks, updateProject, openTaskDrawer } = useApp();
 
   const [search, setSearch] = useState('');
   const [showAddModal, setShowAddModal] = useState(false);
@@ -47,7 +47,7 @@ export default function ProjectTeamPage({
 
   const projectTasks = tasks.filter((t) => t.projectId === projectId);
   const currentMembers = users.filter((u) => project.memberIds.includes(u.id));
-  const availableUsers = users.filter((u) => !project.memberIds.includes(u.id));
+  const availableUsers = members.filter((u) => !project.memberIds.includes(u.id));
 
   const filteredMembers = currentMembers.filter(
     (m) =>

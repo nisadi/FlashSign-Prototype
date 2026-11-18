@@ -2,7 +2,6 @@
 
 import { useApp } from '@/context/app-context';
 import { SectionTabs, type SectionTab } from '@/components/shared/section-tabs';
-import { FEATURES } from '@/lib/features';
 
 export type AgreementsTabGroup = 'inbox' | 'documents';
 
@@ -40,22 +39,6 @@ function useTabGroups(): Record<AgreementsTabGroup, SectionTab[]> {
       { label: 'Recent', href: '/documents/recent' },
       { label: 'Favorites', href: '/documents/favorites' },
       { label: 'Folders', href: '/documents/folders' },
-      ...(FEATURES.contracts ? [{
-        // Contracts live inside Documents; each lifecycle stage is a chip
-        label: 'Contracts',
-        href: '/contracts',
-        subTabs: [
-          { label: 'Overview', href: '/contracts' },
-          { label: 'All', href: '/contracts/all' },
-          { label: 'Drafts', href: '/contracts/drafts' },
-          { label: 'In Review', href: '/contracts/review' },
-          { label: 'Awaiting Signature', href: '/contracts/awaiting' },
-          { label: 'Active', href: '/contracts/active' },
-          { label: 'Expiring Soon', href: '/contracts/expiring' },
-          { label: 'Completed', href: '/contracts/completed' },
-          { label: 'Archived', href: '/contracts/archived' },
-        ],
-      }] : []),
     ],
   };
 }

@@ -22,7 +22,7 @@ export function CreateMeetingDialog({
   defaultDate,
   onSuccess,
 }: CreateMeetingDialogProps) {
-  const { users, projects, meetings, addMeeting, updateMeeting, currentUserId } = useApp();
+  const { users, members, projects, meetings, addMeeting, updateMeeting, currentUserId } = useApp();
 
   const [title, setTitle] = useState(meetingToEdit?.title || '');
   const [description, setDescription] = useState(meetingToEdit?.description || '');
@@ -373,7 +373,7 @@ export function CreateMeetingDialog({
               Participants ({participantIds.length} invited)
             </label>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-1.5 max-h-32 overflow-y-auto p-2 bg-paper rounded-lg border border-line">
-              {users.map(u => {
+              {members.map(u => {
                 const isSelected = participantIds.includes(u.id);
                 return (
                   <button

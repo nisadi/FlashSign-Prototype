@@ -1,7 +1,8 @@
+import { avatarColorFor } from '@/lib/avatar';
 import type {
   User, Organization, Project, Task, Sprint, Milestone, Epic, Story,
   Document, ApprovalRequest, Notification, AuditLog, Integration,
-  AgentRun, DemoRole, ProjectFile, SrsGeneratedTaskRecord, UserFavoriteProject,
+  DemoRole, ProjectFile, SrsGeneratedTaskRecord, UserFavoriteProject,
 } from '@/types';
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -15,99 +16,99 @@ function d(offset: number): string {
 export const MOCK_USERS: User[] = [
   {
     id: 'u1', name: 'Aria Chen', email: 'aria@flashsign.io', initials: 'AC', role: 'ceo',
-    title: 'Chief Executive Officer', color: '#009882', isActive: true,
-    projectIds: ['p1', 'p2', 'p3'], timeZone: 'America/New_York (EST)', workingHours: '08:30 AM - 05:30 PM',
+    title: 'Chief Executive Officer', color: avatarColorFor('u1'), isActive: true,
+    projectIds: ['p1', 'p2', 'p3'],
     availability: 'busy', weeklyCapacity: 40,
     createdAt: d(-180),
   },
   {
     id: 'u2', name: 'Marcus Webb', email: 'marcus@flashsign.io', initials: 'MW', role: 'project_manager',
-    title: 'Senior Project Manager', color: '#5c6bc0', isActive: true,
-    projectIds: ['p1', 'p2'], timeZone: 'America/New_York (EST)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'Senior Project Manager', color: avatarColorFor('u2'), isActive: true,
+    projectIds: ['p1', 'p2'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-160),
   },
   {
     id: 'u3', name: 'Sofia Reyes', email: 'sofia@flashsign.io', initials: 'SR', role: 'product_owner',
-    title: 'Product Owner', color: '#e57373', isActive: true,
-    projectIds: ['p1', 'p4', 'p6'], timeZone: 'America/Los_Angeles (PST)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'Product Owner', color: avatarColorFor('u3'), isActive: true,
+    projectIds: ['p1', 'p4', 'p6'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-140),
   },
   {
     id: 'u4', name: 'James Okafor', email: 'james@flashsign.io', initials: 'JO', role: 'engineering_lead',
-    title: 'Engineering Lead', color: '#26a69a', isActive: true,
-    projectIds: ['p1', 'p2', 'p3', 'p5'], timeZone: 'America/New_York (EST)', workingHours: '09:00 AM - 05:30 PM',
+    title: 'Engineering Lead', color: avatarColorFor('u4'), isActive: true,
+    projectIds: ['p1', 'p2', 'p3', 'p5'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-130),
   },
   {
     id: 'u5', name: 'Priya Nair', email: 'priya@flashsign.io', initials: 'PN', role: 'developer',
-    title: 'Senior Engineer', color: '#ab47bc', isActive: true,
-    projectIds: ['p1', 'p3'], timeZone: 'Europe/London (GMT)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'Senior Engineer', color: avatarColorFor('u5'), isActive: true,
+    projectIds: ['p1', 'p3'],
     availability: 'focus_time', weeklyCapacity: 40,
     createdAt: d(-120),
   },
   {
     id: 'u6', name: 'Lena Fischer', email: 'lena@flashsign.io', initials: 'LF', role: 'developer',
-    title: 'Frontend Engineer', color: '#ff7043', isActive: true,
-    projectIds: ['p1', 'p4', 'p6'], timeZone: 'Europe/Berlin (CET)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'Frontend Engineer', color: avatarColorFor('u6'), isActive: true,
+    projectIds: ['p1', 'p4', 'p6'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-110),
   },
   {
     id: 'u7', name: 'Tom Nakamura', email: 'tom@flashsign.io', initials: 'TN', role: 'qa_tester',
-    title: 'QA Engineer', color: '#66bb6a', isActive: true,
-    projectIds: ['p1', 'p4'], timeZone: 'Asia/Tokyo (JST)', workingHours: '10:00 AM - 06:00 PM',
+    title: 'QA Engineer', color: avatarColorFor('u7'), isActive: true,
+    projectIds: ['p1', 'p4'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-100),
   },
   {
     id: 'u8', name: 'Rachel Kim', email: 'rachel@flashsign.io', initials: 'RK', role: 'org_admin',
-    title: 'IT Administrator', color: '#42a5f5', isActive: true,
-    projectIds: ['p5'], timeZone: 'America/New_York (EST)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'IT Administrator', color: avatarColorFor('u8'), isActive: true,
+    projectIds: ['p5'],
     availability: 'busy', weeklyCapacity: 40,
     createdAt: d(-90),
   },
   {
     id: 'u9', name: 'David Osei', email: 'david@flashsign.io', initials: 'DO', role: 'document_manager',
-    title: 'Legal Operations Manager', color: '#ffa726', isActive: true,
-    projectIds: ['p1', 'p2', 'p5'], timeZone: 'America/New_York (EST)', workingHours: '09:30 AM - 05:30 PM',
+    title: 'Legal Operations Manager', color: avatarColorFor('u9'), isActive: true,
+    projectIds: ['p1', 'p2', 'p5'],
     availability: 'out_of_office', weeklyCapacity: 40,
     createdAt: d(-80),
   },
   {
     id: 'u10', name: 'Claire Dupont', email: 'claire@acmecorp.com', initials: 'CD', role: 'client',
-    title: 'VP of Partnerships', color: '#8d6e63', isActive: true,
-    projectIds: ['p2'], timeZone: 'America/Chicago (CST)', workingHours: '08:30 AM - 04:30 PM',
+    title: 'VP of Partnerships', color: avatarColorFor('u10'), isActive: true,
+    projectIds: ['p2'],
     availability: 'available', weeklyCapacity: 20,
     createdAt: d(-30),
   },
   {
     id: 'u11', name: 'Ethan Mwangi', email: 'ethan@audit.io', initials: 'EM', role: 'auditor',
-    title: 'Compliance Auditor', color: '#78909c', isActive: true,
-    projectIds: ['p5'], timeZone: 'America/New_York (EST)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'Compliance Auditor', color: avatarColorFor('u11'), isActive: true,
+    projectIds: ['p5'],
     availability: 'busy', weeklyCapacity: 30,
     createdAt: d(-20),
   },
   {
     id: 'u12', name: 'Nina Petrov', email: 'nina@flashsign.io', initials: 'NP', role: 'platform_admin',
-    title: 'Platform Administrator', color: '#26c6da', isActive: true,
-    projectIds: ['p1', 'p5'], timeZone: 'Europe/Warsaw (CET)', workingHours: '09:00 AM - 05:00 PM',
+    title: 'Platform Administrator', color: avatarColorFor('u12'), isActive: true,
+    projectIds: ['p1', 'p5'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-200),
   },
   {
     id: 'u13', name: 'CI/CD Bot', email: 'bot@flashsign.io', initials: 'CB', role: 'integration_service',
-    title: 'Integration Service Account', color: '#bdbdbd', isActive: true,
-    projectIds: ['p1', 'p2', 'p3'], timeZone: 'UTC', workingHours: '24/7 Automated',
+    title: 'Integration Service Account', color: avatarColorFor('u13'), isActive: true,
+    projectIds: ['p1', 'p2', 'p3'],
     availability: 'available', weeklyCapacity: 168,
     createdAt: d(-200),
   },
   {
     id: 'u14', name: 'Aditya Sharma', email: 'aditya@flashsign.io', initials: 'AS', role: 'developer',
-    title: 'Backend Engineer', color: '#ef5350', isActive: true,
-    projectIds: ['p1', 'p2', 'p3', 'p5'], timeZone: 'Asia/Kolkata (IST)', workingHours: '10:00 AM - 06:30 PM',
+    title: 'Backend Engineer', color: avatarColorFor('u14'), isActive: true,
+    projectIds: ['p1', 'p2', 'p3', 'p5'],
     availability: 'available', weeklyCapacity: 40,
     createdAt: d(-95),
   },
@@ -870,65 +871,6 @@ export const INITIAL_SRS_TASK_HISTORY: Record<string, SrsGeneratedTaskRecord[]> 
 };
 
 
-// ── Agent Runs ────────────────────────────────────────────────────────────────
-export const MOCK_AGENT_RUNS: AgentRun[] = [
-  {
-    id: 'run1', taskId: 'task11', agentProviderId: 'ap1', status: 'completed',
-    startedAt: d(-6), completedAt: d(-6), triggeredBy: 'u5',
-    events: [
-      { timestamp: d(-6), type: 'info', message: 'Agent initialized with task context' },
-      { timestamp: d(-6), type: 'info', message: 'Reading task FSV2-101 description and acceptance criteria' },
-      { timestamp: d(-6), type: 'code', message: 'Generated integration module', detail: 'src/lib/claude-provider.ts created (287 lines)' },
-      { timestamp: d(-6), type: 'success', message: 'Unit tests passing — 24/24 test cases' },
-      { timestamp: d(-6), type: 'success', message: 'PR #142 created for review' },
-    ],
-    output: 'Created `claude-provider.ts` with streaming support, tool call handling, and retry logic. All tests passing. PR submitted for review.',
-    tokensUsed: 18420, costEstimate: 0.55,
-    verificationChecks: [
-      { id: 'vc1', label: 'Unit tests passing', status: 'passed' },
-      { id: 'vc2', label: 'PR created and linked', status: 'passed' },
-      { id: 'vc3', label: 'No secrets in diff', status: 'passed' },
-      { id: 'vc4', label: 'Human code review approved', status: 'passed' },
-    ],
-    approvedBy: 'u4', approvedAt: d(-5),
-  },
-  {
-    id: 'run2', taskId: 'task12', agentProviderId: 'ap3', status: 'running',
-    startedAt: d(-1), triggeredBy: 'u14',
-    events: [
-      { timestamp: d(-1), type: 'info', message: 'Agent initialized' },
-      { timestamp: d(-1), type: 'info', message: 'Reading Gemini API documentation' },
-      { timestamp: d(-1), type: 'code', message: 'Scaffolding provider module' },
-      { timestamp: d(-1), type: 'info', message: 'Running integration tests...' },
-    ],
-    tokensUsed: 5210, costEstimate: 0.12,
-    verificationChecks: [
-      { id: 'vc5', label: 'Unit tests passing', status: 'pending' },
-      { id: 'vc6', label: 'PR created and linked', status: 'pending' },
-      { id: 'vc7', label: 'No secrets in diff', status: 'pending' },
-      { id: 'vc8', label: 'Human code review approved', status: 'pending' },
-    ],
-  },
-  {
-    id: 'run3', taskId: 'task2', agentProviderId: 'ap1', status: 'needs_review',
-    startedAt: d(-2), completedAt: d(-2), triggeredBy: 'u5',
-    events: [
-      { timestamp: d(-2), type: 'info', message: 'Analyzing PDF document structure' },
-      { timestamp: d(-2), type: 'info', message: 'Running NLP field detection pipeline' },
-      { timestamp: d(-2), type: 'warning', message: 'Confidence below threshold for 2 fields — manual review recommended' },
-      { timestamp: d(-2), type: 'success', message: 'Field annotations generated' },
-    ],
-    output: 'Detected 14 signature fields, 8 date fields, 3 initials fields. 2 fields flagged as low-confidence.',
-    tokensUsed: 9840, costEstimate: 0.28,
-    verificationChecks: [
-      { id: 'vc9',  label: 'Detection accuracy ≥85%', status: 'failed', detail: 'Accuracy at 78% on test set' },
-      { id: 'vc10', label: 'PR created and linked', status: 'passed' },
-      { id: 'vc11', label: 'No secrets in diff', status: 'passed' },
-      { id: 'vc12', label: 'Human code review approved', status: 'pending' },
-    ],
-  },
-];
-
 // ── Documents ─────────────────────────────────────────────────────────────────
 export const MOCK_DOCUMENTS: Document[] = [
   {
@@ -1018,7 +960,6 @@ export const MOCK_APPROVALS: ApprovalRequest[] = [
 // ── Notifications ─────────────────────────────────────────────────────────────
 export const MOCK_NOTIFICATIONS: Notification[] = [
   { id: 'n1', userId: 'u5', title: 'Task assigned', body: 'FSV2-102: AI field auto-detection assigned to you', type: 'task', isRead: false, link: '/tasks/task2', createdAt: d(-14) },
-  { id: 'n2', userId: 'u5', title: 'Agent run completed', body: 'Agent run for AIAG-21 needs your review', type: 'agent', isRead: false, link: '/ai-agents/runs/run3', createdAt: d(-2) },
   { id: 'n3', userId: 'u2', title: 'Approval requested', body: 'ACME Corp MSA needs your approval', type: 'approval', isRead: false, link: '/approvals', createdAt: d(-3) },
   { id: 'n4', userId: 'u1', title: 'Approval requested', body: 'ACME Corp MSA needs your approval', type: 'approval', isRead: false, link: '/approvals', createdAt: d(-3) },
   { id: 'n5', userId: 'u7', title: 'Task ready for testing', body: 'FSV2-101 moved to Review — please test', type: 'task', isRead: true, link: '/tasks/task1', createdAt: d(-2) },
@@ -1028,10 +969,8 @@ export const MOCK_NOTIFICATIONS: Notification[] = [
 export const MOCK_AUDIT_LOGS: AuditLog[] = [
   { id: 'al1', category: 'document', actorId: 'u9', actorName: 'David Osei', action: 'document.created', resource: 'Document', resourceId: 'doc1', detail: 'ACME Corp MSA', ipAddress: '102.89.3.12', userAgent: 'Chrome 131 on Windows', timestamp: d(-5) },
   { id: 'al2', category: 'document', actorId: 'u9', actorName: 'David Osei', action: 'document.sent', resource: 'Document', resourceId: 'doc1', detail: 'Sent to 2 signers', ipAddress: '102.89.3.12', timestamp: d(-3) },
-  { id: 'al3', category: 'agent', actorId: 'u5', actorName: 'Priya Nair', action: 'agent.run.started', resource: 'AgentRun', resourceId: 'run3', detail: 'Claude on FSV2-102', ipAddress: '192.168.1.5', timestamp: d(-2) },
   { id: 'al4', category: 'member', actorId: 'u8', actorName: 'Rachel Kim', action: 'user.invited', resource: 'User', resourceId: 'u10', detail: 'claire@acmecorp.com', ipAddress: '10.0.0.1', timestamp: d(-30) },
   { id: 'al5', category: 'settings', actorId: 'u13', actorName: 'CI/CD Bot', action: 'integration.sync', resource: 'Integration', resourceId: 'int1', detail: 'GitHub sync — 3 repos updated', ipAddress: '10.0.1.99', timestamp: d(-1) },
-  { id: 'al6', category: 'agent', actorId: 'u4', actorName: 'James Okafor', action: 'agent.run.approved', resource: 'AgentRun', resourceId: 'run1', detail: 'Approved AIAG-21 Claude run', ipAddress: '192.168.1.4', timestamp: d(-5) },
   { id: 'al7', category: 'security', actorId: 'u8', actorName: 'Rachel Kim', action: 'settings.mfa.updated', resource: 'Settings', resourceId: 'org1', detail: 'MFA required for admins', ipAddress: '10.0.0.1', timestamp: d(-10) },
 ];
 

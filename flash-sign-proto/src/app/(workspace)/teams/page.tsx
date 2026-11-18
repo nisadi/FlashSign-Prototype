@@ -8,11 +8,11 @@ import {
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { canViewTeamAnalytics } from '@/lib/rbac';
+import { canViewTeamAnalytics, canManageTeam } from '@/lib/rbac';
 import { AccessDenied } from '@/components/shared/access-denied';
 import { AvailabilityBadge, LeaveTypeBadge } from '@/components/collaboration/collaboration-badges';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
-import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
+import { InviteMemberDialog } from '@/components/members/invite-member-dialog';
 import { CreateMeetingDialog } from '@/components/collaboration/create-meeting-dialog';
 import { CreateAnnouncementDialog } from '@/components/collaboration/create-announcement-dialog';
 import { TaskFlowChart, AvailabilityNow, TaskStatusByMember, MeetingLoad } from '@/components/analytics/team-charts';
@@ -33,7 +33,7 @@ const formatDate = (value: string) =>
 
 export default function TeamAnalyticsPage() {
   const {
-    users, tasks, meetings, timeOffRequests, activities, announcements, milestones,
+    users, members, tasks, meetings, timeOffRequests, activities, announcements, milestones,
   } = useApp();
   const { currentRbacUser } = useDemoAuth();
 
@@ -51,13 +51,14 @@ export default function TeamAnalyticsPage() {
   }
 
   // Dialog states
-  const [createMemberOpen, setCreateMemberOpen] = useState(false);
+  // People join only through an invitation (invitation table), so the dashboard offers Invite
+  const [inviteOpen, setInviteOpen] = useState(false);
   const [scheduleMeetingOpen, setScheduleMeetingOpen] = useState(false);
   const [createAnnouncementOpen, setCreateAnnouncementOpen] = useState(false);
 
   // Workload per member, highest load first (assumes story points ≈ hours, as before)
   const workload = useMemo(() => {
-    return users
+    return members
       .map(u => {
         const open = tasks.filter(t => t.assigneeId === u.id && t.status !== 'done');
         const load = open.reduce((sum, t) => sum + (t.storyPoints || t.points || 3), 0);
@@ -65,14 +66,14 @@ export default function TeamAnalyticsPage() {
         return { user: u, load, capacity, percent: Math.round((load / capacity) * 100) };
       })
       .sort((a, b) => b.percent - a.percent);
-  }, [users, tasks]);
+  }, [members, tasks]);
 
   const kpis = useMemo(() => {
     const thisWeek = WEEKLY_TASK_FLOW[WEEKLY_TASK_FLOW.length - 1];
     const lastWeek = WEEKLY_TASK_FLOW[WEEKLY_TASK_FLOW.length - 2];
     return {
-      members: users.length,
-      activeMembers: users.filter(u => u.isActive !== false).length,
+      members: members.length,
+      activeMembers: members.filter(u => u.isActive !== false).length,
       openTasks: tasks.filter(t => t.status !== 'done').length,
       inProgress: tasks.filter(t => t.status === 'in_progress').length,
       blocked: tasks.filter(t => t.status === 'blocked').length,
@@ -80,7 +81,7 @@ export default function TeamAnalyticsPage() {
       completedDelta: thisWeek.completed - lastWeek.completed,
       atCapacity: workload.filter(w => w.percent >= 85).length,
     };
-  }, [users, tasks, workload]);
+  }, [members, tasks, workload]);
 
   // Upcoming time off
   const upcomingTimeOff = useMemo(() => {
@@ -104,7 +105,7 @@ export default function TeamAnalyticsPage() {
   }, [announcements]);
 
   const recentActivities = useMemo(() => activities.slice(0, 5), [activities]);
-  const recentMembers = useMemo(() => users.slice(0, 6), [users]);
+  const recentMembers = useMemo(() => members.slice(0, 6), [members]);
 
   const kpiCards = [
     {
@@ -152,13 +153,15 @@ export default function TeamAnalyticsPage() {
 
           {/* Quick Actions Bar */}
           <div className="flex flex-wrap items-center gap-2 lg:flex-nowrap">
-            <button
-              onClick={() => setCreateMemberOpen(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-paper-elevated hover:bg-mist text-ink font-semibold rounded-lg border border-line shadow-2xs transition-colors text-xs"
-            >
-              <Plus className="w-3.5 h-3.5 text-flash-deep" />
-              <span>Add Member</span>
-            </button>
+            {currentRbacUser && canManageTeam(currentRbacUser) && (
+              <button
+                onClick={() => setInviteOpen(true)}
+                className="flex items-center gap-1.5 px-3 py-1.5 bg-paper-elevated hover:bg-mist text-ink font-semibold rounded-lg border border-line shadow-2xs transition-colors text-xs"
+              >
+                <Plus className="w-3.5 h-3.5 text-flash-deep" />
+                <span>Invite people</span>
+              </button>
+            )}
 
             <button
               onClick={() => setScheduleMeetingOpen(true)}
@@ -295,8 +298,8 @@ export default function TeamAnalyticsPage() {
 
         {/* Task status + meetings */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-          <TaskStatusByMember users={users} tasks={tasks} className="lg:col-span-2" />
-          <MeetingLoad users={users} meetings={meetings} weekStart={WEEK_START} weekEnd={WEEK_END} />
+          <TaskStatusByMember users={members} tasks={tasks} className="lg:col-span-2" />
+          <MeetingLoad users={members} meetings={meetings} weekStart={WEEK_START} weekEnd={WEEK_END} />
         </div>
 
         {/* Hours per person and per agent */}
@@ -304,7 +307,7 @@ export default function TeamAnalyticsPage() {
 
         {/* Availability, leave, milestones */}
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-          <AvailabilityNow users={users} />
+          <AvailabilityNow users={members} />
 
           {/* Upcoming Time Off */}
           <div className="bg-paper-elevated border border-line rounded-xl shadow-xs p-5 space-y-3">
@@ -468,7 +471,7 @@ export default function TeamAnalyticsPage() {
       </div>
 
       {/* Shared Modals */}
-      <CreateMemberDialog open={createMemberOpen} onOpenChange={setCreateMemberOpen} />
+      <InviteMemberDialog open={inviteOpen} onClose={() => setInviteOpen(false)} />
       <CreateMeetingDialog open={scheduleMeetingOpen} onOpenChange={setScheduleMeetingOpen} />
       <CreateAnnouncementDialog open={createAnnouncementOpen} onOpenChange={setCreateAnnouncementOpen} />
     </div>

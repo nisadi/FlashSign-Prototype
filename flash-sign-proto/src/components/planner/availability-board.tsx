@@ -20,7 +20,7 @@ import { Modal } from '@/components/shared/modal';
 /** Team availability: status summary, weekly schedule grid and member detail modal. */
 export function AvailabilityBoard() {
   const {
-    users,
+    members: users,
     meetings,
     timeOffRequests,
     calendarEvents,

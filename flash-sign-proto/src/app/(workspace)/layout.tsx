@@ -14,20 +14,22 @@ import { Loader2, Zap } from 'lucide-react';
 export default function WorkspaceLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
   const { sidebarCollapsed } = useApp();
-  const { isAuthenticated, currentUser, isHydrated } = useDemoAuth();
+  const { isAuthenticated, currentUser, isHydrated, currentRbacUser, currentOrganizationRecord } = useDemoAuth();
+  // An Owner who hasn't finished "Complete your organisation" (organization.setup_completed_at)
+  const needsOrgSetup = Boolean(currentRbacUser?.isOwner && currentOrganizationRecord && !currentOrganizationRecord.setupCompletedAt);
 
   useEffect(() => {
     if (!isHydrated) return;
 
     if (!isAuthenticated || !currentUser) {
       router.replace('/login');
-    } else if (!currentUser.organizationSetupCompleted) {
-      router.replace('/onboarding/create-organization');
+    } else if (needsOrgSetup) {
+      router.replace('/onboarding/complete-organization');
     }
-  }, [isAuthenticated, currentUser, isHydrated, router]);
+  }, [isAuthenticated, currentUser, isHydrated, needsOrgSetup, router]);
 
   // While checking hydration or unauthenticated, show clean transition placeholder
-  if (!isHydrated || !isAuthenticated || !currentUser || !currentUser.organizationSetupCompleted) {
+  if (!isHydrated || !isAuthenticated || !currentUser || needsOrgSetup) {
     return (
       <div className="flex h-screen w-full items-center justify-center bg-[var(--paper)]">
         <div className="flex flex-col items-center gap-3">

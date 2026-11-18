@@ -1,10 +1,17 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import type { User } from '@/types';
+import { isRemovedMember, type User } from '@/types';
+
+/* eslint-disable @next/next/no-img-element -- avatar photos are local data URLs */
+type AvatarUser = Pick<User, 'name' | 'initials' | 'color'> & Partial<Pick<User, 'removedAt' | 'avatar'>>;
+
+/** A removed member keeps their name on past work, greyed out and labelled */
+const displayName = (u: AvatarUser) => (isRemovedMember(u) ? `${u.name} (former member)` : u.name);
+const displayColor = (u: AvatarUser) => (isRemovedMember(u) ? '#9ca3af' : u.color);
 
 interface AvatarProps {
-  user?: Pick<User, 'name' | 'initials' | 'color'> | null;
+  user?: AvatarUser | null;
   size?: 'xs' | 'sm' | 'md' | 'lg';
   className?: string;
 }
@@ -39,16 +46,20 @@ export function Avatar({ user, size = 'md', className }: AvatarProps) {
         SIZE_MAP[size],
         className
       )}
-      style={{ background: user.color }}
-      title={user.name}
+      style={{ background: displayColor(user) }}
+      title={displayName(user)}
     >
-      {user.initials}
+      {user.avatar ? (
+        <img src={user.avatar} alt="" className={cn('w-full h-full rounded-full object-cover', isRemovedMember(user) && 'grayscale opacity-70')} />
+      ) : (
+        user.initials
+      )}
     </div>
   );
 }
 
 interface AvatarGroupProps {
-  users: Pick<User, 'name' | 'initials' | 'color'>[];
+  users: AvatarUser[];
   max?: number;
   size?: 'xs' | 'sm' | 'md';
 }
@@ -67,10 +78,14 @@ export function AvatarGroup({ users, max = 4, size = 'sm' }: AvatarGroupProps) {
             'rounded-full flex items-center justify-center font-bold text-white border-2 border-paper-elevated shrink-0',
             sizeClass
           )}
-          style={{ background: u.color }}
-          title={u.name}
+          style={{ background: displayColor(u) }}
+          title={displayName(u)}
         >
-          {u.initials}
+          {u.avatar ? (
+            <img src={u.avatar} alt="" className={cn('w-full h-full rounded-full object-cover', isRemovedMember(u) && 'grayscale opacity-70')} />
+          ) : (
+            u.initials
+          )}
         </div>
       ))}
       {extra > 0 && (

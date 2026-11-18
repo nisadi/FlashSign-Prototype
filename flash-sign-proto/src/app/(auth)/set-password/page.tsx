@@ -1,6 +1,6 @@
 'use client';
 
-import React, { use, useMemo, useState } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -11,111 +11,109 @@ import { PasswordInput } from '@/components/auth/password-input';
 import { PasswordStrength } from '@/components/auth/password-strength';
 import { PrototypeNotice } from '@/components/shared/prototype-notice';
 import { acceptInviteSchema, type AcceptInviteFormData } from '@/lib/auth-validation';
-import { decodeInvite, invitationRoleName, isInviteExpired } from '@/lib/invitations';
+import { invitationRoleName, isOwnerInvitation } from '@/lib/invitations';
+import { checkTempPassword } from '@/lib/temp-password';
 import { useDemoAuth } from '@/context/demo-auth-context';
-import { ArrowRight, Loader2, AlertCircle, Lock, MailPlus, Building2 } from 'lucide-react';
+import { ArrowRight, Loader2, AlertCircle, Lock, KeyRound, Building2 } from 'lucide-react';
 
 const fieldClass = (hasError: boolean) =>
   `w-full px-3.5 py-2.5 text-sm rounded-lg border bg-[var(--paper-elevated)] text-[var(--ink)] placeholder:text-[var(--muted)]/60 focus:outline-none focus:ring-2 focus:ring-[var(--flash)] transition-all ${
     hasError ? 'border-[var(--danger)] ring-1 ring-[var(--danger)]' : 'border-[var(--line)] hover:border-[var(--muted)]'
   }`;
 
-/** Where an invitation link lands: create an account and join the inviting organization directly. */
-export default function AcceptInvitationPage({ params }: { params: Promise<{ token: string }> }) {
-  const { token } = use(params);
+/**
+ * First login, step 2. The person signed in with the temporary password from their invitation
+ * email (step 1, at /login); now they set their own password. Only then is their account
+ * (users row) created and the invitation accepted (tables.txt `invitation`).
+ */
+export default function SetPasswordPage() {
   const router = useRouter();
-  const { isHydrated, invitations, users, currentUser, isAuthenticated, acceptInvitation, roles } = useDemoAuth();
+  const { isHydrated, firstLoginInvitation: invite, completeFirstLogin, roles } = useDemoAuth();
   const [serverError, setServerError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-
-  const invite = useMemo(() => decodeInvite(token), [token]);
-  const local = invite ? invitations.find(i => i.id === invite.id) : undefined;
-  const accountExists = !!invite && users.some(u => u.email.trim().toLowerCase() === invite.email.trim().toLowerCase());
 
   const {
     register,
     handleSubmit,
     watch,
+    setError,
     formState: { errors },
   } = useForm<AcceptInviteFormData>({
     resolver: zodResolver(acceptInviteSchema),
     mode: 'onTouched',
-    defaultValues: {
+    values: {
       fullName: invite?.fullName ?? '',
       jobTitle: invite?.jobTitle ?? '',
       password: '',
       confirmPassword: '',
       terms: false,
     },
+    resetOptions: { keepDirtyValues: true },
   });
   const passwordValue = watch('password', '');
 
   const onSubmit = async (data: AcceptInviteFormData) => {
     if (!invite) return;
+    // Their own password, not the temporary one from the email
+    if (checkTempPassword(data.password, invite.tempPasswordHash)) {
+      setError('password', { message: 'Choose a new password, not the temporary one from the email.' });
+      return;
+    }
     setServerError(null);
     setIsSubmitting(true);
     await new Promise(resolve => setTimeout(resolve, 400));
-    const result = acceptInvitation(invite, { fullName: data.fullName, password: data.password, jobTitle: data.jobTitle });
+    const result = completeFirstLogin({ fullName: data.fullName, password: data.password, jobTitle: data.jobTitle });
     setIsSubmitting(false);
     if (!result.success) {
-      setServerError(result.error ?? 'Unable to join. Please try again.');
+      setServerError(result.error ?? 'Unable to finish signing in. Please try again.');
       return;
     }
-    router.replace('/dashboard');
+    if (result.requiresOrganizationSetup) router.replace('/onboarding/complete-organization');
+    else if (result.rbacUser?.dashboardAccess.defaultDashboard === 'my-status') router.replace('/projects/home');
+    else router.replace('/dashboard');
   };
 
-  // Links that can't be used: show why, and where to go instead
-  let problem: { title: string; body: string; action?: { href: string; label: string } } | null = null;
-  if (!isHydrated) {
-    problem = null;
-  } else if (!invite) {
-    problem = { title: 'This invitation link isn’t valid', body: 'The link may be incomplete. Copy the whole link from your invitation email, or ask the workspace owner to send it again.' };
-  } else if (local?.status === 'revoked') {
-    problem = { title: 'This invitation was cancelled', body: `Ask ${invite.invitedByName} to invite you to ${invite.organizationName} again.` };
-  } else if (local?.status === 'accepted' || accountExists) {
-    problem = { title: 'You’ve already joined', body: `There is already an account for ${invite.email}. Log in to open ${invite.organizationName}.`, action: { href: '/login', label: 'Log in' } };
-  } else if (isInviteExpired(local ?? invite)) {
-    problem = { title: 'This invitation has expired', body: `Invitations are valid for 7 days. Ask ${invite.invitedByName} to resend it from the Members page.` };
-  }
+  const owner = invite ? isOwnerInvitation(invite) : false;
 
   return (
     <AuthLayout>
       <AuthCard>
         {!isHydrated ? (
           <div className="py-16 flex items-center justify-center gap-2 text-xs text-[var(--muted)]">
-            <Loader2 className="w-4 h-4 animate-spin" /> Opening invitation…
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading…
           </div>
-        ) : problem ? (
+        ) : !invite ? (
           <div className="py-4 space-y-4 text-center">
             <div className="w-12 h-12 mx-auto rounded-full bg-[var(--mist)] flex items-center justify-center">
-              <MailPlus className="w-6 h-6 text-[var(--muted)]" />
+              <KeyRound className="w-6 h-6 text-[var(--muted)]" />
             </div>
             <div>
-              <h2 className="text-xl font-bold text-[var(--ink)]">{problem.title}</h2>
-              <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">{problem.body}</p>
+              <h2 className="text-xl font-bold text-[var(--ink)]">Sign in with your temporary password first</h2>
+              <p className="text-xs text-[var(--muted)] mt-1.5 leading-relaxed">
+                Use the email address and temporary password from your invitation email. You&apos;ll set your own password next.
+              </p>
             </div>
-            {problem.action && (
-              <Link
-                href={problem.action.href}
-                className="inline-flex items-center gap-2 py-2.5 px-5 rounded-lg bg-[var(--flash-deep)] hover:bg-[var(--flash)] text-white font-semibold text-sm"
-              >
-                {problem.action.label} <ArrowRight className="w-4 h-4" />
-              </Link>
-            )}
+            <Link
+              href="/login"
+              className="inline-flex items-center gap-2 py-2.5 px-5 rounded-lg bg-[var(--flash-deep)] hover:bg-[var(--flash)] text-white font-semibold text-sm"
+            >
+              Go to sign in <ArrowRight className="w-4 h-4" />
+            </Link>
           </div>
-        ) : invite && (
+        ) : (
           <>
             <div className="mb-5">
               <div className="flex items-center justify-between mb-2">
-                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--flash-deep)]">You&apos;re invited</span>
+                <span className="text-xs font-semibold uppercase tracking-wider text-[var(--flash-deep)]">Set your password</span>
                 <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-[var(--mist)] text-[var(--ink-soft)] font-medium">
                   {invitationRoleName(invite, roles)}
                 </span>
               </div>
-              <h2 className="text-2xl font-bold tracking-tight text-[var(--ink)]">Join {invite.organizationName}</h2>
+              <h2 className="text-2xl font-bold tracking-tight text-[var(--ink)]">
+                {owner ? `Become the Owner of ${invite.organizationName}` : `Join ${invite.organizationName}`}
+              </h2>
               <p className="text-xs text-[var(--muted)] mt-1">
-                <strong className="text-[var(--ink)]">{invite.invitedByName}</strong> invited you to work with the team on Flash Sign.
-                Create your account to go straight to the workspace.
+                Your temporary password worked. Check your name and choose your own password; the temporary one stops working.
               </p>
               {invite.message && (
                 <blockquote className="mt-3 border-l-2 border-[var(--flash)] pl-3 text-xs text-[var(--ink-soft)] italic whitespace-pre-line">
@@ -123,12 +121,6 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ tok
                 </blockquote>
               )}
             </div>
-
-            {isAuthenticated && currentUser && (
-              <div className="mb-4 p-3 rounded-lg bg-[var(--mist)] text-xs text-[var(--ink-soft)]">
-                You&apos;re signed in as <strong>{currentUser.fullName}</strong>. Joining signs you in with the new account instead.
-              </div>
-            )}
 
             {serverError && (
               <div className="mb-4 p-3 rounded-lg bg-red-50 border border-red-200 text-xs text-[var(--danger)] flex items-start gap-2">
@@ -163,7 +155,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ tok
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--ink)] mb-1">
-                  Password <span className="text-[var(--danger)]">*</span>
+                  New Password <span className="text-[var(--danger)]">*</span>
                 </label>
                 <PasswordInput autoComplete="new-password" placeholder="At least 8 characters (letters & numbers)" error={!!errors.password} {...register('password')} />
                 {errors.password && <p className="text-xs text-[var(--danger)] mt-1">{errors.password.message}</p>}
@@ -172,7 +164,7 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ tok
 
               <div>
                 <label className="block text-xs font-semibold text-[var(--ink)] mb-1">
-                  Confirm Password <span className="text-[var(--danger)]">*</span>
+                  Confirm New Password <span className="text-[var(--danger)]">*</span>
                 </label>
                 <PasswordInput autoComplete="new-password" placeholder="Re-enter your password" error={!!errors.confirmPassword} {...register('confirmPassword')} />
                 {errors.confirmPassword && <p className="text-xs text-[var(--danger)] mt-1">{errors.confirmPassword.message}</p>}
@@ -196,20 +188,15 @@ export default function AcceptInvitationPage({ params }: { params: Promise<{ tok
                 className="w-full mt-3 py-2.5 px-4 rounded-lg bg-[var(--flash-deep)] hover:bg-[var(--flash)] text-white font-semibold text-sm shadow-sm hover:shadow transition-all flex items-center justify-center gap-2 cursor-pointer disabled:opacity-70"
               >
                 {isSubmitting ? (
-                  <><Loader2 className="w-4 h-4 animate-spin" /><span>Joining…</span></>
+                  <><Loader2 className="w-4 h-4 animate-spin" /><span>Saving…</span></>
                 ) : (
-                  <><Building2 className="w-4 h-4" /><span>Join {invite.organizationName}</span><ArrowRight className="w-4 h-4 ml-0.5" /></>
+                  <><Building2 className="w-4 h-4" /><span>Save password and continue</span><ArrowRight className="w-4 h-4 ml-0.5" /></>
                 )}
               </button>
             </form>
 
             <div className="mt-4">
               <PrototypeNotice variant="banner" message="Frontend prototype only. Mock user data is stored safely in local browser state." />
-            </div>
-
-            <div className="mt-5 pt-3 border-t border-[var(--line)] text-center text-xs text-[var(--muted)]">
-              Already have an account?{' '}
-              <Link href="/login" className="font-semibold text-[var(--flash-deep)] hover:underline">Log in</Link>
             </div>
           </>
         )}

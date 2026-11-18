@@ -13,7 +13,7 @@ interface SearchCommandProps {
 
 export function SearchCommand({ isOpen, onClose }: SearchCommandProps) {
   const router = useRouter();
-  const { projects, tasks, milestones, sprints, users, openTaskDrawer } = useApp();
+  const { projects, tasks, milestones, sprints, members: users, openTaskDrawer } = useApp();
   const [query, setQuery] = useState('');
 
   // Keyboard escape

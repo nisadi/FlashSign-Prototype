@@ -25,7 +25,6 @@ import {
   Sparkles
 } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
-import { FEATURES } from '@/lib/features';
 import {
   SignatureRequestStatusBadge,
   SignerStatusBadge
@@ -63,7 +62,6 @@ function SigningProgressPage() {
     sendSignatureReminder,
     cancelSignatureRequest,
     documentItems,
-    contracts
   } = useApp();
   const currentUser = useCurrentUser();
 
@@ -78,11 +76,6 @@ function SigningProgressPage() {
     if (!request?.documentId) return null;
     return documentItems.find(d => d.id === request.documentId);
   }, [request, documentItems]);
-
-  const linkedContract = useMemo(() => {
-    if (!FEATURES.contracts || !request?.contractId) return null;
-    return contracts.find(c => c.id === request.contractId);
-  }, [request, contracts]);
 
   if (!request) {
     return (
@@ -329,22 +322,6 @@ function SigningProgressPage() {
 
           {/* Linked Artifacts & Quick Info (1 Col) */}
           <div className="space-y-6">
-            {/* Linked Contract Card */}
-            {linkedContract && (
-              <div className="bg-paper-elevated border border-line rounded-xl p-5 shadow-sm space-y-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-muted block">Linked Contract</span>
-                <h4 className="font-bold text-ink text-sm">{linkedContract.title}</h4>
-                <p className="text-xs text-muted">{linkedContract.counterparty} • ID: {linkedContract.id}</p>
-                <Link
-                  href={`/contracts/${linkedContract.id}`}
-                  className="w-full py-2 bg-paper hover:bg-mist/50 border border-line rounded-lg text-xs font-semibold text-ink transition-colors flex items-center justify-center gap-1.5"
-                >
-                  <Eye className="w-3.5 h-3.5" />
-                  View Contract Details
-                </Link>
-              </div>
-            )}
-
             {/* Linked Document Card */}
             {linkedDocument && (
               <div className="bg-paper-elevated border border-line rounded-xl p-5 shadow-sm space-y-3">

@@ -1,18 +1,25 @@
 import type { DemoInvitation } from '@/types/demo-auth';
 import type { CustomRole } from '@/lib/rbac';
 
-// Invitation links for the frontend prototype. The link carries the invitation itself
-// (base64url JSON), so it also opens in another browser or an incognito window, where this
-// browser's stored invitations aren't available. A real backend would send an opaque token.
+// Invitations (tables.txt `invitation`): one table for Owner and member invitations.
+// The email carries a one-time temporary password; there is no invitation link.
 
 export const INVITE_VALID_DAYS = 7;
 
+/** The Organization Owner role: an invitation with this role is an Owner invitation */
+export const OWNER_ROLE_ID = 'role-owner';
+
+/** An Owner invitation (sent by a Super Admin): its role is the Organization Owner role */
+export function isOwnerInvitation(inv: Pick<DemoInvitation, 'roleId'>): boolean {
+  return inv.roleId === OWNER_ROLE_ID;
+}
+
 /**
- * The organisation's roles an invitation can carry (invitation.role_id). The Organization Owner
- * role is not offered: the Owner comes from the Super Admin's organisation invitation.
+ * The organisation's roles a member invitation can carry (invitation.role_id). The Organization
+ * Owner role is not offered: only a Super Admin sends an Owner invitation.
  */
 export function invitableRoles(roles: CustomRole[]): CustomRole[] {
-  return roles.filter(r => r.id !== 'role-owner');
+  return roles.filter(r => r.id !== OWNER_ROLE_ID);
 }
 
 /** The invitation's role name: looked up by role_id, falling back to the name it was sent with. */
@@ -24,38 +31,17 @@ export function isInviteExpired(inv: Pick<DemoInvitation, 'expiresAt'>, now = Da
   return new Date(inv.expiresAt).getTime() <= now;
 }
 
+export type InviteDisplayStatus = 'pending' | 'accepted' | 'expired' | 'revoked';
+
+/** How an invitation reads in the UI: expired = pending and past expires_at (not stored) */
+export function inviteDisplayStatus(inv: Pick<DemoInvitation, 'status' | 'expiresAt'>, now = Date.now()): InviteDisplayStatus {
+  if (inv.status === 'pending' && isInviteExpired(inv, now)) return 'expired';
+  return inv.status;
+}
+
 /** "in 5 days", "tomorrow", "today", "2 days ago" */
 export function daysLeftText(expiresAt: string, now = Date.now()): string {
   const days = Math.ceil((new Date(expiresAt).getTime() - now) / (24 * 60 * 60 * 1000));
   if (days <= 0) return days === 0 ? 'today' : `${-days} ${days === -1 ? 'day' : 'days'} ago`;
   return days === 1 ? 'tomorrow' : `in ${days} days`;
-}
-
-export type InvitePayload = Omit<DemoInvitation, 'status' | 'acceptedAt'>;
-
-export function encodeInvite(inv: DemoInvitation): string {
-  // Status lives in the inviting browser; the link only carries what the invitee needs
-  const payload: InvitePayload = { ...inv };
-  delete (payload as Partial<DemoInvitation>).status;
-  delete (payload as Partial<DemoInvitation>).acceptedAt;
-  const bytes = new TextEncoder().encode(JSON.stringify(payload));
-  let binary = '';
-  bytes.forEach(b => (binary += String.fromCharCode(b)));
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
-}
-
-export function decodeInvite(token: string): InvitePayload | null {
-  try {
-    const binary = atob(token.replace(/-/g, '+').replace(/_/g, '/'));
-    const json = new TextDecoder().decode(Uint8Array.from(binary, c => c.charCodeAt(0)));
-    const data = JSON.parse(json) as InvitePayload;
-    return data.id && data.email && data.organizationId ? data : null;
-  } catch {
-    return null;
-  }
-}
-
-export function inviteLink(inv: DemoInvitation): string {
-  const origin = typeof window === 'undefined' ? '' : window.location.origin;
-  return `${origin}/invite/${encodeInvite(inv)}`;
 }

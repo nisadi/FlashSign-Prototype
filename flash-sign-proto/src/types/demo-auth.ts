@@ -1,3 +1,5 @@
+import { DEMO_TEMP_PASSWORD, hashTempPassword } from '@/lib/temp-password';
+
 export type DemoRole =
   | 'executive'
   | 'project_manager'
@@ -28,7 +30,6 @@ export interface DemoUser {
   organizationId?: string | null;
   registrationCompleted?: boolean;
   organizationSetupCompleted?: boolean;
-  avatarColor?: string;
   avatarInitials?: string;
   createdAt?: string;
 }
@@ -52,10 +53,11 @@ export interface DemoWorkspace {
 }
 
 /**
- * An invitation to join an organization (finalized tables `invitation` + `invitation_project`).
- * Only the Owner comes in through an organisation invitation; everyone else joins through one
- * of these. The invitee gets one of the organisation's own roles (`roleId`) and, for a Project
- * User Access role, the projects in `projectIds` (copied to project_member on acceptance).
+ * An invitation to join an organization (tables `invitation` + `invitation_project`). Everyone
+ * joins through one: the Super Admin invites the Owner (role = the Organization Owner role) and
+ * the Owner invites members. The email carries a one-time temporary password; only its hash is
+ * kept, until the person sets their own password at first login. For a Project User Access role,
+ * `projectIds` are copied to project_member then.
  * Expired = status 'pending' and past `expiresAt` (not a stored status).
  */
 export interface DemoInvitation {
@@ -63,7 +65,7 @@ export interface DemoInvitation {
   email: string;
   /** invitation.name */
   fullName?: string;
-  /** invitation.role_id: one of this organisation's roles */
+  /** invitation.role_id: one of this organisation's roles ('role-owner' = an Owner invitation) */
   roleId: string;
   /** Role name at the time of sending (display only; the role is looked up by roleId) */
   roleName?: string;
@@ -77,7 +79,12 @@ export interface DemoInvitation {
   invitedById: string;
   invitedByName: string;
   acceptedByUserId?: string;
+  /** invitation.temp_password_hash: kept until the person sets their own password, then emptied */
+  tempPasswordHash?: string;
+  /** invitation.failed_attempts: wrong temporary passwords; locked after 5 (a resend unlocks it) */
+  failedAttempts?: number;
   sentAt: string;
+  /** sentAt + 7 days */
   expiresAt: string;
   status: 'pending' | 'accepted' | 'revoked';
   acceptedAt?: string;
@@ -311,15 +318,6 @@ export const INITIAL_DEMO_WORKSPACES: DemoWorkspace[] = [
   },
 ];
 
-export const PRESET_AVATAR_COLORS = [
-  { label: 'Mint Flash', value: '#00c2a8' },
-  { label: 'Deep Emerald', value: '#009882' },
-  { label: 'Ocean Blue', value: '#2563eb' },
-  { label: 'Royal Violet', value: '#7c3aed' },
-  { label: 'Amber Flame', value: '#d97706' },
-  { label: 'Slate Ink', value: '#1a3539' },
-];
-
 export const DEMO_PRESET_USERS: DemoUser[] = [
   {
     id: 'user-demo',
@@ -332,7 +330,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     organizationId: 'ws-flash',
     registrationCompleted: true,
     organizationSetupCompleted: true,
-    avatarColor: '#00c2a8',
     avatarInitials: 'DU',
     createdAt: '2026-01-01T09:00:00Z',
   },
@@ -347,7 +344,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     organizationId: 'ws-acme',
     registrationCompleted: true,
     organizationSetupCompleted: true,
-    avatarColor: '#00c2a8',
     avatarInitials: 'SC',
     createdAt: '2026-01-10T09:00:00Z',
   },
@@ -362,7 +358,6 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     organizationId: 'ws-acme',
     registrationCompleted: true,
     organizationSetupCompleted: true,
-    avatarColor: '#2563eb',
     avatarInitials: 'AR',
     createdAt: '2026-01-10T09:00:00Z',
   },
@@ -377,31 +372,22 @@ export const DEMO_PRESET_USERS: DemoUser[] = [
     organizationId: 'ws-acme',
     registrationCompleted: true,
     organizationSetupCompleted: true,
-    avatarColor: '#7c3aed',
     avatarInitials: 'ER',
     createdAt: '2026-01-10T09:00:00Z',
-  },
-  {
-    id: 'user-incomplete',
-    fullName: 'Taylor Morgan',
-    email: 'incomplete@flashsign.com',
-    password: 'Demo123!',
-    jobTitle: 'Founder & CEO',
-    bio: 'New user registered without completing organization setup.',
-    role: 'org_admin',
-    organizationId: null,
-    registrationCompleted: true,
-    organizationSetupCompleted: false,
-    avatarColor: '#d97706',
-    avatarInitials: 'TM',
-    createdAt: '2026-03-01T09:00:00Z',
   },
 ];
 
 const daysFromNow = (days: number) => new Date(Date.now() + days * 24 * 60 * 60 * 1000).toISOString();
 
-/** Invitations the owner of Flash Technologies has sent but nobody has accepted yet */
+/** Hash of DEMO_TEMP_PASSWORD, so the seeded invitations can be tried at the login page */
+const DEMO_TEMP_HASH = hashTempPassword(DEMO_TEMP_PASSWORD);
+
+/**
+ * Seeded invitations (one `invitation` table for Owners and members). Pending ones carry the
+ * demo temporary password "Welcome-2026": sign in with the invited email and that password.
+ */
 export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
+  // Members invited by the Owner of Flash Technologies
   {
     id: 'inv-demo-1',
     email: 'ravi.perera@flashsign.io',
@@ -415,6 +401,8 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     organizationName: 'Flash Technologies',
     invitedById: 'demo-owner',
     invitedByName: 'Aria Chen',
+    tempPasswordHash: DEMO_TEMP_HASH,
+    failedAttempts: 0,
     sentAt: daysFromNow(-1),
     expiresAt: daysFromNow(6),
     status: 'pending',
@@ -431,6 +419,8 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     organizationName: 'Flash Technologies',
     invitedById: 'demo-owner',
     invitedByName: 'Aria Chen',
+    tempPasswordHash: DEMO_TEMP_HASH,
+    failedAttempts: 0,
     sentAt: daysFromNow(-3),
     expiresAt: daysFromNow(4),
     status: 'pending',
@@ -445,8 +435,48 @@ export const INITIAL_DEMO_INVITATIONS: DemoInvitation[] = [
     organizationName: 'Flash Technologies',
     invitedById: 'demo-owner',
     invitedByName: 'Aria Chen',
+    tempPasswordHash: DEMO_TEMP_HASH,
+    failedAttempts: 0,
     sentAt: daysFromNow(-9),
     expiresAt: daysFromNow(-2),
     status: 'pending',
+  },
+  // Owner invitations sent by the Super Admin (role = the Organization Owner role)
+  {
+    id: 'inv-owner-vertex',
+    email: 'elena.r@vertexlabs.ai',
+    fullName: 'Elena Rostova',
+    roleId: 'role-owner',
+    roleName: 'Organization Owner',
+    projectIds: [],
+    organizationId: 'ws-vertex',
+    organizationName: 'Vertex Labs',
+    invitedById: 'demo-super-admin',
+    invitedByName: 'FlashSign Super Admin',
+    tempPasswordHash: DEMO_TEMP_HASH,
+    failedAttempts: 0,
+    sentAt: daysFromNow(-2),
+    expiresAt: daysFromNow(5),
+    status: 'pending',
+    createdAt: '2026-02-15T09:00:00Z',
+  },
+  {
+    id: 'inv-owner-acme',
+    email: 'sarah.chen@acmedigital.com',
+    fullName: 'Sarah Chen',
+    roleId: 'role-owner',
+    roleName: 'Organization Owner',
+    projectIds: [],
+    organizationId: 'ws-acme',
+    organizationName: 'Acme Digital',
+    invitedById: 'demo-super-admin',
+    invitedByName: 'FlashSign Super Admin',
+    acceptedByUserId: 'user-sarah',
+    failedAttempts: 0,
+    sentAt: '2026-01-08T08:30:00Z',
+    expiresAt: '2026-01-15T08:30:00Z',
+    status: 'accepted',
+    acceptedAt: '2026-01-10T09:00:00Z',
+    createdAt: '2026-01-08T08:30:00Z',
   },
 ];

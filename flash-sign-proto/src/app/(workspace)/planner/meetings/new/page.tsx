@@ -21,7 +21,7 @@ import { MemberAvatar } from '@/components/collaboration/member-avatar';
 
 export default function NewMeetingPage() {
   const router = useRouter();
-  const { users, projects, meetings, addMeeting } = useApp();
+  const { members: users, projects, meetings, addMeeting } = useApp();
 
   const [title, setTitle] = useState('');
   const [description, setDescription] = useState('');

@@ -72,7 +72,6 @@ export interface DemoUserAccount {
   myTasksAccess: boolean;
   teamAccess: TeamAccess;
   assignedProjectIds: string[];
-  avatarColor: string;
   avatarInitials: string;
 }
 
@@ -144,48 +143,13 @@ export interface SuperAdminOrg {
   workingHoursEnd: string;
   createdAt: string;
   updatedAt: string;
+  /** organization.setup_completed_at: set when the Owner finishes "Complete your organisation"; empty = the Owner is sent there after login */
+  setupCompletedAt?: string;
   /** Deleted by the Super Admin (soft delete) */
   deletedAt?: string;
 }
 
-/**
- * organization_invitation: a Super Admin's invitation for an Owner to take over or create an
- * organisation. Revoking sets status 'expired' and revokedAt; revokedAt tells the two apart.
- */
-export interface SuperAdminOrgInvitation {
-  id: string;
-  /** Set when the Super Admin created the organisation first, or once the Owner accepts */
-  organizationId?: string;
-  invitedByUserId: string;
-  acceptedByUserId?: string;
-  organizationName: string;
-  ownerName: string;
-  ownerEmail: string;
-  plan: OrgPlan;
-  status: 'pending' | 'accepted' | 'expired';
-  /** Last time it was sent (moves on resend) */
-  sentAt: string;
-  /** sentAt + 7 days */
-  expiresAt: string;
-  acceptedAt?: string;
-  revokedAt?: string;
-  createdAt: string;
-  updatedAt: string;
-}
-
-export const ORG_INVITE_VALID_DAYS = 7;
-
-/** How an organisation invitation reads in the UI: a pending one past expires_at counts as expired. */
-export function orgInviteDisplayStatus(
-  inv: SuperAdminOrgInvitation,
-  now = Date.now()
-): 'pending' | 'accepted' | 'expired' | 'revoked' {
-  if (inv.revokedAt) return 'revoked';
-  if (inv.status === 'pending' && new Date(inv.expiresAt).getTime() <= now) return 'expired';
-  return inv.status;
-}
-
-export type FeatureKey = 'contracts' | 'ai_agents' | 'srs_analysis';
+export type FeatureKey = 'ai_agents' | 'srs_analysis';
 
 /** organization_feature: one switch per organisation and feature key. */
 export interface OrganizationFeature {
@@ -197,7 +161,6 @@ export interface OrganizationFeature {
 }
 
 export const FEATURE_DEFINITIONS: { key: FeatureKey; label: string; description: string; defaultEnabled: boolean }[] = [
-  { key: 'contracts', label: 'Contracts', description: 'Contracts as their own record type under Documents.', defaultEnabled: false },
   { key: 'ai_agents', label: 'AI Agent Hub', description: 'AI coding-agent connections, tokens and activity (Phase 2).', defaultEnabled: true },
   { key: 'srs_analysis', label: 'SRS analysis', description: 'Analyse uploaded SRS files into proposed tasks (Phase 2).', defaultEnabled: true },
 ];
@@ -318,7 +281,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     myTasksAccess: false,
     teamAccess: 'management',
     assignedProjectIds: [],
-    avatarColor: '#00c2a8',
     avatarInitials: 'SA',
   },
   {
@@ -341,7 +303,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     myTasksAccess: true,
     teamAccess: 'management',
     assignedProjectIds: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
-    avatarColor: '#009882',
     avatarInitials: 'AC',
   },
   {
@@ -364,7 +325,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     myTasksAccess: true,
     teamAccess: 'management',
     assignedProjectIds: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
-    avatarColor: '#5c6bc0',
     avatarInitials: 'MW',
   },
   {
@@ -387,7 +347,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     myTasksAccess: true,
     teamAccess: 'member',
     assignedProjectIds: ['p1', 'p2', 'p3'], // Distinct assigned projects
-    avatarColor: '#26a69a',
     avatarInitials: 'JO',
   },
   {
@@ -410,7 +369,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     myTasksAccess: true,
     teamAccess: 'member',
     assignedProjectIds: ['p1', 'p3', 'p5'], // Distinct assigned projects
-    avatarColor: '#ab47bc',
     avatarInitials: 'PN',
   },
   {
@@ -433,7 +391,6 @@ export const DEMO_ACCOUNTS: DemoUserAccount[] = [
     myTasksAccess: true,
     teamAccess: 'member',
     assignedProjectIds: ['p1', 'p4', 'p6'], // Distinct assigned projects
-    avatarColor: '#66bb6a',
     avatarInitials: 'TN',
   },
 ];
@@ -471,6 +428,7 @@ export const INITIAL_SUPER_ADMIN_ORGS: SuperAdminOrg[] = [
     workingHoursStart: '09:00',
     workingHoursEnd: '17:00',
     createdAt: '2026-01-15T09:00:00Z',
+    setupCompletedAt: '2026-01-15T09:00:00Z',
     updatedAt: '2026-01-15T09:00:00Z',
   },
   {
@@ -488,6 +446,7 @@ export const INITIAL_SUPER_ADMIN_ORGS: SuperAdminOrg[] = [
     workingHoursStart: '09:00',
     workingHoursEnd: '17:00',
     createdAt: '2026-01-10T09:00:00Z',
+    setupCompletedAt: '2026-01-10T09:00:00Z',
     updatedAt: '2026-01-10T09:00:00Z',
   },
   {
@@ -505,6 +464,7 @@ export const INITIAL_SUPER_ADMIN_ORGS: SuperAdminOrg[] = [
     workingHoursStart: '08:30',
     workingHoursEnd: '17:30',
     createdAt: '2026-02-01T09:00:00Z',
+    setupCompletedAt: '2026-02-01T09:00:00Z',
     updatedAt: '2026-02-01T09:00:00Z',
   },
   {
@@ -537,6 +497,7 @@ export const INITIAL_SUPER_ADMIN_ORGS: SuperAdminOrg[] = [
     workingHoursStart: '09:00',
     workingHoursEnd: '18:00',
     createdAt: '2026-03-01T09:00:00Z',
+    setupCompletedAt: '2026-03-01T09:00:00Z',
     updatedAt: '2026-03-01T09:00:00Z',
   },
 ];
@@ -553,79 +514,6 @@ export const MOCK_ORG_COUNTS: Record<string, { members: number; projects: number
 };
 
 /** organization_invitation rows */
-export const INITIAL_SUPER_ADMIN_INVITATIONS: SuperAdminOrgInvitation[] = [
-  {
-    id: 'inv-org-vertex',
-    organizationId: 'ws-vertex',
-    invitedByUserId: 'demo-super-admin',
-    organizationName: 'Vertex Labs',
-    ownerName: 'Elena Rostova',
-    ownerEmail: 'elena.r@vertexlabs.ai',
-    plan: 'starter',
-    status: 'pending',
-    sentAt: '2026-11-10T09:00:00Z',
-    expiresAt: '2026-11-17T09:00:00Z',
-    createdAt: '2026-02-15T09:00:00Z',
-    updatedAt: '2026-11-10T09:00:00Z',
-  },
-  {
-    id: 'inv-org-1',
-    invitedByUserId: 'demo-super-admin',
-    organizationName: 'Quantum Dynamics',
-    ownerName: 'Noah Fernando',
-    ownerEmail: 'contact@quantumdynamics.io',
-    plan: 'enterprise',
-    status: 'pending',
-    sentAt: '2026-11-11T10:00:00Z',
-    expiresAt: '2026-11-18T10:00:00Z',
-    createdAt: '2026-11-11T10:00:00Z',
-    updatedAt: '2026-11-11T10:00:00Z',
-  },
-  {
-    id: 'inv-org-2',
-    organizationId: 'ws-acme',
-    invitedByUserId: 'demo-super-admin',
-    acceptedByUserId: 'user-sarah',
-    organizationName: 'Acme Digital',
-    ownerName: 'Sarah Chen',
-    ownerEmail: 'sarah.chen@acmedigital.com',
-    plan: 'enterprise',
-    status: 'accepted',
-    sentAt: '2026-01-08T08:30:00Z',
-    expiresAt: '2026-01-15T08:30:00Z',
-    acceptedAt: '2026-01-10T09:00:00Z',
-    createdAt: '2026-01-08T08:30:00Z',
-    updatedAt: '2026-01-10T09:00:00Z',
-  },
-  {
-    id: 'inv-org-3',
-    invitedByUserId: 'demo-super-admin',
-    organizationName: 'Starlight Media',
-    ownerName: 'Maya Silva',
-    ownerEmail: 'founders@starlight.co',
-    plan: 'starter',
-    status: 'pending',
-    sentAt: '2026-10-10T12:00:00Z',
-    expiresAt: '2026-10-17T12:00:00Z',
-    createdAt: '2026-10-10T12:00:00Z',
-    updatedAt: '2026-10-10T12:00:00Z',
-  },
-  {
-    id: 'inv-org-4',
-    invitedByUserId: 'demo-super-admin',
-    organizationName: 'Harbor Logistics',
-    ownerName: 'Ishan Perera',
-    ownerEmail: 'ishan@harborlogistics.lk',
-    plan: 'pro',
-    status: 'expired',
-    sentAt: '2026-10-20T12:00:00Z',
-    expiresAt: '2026-10-27T12:00:00Z',
-    revokedAt: '2026-10-22T08:00:00Z',
-    createdAt: '2026-10-20T12:00:00Z',
-    updatedAt: '2026-10-22T08:00:00Z',
-  },
-];
-
 /** organization_feature rows. No row = the feature's default (FEATURE_DEFINITIONS). */
 export const INITIAL_ORGANIZATION_FEATURES: OrganizationFeature[] = [];
 
@@ -636,7 +524,6 @@ export const RBAC_STORAGE_KEYS = {
   CUSTOM_ROLES: 'flashsign_rbac_custom_roles',
   DEMO_ACCOUNTS: 'flashsign_rbac_demo_accounts',
   SUPER_ADMIN_ORGS: 'flashsign_super_admin_orgs_v2',
-  SUPER_ADMIN_INVITATIONS: 'flashsign_super_admin_invites_v2',
   SUPER_ADMINS: 'flashsign_super_admins',
   ORGANIZATION_FEATURES: 'flashsign_organization_features',
 };

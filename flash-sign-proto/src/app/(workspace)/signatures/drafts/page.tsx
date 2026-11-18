@@ -4,12 +4,11 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { FilePen, Search, Eye, Plus, LayoutTemplate, PenLine, Trash2 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
-import { FEATURES } from '@/lib/features';
 import { SignatureRequestStatusBadge } from '@/components/documents/document-badges';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 
 export default function DraftSignaturesPage() {
-  const { signatureRequests, documentItems, contracts, trashSignatureRequests } = useApp();
+  const { signatureRequests, documentItems, trashSignatureRequests } = useApp();
   const [searchQuery, setSearchQuery] = useState('');
 
   const draftRequests = useMemo(() => {
@@ -92,7 +91,6 @@ export default function DraftSignaturesPage() {
             <div className="divide-y divide-line">
               {filteredRequests.map((req) => {
                 const linkedDoc = req.documentId ? documentItems.find(d => d.id === req.documentId) : undefined;
-                const linkedContract = FEATURES.contracts && req.contractId ? contracts.find(c => c.id === req.contractId) : undefined;
                 return (
                   <div
                     key={req.id}
@@ -124,11 +122,11 @@ export default function DraftSignaturesPage() {
                             </span>
                           </>
                         )}
-                        {(linkedContract || linkedDoc) && (
+                        {linkedDoc && (
                           <>
                             <span>•</span>
                             <span className="truncate">
-                              {linkedContract ? `Contract: ${linkedContract.title}` : `Document: ${linkedDoc?.title}`}
+                              Document: {linkedDoc.title}
                             </span>
                           </>
                         )}

@@ -8,7 +8,7 @@ import { ACTIVITY_CATEGORIES, activityCategoryOf } from '@/lib/activity';
 import type { ActivityCategory } from '@/types';
 import {
   Activity, Bot, FileText, CheckSquare, Settings, FolderKanban, Clock, CalendarDays, Users, UserRound,
-  Shield, FileSignature, ScrollText, Lock,
+  Shield, FileSignature, Lock,
 } from 'lucide-react';
 
 const ICONS: Record<ActivityCategory, React.ElementType> = {
@@ -20,7 +20,6 @@ const ICONS: Record<ActivityCategory, React.ElementType> = {
   member: UserRound,
   role: Shield,
   document: FileText,
-  contract: ScrollText,
   agreement: FileSignature,
   agent: Bot,
   settings: Settings,

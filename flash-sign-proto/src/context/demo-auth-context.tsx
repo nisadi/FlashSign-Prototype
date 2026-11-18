@@ -15,7 +15,8 @@ import {
   DEMO_PRESET_USERS,
   INITIAL_DEMO_INVITATIONS,
 } from '@/types/demo-auth';
-import { INVITE_VALID_DAYS, isInviteExpired, type InvitePayload } from '@/lib/invitations';
+import { INVITE_VALID_DAYS, OWNER_ROLE_ID, isInviteExpired } from '@/lib/invitations';
+import { MAX_TEMP_PASSWORD_ATTEMPTS, checkTempPassword, generateTempPassword, hashTempPassword } from '@/lib/temp-password';
 import {
   safeStorageGet,
   safeStorageSet,
@@ -27,7 +28,6 @@ import {
   type CustomRole,
   type DemoUserAccount,
   type SuperAdminOrg,
-  type SuperAdminOrgInvitation,
   type SuperAdminRecord,
   type OrganizationFeature,
   type FeatureKey,
@@ -36,14 +36,11 @@ import {
   INITIAL_ROLES,
   DEMO_ACCOUNTS,
   INITIAL_SUPER_ADMIN_ORGS,
-  INITIAL_SUPER_ADMIN_INVITATIONS,
   INITIAL_SUPER_ADMINS,
   INITIAL_ORGANIZATION_FEATURES,
-  ORG_INVITE_VALID_DAYS,
   RBAC_STORAGE_KEYS,
   defaultDashboardFor,
   featuresFor,
-  orgInviteDisplayStatus,
 } from '@/lib/rbac';
 import { setActiveOrganizationFeatures } from '@/lib/features';
 
@@ -76,6 +73,7 @@ export interface DemoSession {
 const DAY_MS = 24 * 60 * 60 * 1000;
 const SESSIONS_KEY = 'flashsign_demo_sessions';
 const NOTIFICATION_SETTINGS_KEY = 'flashsign_demo_notification_settings';
+const FIRST_LOGIN_KEY = 'flashsign_demo_first_login_invitation';
 
 /** Maps one of the organisation's roles to the legacy persona the PM screens still read. */
 function legacyRoleFor(roleId: string): DemoRole {
@@ -142,7 +140,6 @@ export interface DemoAuthContextType {
   isAuthenticated: boolean;
   isHydrated: boolean;
   completedSteps: string[];
-  pendingSignupUser: DemoUser | null;
   authMessage: string | null;
   invitations: DemoInvitation[];
 
@@ -162,8 +159,10 @@ export interface DemoAuthContextType {
   superAdmins: SuperAdminRecord[];
   /** organization rows (soft-deleted ones included; filter on deletedAt) */
   superAdminOrgs: SuperAdminOrg[];
-  superAdminOrgInvitations: SuperAdminOrgInvitation[];
-  /** Creates the organisation and sends its Owner an organization_invitation linked to it */
+  /**
+   * Creates the organisation and sends its Owner an invitation (role = Organization Owner).
+   * Returns the one-time temporary password for the invitation email (it is not stored).
+   */
   createSuperAdminOrg: (data: {
     name: string;
     slug: string;
@@ -175,32 +174,18 @@ export interface DemoAuthContextType {
     timezone: string;
     ownerName: string;
     ownerEmail: string;
-  }) => { success: boolean; organization?: SuperAdminOrg; error?: string };
+  }) => { success: boolean; organization?: SuperAdminOrg; invitation?: DemoInvitation; tempPassword?: string; error?: string };
   updateSuperAdminOrg: (orgId: string, data: Partial<SuperAdminOrg>) => { success: boolean; error?: string };
   updateSuperAdminOrgStatus: (orgId: string, status: OrgStatus) => void;
   /** Soft delete: sets organization.deleted_at */
   deleteSuperAdminOrg: (orgId: string) => void;
-  inviteSuperAdminOrg: (data: {
-    organizationName: string;
-    ownerName: string;
-    ownerEmail: string;
-    plan: OrgPlan;
-  }) => { success: boolean; invitation?: SuperAdminOrgInvitation; error?: string };
-  /** Changes the Owner name / email (or plan) on a pending organisation invitation */
-  updateSuperAdminOrgInvite: (
-    inviteId: string,
-    data: { ownerName?: string; ownerEmail?: string; plan?: OrgPlan; organizationName?: string }
-  ) => void;
-  resendSuperAdminOrgInvite: (inviteId: string) => void;
-  revokeSuperAdminOrgInvite: (inviteId: string) => void;
-
   // ── Organisation record & features (organization, organization_feature) ──
   /** The active organisation's organization row */
   currentOrganizationRecord: SuperAdminOrg | null;
   /** Owner: update the active organisation's own columns (Settings > Preferences) */
   updateOrganization: (
     orgId: string,
-    data: Partial<Pick<SuperAdminOrg, 'name' | 'slug' | 'description' | 'industry' | 'website' | 'timezone' | 'workingHoursStart' | 'workingHoursEnd'>>
+    data: Partial<Pick<SuperAdminOrg, 'name' | 'slug' | 'description' | 'industry' | 'website' | 'timezone' | 'workingHoursStart' | 'workingHoursEnd' | 'setupCompletedAt'>>
   ) => { success: boolean; error?: string };
   organizationFeatures: OrganizationFeature[];
   setOrganizationFeature: (orgId: string, key: FeatureKey, enabled: boolean) => void;
@@ -213,30 +198,20 @@ export interface DemoAuthContextType {
   revokeOtherSessions: () => void;
 
   // ── Authentication & Onboarding ───────────────────────────────────────────
-  signUp: (data: {
-    fullName: string;
-    email: string;
-    password: string;
-    jobTitle?: string;
-  }) => { success: boolean; user?: DemoUser; error?: string };
-
-  createOrganization: (data: {
-    name: string;
-    slug: string;
-    industry: string;
-    /** Not in the finalized organization table; kept for SRS FR-AUTH-003 (reported as unresolved) */
-    size: string;
-    website?: string;
-    description?: string;
-    /** organization.timezone (IANA) */
-    timezone?: string;
-  }) => { success: boolean; organization?: DemoWorkspace; error?: string };
-
   login: (
     email: string,
     password?: string,
     rememberMe?: boolean
-  ) => { success: boolean; error?: string; requiresOrgSetup?: boolean; user?: DemoUser; rbacUser?: DemoUserAccount };
+  ) => {
+    success: boolean;
+    error?: string;
+    /** The email and temporary password matched a pending invitation: go to Set your password */
+    requiresPasswordSetup?: boolean;
+    /** The Owner hasn't finished "Complete your organisation" (organization.setup_completed_at empty) */
+    requiresOrganizationSetup?: boolean;
+    user?: DemoUser;
+    rbacUser?: DemoUserAccount;
+  };
 
   logout: () => void;
   clearAuthMessage: () => void;
@@ -249,25 +224,22 @@ export interface DemoAuthContextType {
     message?: string;
     roleId: string;
     assignedProjectIds?: string[];
-  }) => { success: boolean; invitation?: DemoInvitation; error?: string };
-  resendInvitation: (id: string) => DemoInvitation | undefined;
+  }) => { success: boolean; invitation?: DemoInvitation; tempPassword?: string; error?: string };
+  /** Sends it again with a new temporary password (unlocks it, restarts the 7 days) */
+  resendInvitation: (id: string) => { invitation: DemoInvitation; tempPassword: string } | undefined;
   revokeInvitation: (id: string) => void;
-  acceptInvitation: (
-    invite: InvitePayload,
-    data: { fullName: string; password: string; jobTitle?: string }
-  ) => { success: boolean; error?: string };
-  setPendingSignupUser: (user: DemoUser | null) => void;
+  /** Changes the name or email on a pending invitation (e.g. the Owner's, from the Super Admin page) */
+  updateInvitation: (id: string, data: { fullName?: string; email?: string }) => { success: boolean; error?: string };
+  /** The invitation whose temporary password was just accepted at the login page */
+  firstLoginInvitation: DemoInvitation | null;
+  /** First login: the person sets their own password; only now is their account created */
+  completeFirstLogin: (data: { fullName: string; password: string; jobTitle?: string }) => {
+    success: boolean;
+    error?: string;
+    rbacUser?: DemoUserAccount;
+    requiresOrganizationSetup?: boolean;
+  };
 
-  // Backward compatibility methods
-  register: (fullName: string, email: string, companyName?: string) => void;
-  selectWorkspace: (workspaceId: string) => void;
-  createWorkspace: (
-    name: string,
-    type: string,
-    companySize: string,
-    description?: string,
-    accentColor?: string
-  ) => DemoWorkspace;
   updateProfile: (updates: Partial<DemoUser>) => void;
   updatePreferences: (updates: Partial<DemoPreferences>) => void;
   markStepComplete: (step: string) => void;
@@ -284,7 +256,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
   const [preferences, setPreferences] = useState<DemoPreferences>(DEFAULT_PREFERENCES);
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [completedSteps, setCompletedSteps] = useState<string[]>(['workspace']);
-  const [pendingSignupUser, setPendingSignupUserState] = useState<DemoUser | null>(null);
   const [authMessage, setAuthMessageState] = useState<string | null>(null);
   const [invitations, setInvitations] = useState<DemoInvitation[]>(INITIAL_DEMO_INVITATIONS);
   const [isHydrated, setIsHydrated] = useState(false);
@@ -297,7 +268,8 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
   // Super Admin Organizations and Invitations
   const [superAdmins] = useState<SuperAdminRecord[]>(INITIAL_SUPER_ADMINS);
   const [superAdminOrgs, setSuperAdminOrgs] = useState<SuperAdminOrg[]>(INITIAL_SUPER_ADMIN_ORGS);
-  const [superAdminOrgInvitations, setSuperAdminOrgInvitations] = useState<SuperAdminOrgInvitation[]>(INITIAL_SUPER_ADMIN_INVITATIONS);
+  // The invitation whose temporary password was accepted at login, until the password is set
+  const [firstLoginInvitationId, setFirstLoginInvitationId] = useState<string | null>(null);
   const [organizationFeatures, setOrganizationFeatures] = useState<OrganizationFeature[]>(INITIAL_ORGANIZATION_FEATURES);
 
   // Personal settings: user_notification_setting rows per user, and session rows
@@ -325,12 +297,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       const storedSuperAdminOrgs = safeStorageGet<SuperAdminOrg[] | null>(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, null);
       if (storedSuperAdminOrgs && storedSuperAdminOrgs.length > 0) {
         setSuperAdminOrgs(storedSuperAdminOrgs);
-      }
-
-      // Hydrate super admin org invites
-      const storedSuperAdminInvites = safeStorageGet<SuperAdminOrgInvitation[] | null>(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, null);
-      if (storedSuperAdminInvites && storedSuperAdminInvites.length > 0) {
-        setSuperAdminOrgInvitations(storedSuperAdminInvites);
       }
 
       // Hydrate organisation feature switches, notification settings and sessions
@@ -372,12 +338,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         storedWorkspaces.forEach((w) => wsMap.set(w.id, w));
         currentWorkspacesList = Array.from(wsMap.values());
         setWorkspaces(currentWorkspacesList);
-      }
-
-      // 3. Hydrate pending registration state
-      const storedPending = safeStorageGet<DemoUser | null>(STORAGE_KEYS.PENDING_SIGNUP, null);
-      if (storedPending) {
-        setPendingSignupUserState(storedPending);
       }
 
       // 4. Hydrate auth success message
@@ -423,6 +383,8 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       // 7. Invitations (older saved invitations without a role_id are dropped)
       const storedInvitations = safeStorageGet<DemoInvitation[] | null>(STORAGE_KEYS.INVITATIONS, null);
       if (storedInvitations) setInvitations(storedInvitations.filter((i) => Boolean(i.roleId)));
+      const storedFirstLogin = safeStorageGet<string | null>(FIRST_LOGIN_KEY, null);
+      if (storedFirstLogin) setFirstLoginInvitationId(storedFirstLogin);
     } finally {
       setIsHydrated(true);
     }
@@ -469,7 +431,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         jobTitle: account.jobTitle,
         role: mappedRole,
         organizationId: account.organizationId || 'ws-flash',
-        avatarColor: account.avatarColor,
         avatarInitials: account.avatarInitials,
         registrationCompleted: true,
         organizationSetupCompleted: true,
@@ -662,10 +623,26 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, next);
   }, []);
 
-  const saveOrgInvites = useCallback((next: SuperAdminOrgInvitation[]) => {
-    setSuperAdminOrgInvitations(next);
-    safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, next);
+  const saveInvitations = useCallback((next: DemoInvitation[]) => {
+    setInvitations(next);
+    safeStorageSet(STORAGE_KEYS.INVITATIONS, next);
   }, []);
+
+  /**
+   * One person, one organisation (tables.txt users / invitation): is this email already a
+   * user's? 'here' = a member of this organisation, 'elsewhere' = of another one.
+   */
+  const emailInUse = useCallback(
+    (email: string, organizationId?: string): 'here' | 'elsewhere' | null => {
+      const e = email.trim().toLowerCase();
+      const account = demoAccounts.find((a) => a.email.toLowerCase() === e);
+      const user = users.find((u) => u.email.trim().toLowerCase() === e);
+      const orgOf = account ? (account.isSuperAdmin ? '__platform__' : account.organizationId) : user?.organizationId;
+      if (!account && !user) return null;
+      return organizationId && orgOf === organizationId ? 'here' : 'elsewhere';
+    },
+    [demoAccounts, users]
+  );
 
   /** Keeps the workspace switcher (DemoWorkspace) in step with an organization row */
   const syncWorkspace = useCallback((org: SuperAdminOrg) => {
@@ -692,25 +669,13 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     [superAdminOrgs]
   );
 
-  const pendingInviteClash = useCallback(
-    (ownerEmail: string, organizationName: string, exceptInviteId?: string) =>
-      superAdminOrgInvitations.some(
-        (i) =>
-          i.id !== exceptInviteId &&
-          orgInviteDisplayStatus(i) === 'pending' &&
-          i.ownerEmail.toLowerCase() === ownerEmail.toLowerCase() &&
-          i.organizationName.trim().toLowerCase() === organizationName.trim().toLowerCase()
-      ),
-    [superAdminOrgInvitations]
-  );
-
   const createSuperAdminOrg = useCallback<DemoAuthContextType['createSuperAdminOrg']>(
     (data) => {
       const slug = slugify(data.slug || data.name);
       if (!slug) return { success: false, error: 'Enter a workspace slug.' };
       if (slugTaken(slug)) return { success: false, error: 'This slug is already used by another organisation.' };
-      if (pendingInviteClash(data.ownerEmail, data.name)) {
-        return { success: false, error: 'This Owner already has a pending invitation for an organisation with this name.' };
+      if (emailInUse(data.ownerEmail)) {
+        return { success: false, error: `${data.ownerEmail.trim()} already belongs to someone in an organisation. A person can be in one organisation only.` };
       }
       const now = Date.now();
       const nowIso = new Date(now).toISOString();
@@ -732,26 +697,33 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         createdAt: nowIso,
         updatedAt: nowIso,
       };
-      // Creating an organisation also sends its Owner an invitation linked to it
-      const invite: SuperAdminOrgInvitation = {
-        id: 'inv-org-' + now.toString(36),
+      // Creating an organisation also sends its Owner an invitation (role = Organization Owner).
+      // The email carries a one-time temporary password; only its hash is kept.
+      const tempPassword = generateTempPassword();
+      const invite: DemoInvitation = {
+        id: 'inv-owner-' + now.toString(36),
+        email: data.ownerEmail.trim().toLowerCase(),
+        fullName: data.ownerName.trim(),
+        roleId: OWNER_ROLE_ID,
+        roleName: 'Organization Owner',
+        projectIds: [],
         organizationId: org.id,
-        invitedByUserId: superAdminId,
         organizationName: org.name,
-        ownerName: data.ownerName.trim(),
-        ownerEmail: data.ownerEmail.trim().toLowerCase(),
-        plan: data.plan,
-        status: 'pending',
+        invitedById: superAdminId,
+        invitedByName: currentRbacUser?.name ?? 'FlashSign Super Admin',
+        tempPasswordHash: hashTempPassword(tempPassword),
+        failedAttempts: 0,
         sentAt: nowIso,
-        expiresAt: new Date(now + ORG_INVITE_VALID_DAYS * DAY_MS).toISOString(),
+        expiresAt: new Date(now + INVITE_VALID_DAYS * DAY_MS).toISOString(),
+        status: 'pending',
         createdAt: nowIso,
         updatedAt: nowIso,
       };
       saveOrgs([org, ...superAdminOrgs]);
-      saveOrgInvites([invite, ...superAdminOrgInvitations]);
-      return { success: true, organization: org };
+      saveInvitations([invite, ...invitations]);
+      return { success: true, organization: org, invitation: invite, tempPassword };
     },
-    [currentRbacUser, slugTaken, pendingInviteClash, superAdminOrgs, superAdminOrgInvitations, saveOrgs, saveOrgInvites]
+    [currentRbacUser, slugTaken, emailInUse, superAdminOrgs, invitations, saveOrgs, saveInvitations]
   );
 
   const updateSuperAdminOrg = useCallback<DemoAuthContextType['updateSuperAdminOrg']>(
@@ -780,95 +752,16 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     (orgId: string) => {
       const nowIso = new Date().toISOString();
       saveOrgs(superAdminOrgs.map((o) => (o.id === orgId ? { ...o, deletedAt: nowIso, updatedAt: nowIso } : o)));
-      // Its pending Owner invitation stops working too
-      saveOrgInvites(
-        superAdminOrgInvitations.map((i) =>
+      // Its pending invitations (the Owner's and members') stop working too
+      saveInvitations(
+        invitations.map((i) =>
           i.organizationId === orgId && i.status === 'pending'
-            ? { ...i, status: 'expired' as const, revokedAt: nowIso, updatedAt: nowIso }
+            ? { ...i, status: 'revoked' as const, revokedAt: nowIso, tempPasswordHash: undefined, updatedAt: nowIso }
             : i
         )
       );
     },
-    [superAdminOrgs, superAdminOrgInvitations, saveOrgs, saveOrgInvites]
-  );
-
-  const inviteSuperAdminOrg = useCallback<DemoAuthContextType['inviteSuperAdminOrg']>(
-    (data) => {
-      if (pendingInviteClash(data.ownerEmail, data.organizationName)) {
-        return { success: false, error: 'This Owner already has a pending invitation for an organisation with this name.' };
-      }
-      const now = Date.now();
-      const nowIso = new Date(now).toISOString();
-      const newInvite: SuperAdminOrgInvitation = {
-        id: 'inv-org-' + now.toString(36),
-        invitedByUserId: currentRbacUser?.id ?? 'demo-super-admin',
-        organizationName: data.organizationName.trim(),
-        ownerName: data.ownerName.trim(),
-        ownerEmail: data.ownerEmail.trim().toLowerCase(),
-        plan: data.plan,
-        status: 'pending',
-        sentAt: nowIso,
-        expiresAt: new Date(now + ORG_INVITE_VALID_DAYS * DAY_MS).toISOString(),
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      saveOrgInvites([newInvite, ...superAdminOrgInvitations]);
-      return { success: true, invitation: newInvite };
-    },
-    [currentRbacUser, pendingInviteClash, superAdminOrgInvitations, saveOrgInvites]
-  );
-
-  const updateSuperAdminOrgInvite = useCallback<DemoAuthContextType['updateSuperAdminOrgInvite']>(
-    (inviteId, data) => {
-      const nowIso = new Date().toISOString();
-      saveOrgInvites(
-        superAdminOrgInvitations.map((i) =>
-          i.id === inviteId
-            ? {
-                ...i,
-                ...data,
-                ownerEmail: data.ownerEmail !== undefined ? data.ownerEmail.trim().toLowerCase() : i.ownerEmail,
-                updatedAt: nowIso,
-              }
-            : i
-        )
-      );
-    },
-    [superAdminOrgInvitations, saveOrgInvites]
-  );
-
-  const resendSuperAdminOrgInvite = useCallback(
-    (inviteId: string) => {
-      const now = Date.now();
-      saveOrgInvites(
-        superAdminOrgInvitations.map((i) =>
-          i.id === inviteId
-            ? {
-                ...i,
-                status: 'pending' as const,
-                revokedAt: undefined,
-                sentAt: new Date(now).toISOString(),
-                expiresAt: new Date(now + ORG_INVITE_VALID_DAYS * DAY_MS).toISOString(),
-                updatedAt: new Date(now).toISOString(),
-              }
-            : i
-        )
-      );
-    },
-    [superAdminOrgInvitations, saveOrgInvites]
-  );
-
-  const revokeSuperAdminOrgInvite = useCallback(
-    (inviteId: string) => {
-      const nowIso = new Date().toISOString();
-      // Revoking also sets status expired; revoked_at tells the two apart
-      saveOrgInvites(
-        superAdminOrgInvitations.map((i) =>
-          i.id === inviteId ? { ...i, status: 'expired' as const, revokedAt: nowIso, updatedAt: nowIso } : i
-        )
-      );
-    },
-    [superAdminOrgInvitations, saveOrgInvites]
+    [superAdminOrgs, invitations, saveOrgs, saveInvitations]
   );
 
   // ── Organisation record & feature switches ────────────────────────────────
@@ -937,188 +830,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     });
   }, [personId]);
 
-  const setPendingSignupUser = useCallback((user: DemoUser | null) => {
-    setPendingSignupUserState(user);
-    if (user) {
-      safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, user);
-    } else {
-      safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
-    }
-  }, []);
-
   const clearAuthMessage = useCallback(() => {
     setAuthMessageState(null);
     safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
   }, []);
-
-  const saveInvitations = useCallback((next: DemoInvitation[]) => {
-    setInvitations(next);
-    safeStorageSet(STORAGE_KEYS.INVITATIONS, next);
-  }, []);
-
-  const openInvitationFor = useCallback(
-    (email: string) =>
-      invitations.find((i) => i.email.toLowerCase() === email.toLowerCase() && !isInviteExpired(i)),
-    [invitations]
-  );
-
-  // ── SignUp (Owner creating initial account) ───────────────────────────────
-  const signUp = useCallback(
-    (data: { fullName: string; email: string; password: string; jobTitle?: string }) => {
-      const normalizedEmail = data.email.trim().toLowerCase();
-      const existingUser = users.find((u) => u.email.toLowerCase() === normalizedEmail);
-
-      if (existingUser) {
-        return {
-          success: false,
-          error: 'An account with this email already exists. Please log in instead.',
-        };
-      }
-
-      const generatedId = `user-${Date.now().toString(36)}`;
-      const initials =
-        data.fullName
-          .split(' ')
-          .map((n) => n[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase() || 'DU';
-
-      const newUser: DemoUser = {
-        id: generatedId,
-        fullName: data.fullName.trim(),
-        email: normalizedEmail,
-        password: data.password,
-        jobTitle: data.jobTitle?.trim() || 'Founder & CEO',
-        role: 'executive',
-        organizationId: null,
-        registrationCompleted: true,
-        organizationSetupCompleted: false,
-        avatarColor: '#00c2a8',
-        avatarInitials: initials,
-        createdAt: new Date().toISOString(),
-      };
-
-      const updatedUsers = [...users, newUser];
-      setUsers(updatedUsers);
-      safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
-
-      setPendingSignupUserState(newUser);
-      safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, newUser);
-
-      return { success: true, user: newUser };
-    },
-    [users]
-  );
-
-  // ── Create Organization ───────────────────────────────────────────────────
-  const createOrganization = useCallback(
-    (data: {
-      name: string;
-      slug: string;
-      industry: string;
-      size: string;
-      website?: string;
-      description?: string;
-      timezone?: string;
-    }) => {
-      const user = pendingSignupUser || currentUser;
-      if (!user) {
-        return {
-          success: false,
-          error: 'User session not found. Please complete the registration step first.',
-        };
-      }
-
-      // organization.slug is unique across FlashSign
-      const existingSlug =
-        workspaces.find((w) => w.slug.toLowerCase() === data.slug.toLowerCase().trim()) ||
-        superAdminOrgs.find((o) => o.slug.toLowerCase() === data.slug.toLowerCase().trim());
-      if (existingSlug) {
-        return {
-          success: false,
-          error: 'This workspace URL slug is already taken. Please choose another one.',
-        };
-      }
-
-      const orgId = `ws-${slugify(data.slug) || Date.now().toString(36)}`;
-      const initials =
-        data.name
-          .split(' ')
-          .map((w) => w[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase() || 'FS';
-
-      const newOrg: DemoWorkspace = {
-        id: orgId,
-        name: data.name.trim(),
-        slug: data.slug.trim().toLowerCase(),
-        industry: data.industry,
-        size: data.size,
-        companySize: data.size,
-        type: data.industry,
-        website: data.website?.trim() || `https://${data.slug}.flashsign.com`,
-        description: data.description?.trim() || 'Flash Sign digital execution and agreement workspace.',
-        ownerId: user.id,
-        memberCount: 1,
-        activeProjectCount: 1,
-        accentColor: '#00c2a8',
-        initials,
-        createdAt: new Date().toISOString(),
-      };
-
-      const updatedUser: DemoUser = {
-        ...user,
-        organizationId: orgId,
-        organizationSetupCompleted: true,
-        role: 'executive',
-      };
-
-      // The organization row: the person who signs up becomes its Owner and its creator
-      const nowIso = new Date().toISOString();
-      const orgRecord: SuperAdminOrg = {
-        id: orgId,
-        ownerUserId: user.id,
-        createdByUserId: user.id,
-        name: newOrg.name,
-        slug: newOrg.slug,
-        description: data.description?.trim() || undefined,
-        industry: data.industry,
-        website: data.website?.trim() || undefined,
-        plan: 'starter',
-        status: 'pending',
-        timezone: data.timezone || 'UTC',
-        workingHoursStart: '09:00',
-        workingHoursEnd: '17:00',
-        createdAt: nowIso,
-        updatedAt: nowIso,
-      };
-      saveOrgs([orgRecord, ...superAdminOrgs.filter((o) => o.id !== orgId)]);
-
-      const updatedWorkspaces = [newOrg, ...workspaces.filter((w) => w.id !== orgId)];
-      setWorkspaces(updatedWorkspaces);
-      setSelectedWorkspace(newOrg);
-      safeStorageSet(STORAGE_KEYS.WORKSPACES, updatedWorkspaces);
-      safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, newOrg);
-
-      const updatedUsers = users.some((u) => u.id === updatedUser.id)
-        ? users.map((u) => (u.id === updatedUser.id ? updatedUser : u))
-        : [...users, updatedUser];
-      setUsers(updatedUsers);
-      safeStorageSet(STORAGE_KEYS.USERS, updatedUsers);
-
-      setPendingSignupUserState(updatedUser);
-      safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, updatedUser);
-
-      const successMessage = `Organization "${newOrg.name}" created successfully! Please log in to access your workspace.`;
-      setAuthMessageState(successMessage);
-      safeStorageSet(STORAGE_KEYS.AUTH_SUCCESS_MSG, successMessage);
-
-      return { success: true, organization: newOrg };
-    },
-    [workspaces, users, pendingSignupUser, currentUser, superAdminOrgs, saveOrgs]
-  );
 
   // ── Step 3: Login (Existing and Demo Users) ────────────────────────────────
   const login = useCallback(
@@ -1147,6 +862,7 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
           success: true,
           user: currentUser || undefined,
           rbacUser: account,
+          requiresOrganizationSetup: Boolean(account?.isOwner && org && !org.setupCompletedAt),
         };
       }
 
@@ -1156,13 +872,44 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       );
 
       if (!matchedUser) {
-        const invitation = openInvitationFor(normalizedEmail);
-        return {
-          success: false,
-          error: invitation
-            ? `You haven't joined ${invitation.organizationName} yet. Open the invitation link in your email to create your account.`
-            : 'No account found with this email address. Please check your credentials or select a demo account.',
-        };
+        // No account yet: first login with the temporary password from an invitation email
+        const invitation = invitations
+          .filter((i) => i.email.toLowerCase() === normalizedEmail && i.status === 'pending')
+          .sort((a, b) => b.sentAt.localeCompare(a.sentAt))[0];
+        if (!invitation) {
+          return {
+            success: false,
+            error: 'No account found with this email address. Please check your credentials or select a demo account.',
+          };
+        }
+        if (isInviteExpired(invitation)) {
+          return {
+            success: false,
+            error: `Your invitation to ${invitation.organizationName} has expired. Ask ${invitation.invitedByName} to resend it.`,
+          };
+        }
+        if ((invitation.failedAttempts ?? 0) >= MAX_TEMP_PASSWORD_ATTEMPTS) {
+          return {
+            success: false,
+            error: `Too many wrong temporary passwords. Ask ${invitation.invitedByName} to resend your invitation.`,
+          };
+        }
+        if (!password || !checkTempPassword(password, invitation.tempPasswordHash)) {
+          const failed = (invitation.failedAttempts ?? 0) + 1;
+          saveInvitations(invitations.map((i) => (i.id === invitation.id ? { ...i, failedAttempts: failed } : i)));
+          const left = MAX_TEMP_PASSWORD_ATTEMPTS - failed;
+          return {
+            success: false,
+            error:
+              left > 0
+                ? `That temporary password isn't right. ${left} ${left === 1 ? 'try' : 'tries'} left.`
+                : `Too many wrong temporary passwords. Ask ${invitation.invitedByName} to resend your invitation.`,
+          };
+        }
+        // Right password: the person now sets their own password (completeFirstLogin)
+        setFirstLoginInvitationId(invitation.id);
+        safeStorageSet(FIRST_LOGIN_KEY, invitation.id);
+        return { success: false, requiresPasswordSetup: true };
       }
 
       const isValidPassword =
@@ -1175,17 +922,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         return {
           success: false,
           error: 'Invalid password. (Demo password: Demo123!).',
-        };
-      }
-
-      if (!matchedUser.organizationSetupCompleted) {
-        setPendingSignupUserState(matchedUser);
-        safeStorageSet(STORAGE_KEYS.PENDING_SIGNUP, matchedUser);
-        return {
-          success: false,
-          requiresOrgSetup: true,
-          user: matchedUser,
-          error: 'Organization setup incomplete. Please set up your organization before accessing the workspace.',
         };
       }
 
@@ -1204,9 +940,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
 
       setAuthMessageState(null);
       safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
-      setPendingSignupUserState(null);
-      safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
-
       safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
       if (rememberMe) {
         safeStorageSet(STORAGE_KEYS.USER, matchedUser);
@@ -1216,7 +949,7 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
 
       return { success: true, user: matchedUser };
     },
-    [demoAccounts, switchDemoAccount, users, currentUser, openInvitationFor, workspaces, superAdminOrgs]
+    [demoAccounts, switchDemoAccount, users, currentUser, invitations, saveInvitations, workspaces, superAdminOrgs]
   );
 
   // ── Invitations ───────────────────────────────────────────────────────────
@@ -1227,11 +960,11 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       const normalizedEmail = email.toLowerCase();
       const org = selectedWorkspace;
 
-      const member = users.find(
-        (u) => u.email.trim().toLowerCase() === normalizedEmail && u.organizationId === org.id
-      );
-      if (member) {
-        return { success: false, error: `${member.fullName} is already a member of ${org.name}.` };
+      // One person, one organisation
+      const inUse = emailInUse(normalizedEmail, org.id);
+      if (inUse === 'here') return { success: false, error: `${email} is already a member of ${org.name}.` };
+      if (inUse === 'elsewhere') {
+        return { success: false, error: `${email} already belongs to another organisation. A person can be in one organisation only.` };
       }
       const existing = invitations.find(
         (i) => i.organizationId === org.id && i.status === 'pending' && i.email.toLowerCase() === normalizedEmail
@@ -1253,6 +986,8 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
 
       const now = Date.now();
       const nowIso = new Date(now).toISOString();
+      // The email carries a one-time temporary password; only its hash is kept
+      const tempPassword = generateTempPassword();
       const invitation: DemoInvitation = {
         id: `inv-${now.toString(36)}`,
         email: normalizedEmail,
@@ -1266,6 +1001,8 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         organizationName: org.name,
         invitedById: currentRbacUser?.id || currentUser?.id || 'demo-owner',
         invitedByName: currentRbacUser?.name || currentUser?.fullName || 'Organization Owner',
+        tempPasswordHash: hashTempPassword(tempPassword),
+        failedAttempts: 0,
         sentAt: nowIso,
         expiresAt: new Date(now + INVITE_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
         status: 'pending',
@@ -1274,27 +1011,30 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       };
 
       saveInvitations([invitation, ...invitations.filter((i) => i !== existing)]);
-      return { success: true, invitation };
+      return { success: true, invitation, tempPassword };
     },
-    [currentRbacUser, currentUser, selectedWorkspace, users, invitations, saveInvitations, roles]
+    [currentRbacUser, currentUser, selectedWorkspace, emailInUse, invitations, saveInvitations, roles]
   );
 
   const resendInvitation = useCallback(
     (id: string) => {
+      const current = invitations.find((i) => i.id === id);
+      if (!current || current.status === 'accepted') return undefined;
+      // A new temporary password: unlocks it and restarts the 7 days
       const now = Date.now();
-      let resent: DemoInvitation | undefined;
-      const next = invitations.map((i) => {
-        if (i.id !== id) return i;
-        resent = {
-          ...i,
-          sentAt: new Date(now).toISOString(),
-          expiresAt: new Date(now + INVITE_VALID_DAYS * 24 * 60 * 60 * 1000).toISOString(),
-          updatedAt: new Date(now).toISOString(),
-        };
-        return resent;
-      });
-      saveInvitations(next);
-      return resent;
+      const tempPassword = generateTempPassword();
+      const resent: DemoInvitation = {
+        ...current,
+        status: 'pending',
+        revokedAt: undefined,
+        tempPasswordHash: hashTempPassword(tempPassword),
+        failedAttempts: 0,
+        sentAt: new Date(now).toISOString(),
+        expiresAt: new Date(now + INVITE_VALID_DAYS * DAY_MS).toISOString(),
+        updatedAt: new Date(now).toISOString(),
+      };
+      saveInvitations(invitations.map((i) => (i.id === id ? resent : i)));
+      return { invitation: resent, tempPassword };
     },
     [invitations, saveInvitations]
   );
@@ -1303,50 +1043,97 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     (id: string) => {
       const nowIso = new Date().toISOString();
       saveInvitations(
-        invitations.map((i) => (i.id === id ? { ...i, status: 'revoked' as const, revokedAt: nowIso, updatedAt: nowIso } : i))
+        invitations.map((i) =>
+          i.id === id ? { ...i, status: 'revoked' as const, revokedAt: nowIso, tempPasswordHash: undefined, updatedAt: nowIso } : i
+        )
       );
     },
     [invitations, saveInvitations]
   );
 
-  const acceptInvitation = useCallback<DemoAuthContextType['acceptInvitation']>(
-    (invite, data) => {
-      const local = invitations.find((i) => i.id === invite.id);
-      if (local?.status === 'revoked') {
-        return { success: false, error: 'This invitation was cancelled.' };
+  const updateInvitation = useCallback<DemoAuthContextType['updateInvitation']>(
+    (id, data) => {
+      const current = invitations.find((i) => i.id === id);
+      if (!current || current.status !== 'pending') return { success: false, error: 'Only a pending invitation can be changed.' };
+      const email = data.email !== undefined ? data.email.trim().toLowerCase() : current.email;
+      if (email !== current.email && emailInUse(email, current.organizationId)) {
+        return { success: false, error: `${email} already belongs to someone in an organisation. A person can be in one organisation only.` };
       }
-      if (local?.status === 'accepted') {
-        return { success: false, error: 'This invitation has already been accepted.' };
-      }
+      saveInvitations(
+        invitations.map((i) =>
+          i.id === id
+            ? { ...i, email, fullName: data.fullName !== undefined ? data.fullName.trim() : i.fullName, updatedAt: new Date().toISOString() }
+            : i
+        )
+      );
+      return { success: true };
+    },
+    [invitations, saveInvitations, emailInUse]
+  );
 
-      const org = workspaces.find((w) => w.id === invite.organizationId) || selectedWorkspace;
-      const initials = initialsOf(data.fullName, 'MB');
-      const role = roles.find((r) => r.id === invite.roleId);
-      if (!role) {
-        return { success: false, error: 'The role on this invitation no longer exists. Ask for a new invitation.' };
+  const firstLoginInvitation = firstLoginInvitationId
+    ? invitations.find((i) => i.id === firstLoginInvitationId && i.status === 'pending') ?? null
+    : null;
+
+  /**
+   * First login: the temporary password was accepted at the login page; the person now sets
+   * their own password. Only now is their account (users row) created. The temporary password
+   * is emptied and the invitation accepted. An Owner invitation also sets
+   * organization.owner_user_id.
+   */
+  const completeFirstLogin = useCallback<DemoAuthContextType['completeFirstLogin']>(
+    (data) => {
+      const invite = firstLoginInvitation;
+      if (!invite) return { success: false, error: 'Sign in with the temporary password from your invitation email first.' };
+      if (isInviteExpired(invite)) return { success: false, error: 'This invitation has expired. Ask for it to be resent.' };
+      // One person, one organisation (the email may have joined somewhere since)
+      if (emailInUse(invite.email)) {
+        return { success: false, error: `${invite.email} already belongs to an organisation. A person can be in one organisation only.` };
       }
+      const role = roles.find((r) => r.id === invite.roleId);
+      if (!role) return { success: false, error: 'The role on this invitation no longer exists. Ask for a new invitation.' };
+      const orgRecord = superAdminOrgs.find((o) => o.id === invite.organizationId && !o.deletedAt);
+      if (!orgRecord) return { success: false, error: 'This organisation no longer exists.' };
+
+      const isOwner = role.id === OWNER_ROLE_ID;
       const nowIso = new Date().toISOString();
       const userId = `user-${Date.now().toString(36)}`;
+      const initials = initialsOf(data.fullName, 'MB');
+
+      // The workspace record the app opens (created from the organization row if it isn't there yet)
+      const org: DemoWorkspace = workspaces.find((w) => w.id === orgRecord.id) ?? {
+        id: orgRecord.id,
+        name: orgRecord.name,
+        slug: orgRecord.slug,
+        description: orgRecord.description,
+        industry: orgRecord.industry,
+        website: orgRecord.website,
+        ownerId: isOwner ? userId : orgRecord.ownerUserId,
+        memberCount: 0,
+        activeProjectCount: 0,
+        initials: initialsOf(orgRecord.name, 'OR'),
+        createdAt: orgRecord.createdAt,
+      };
 
       const newUser: DemoUser = {
         id: userId,
         fullName: data.fullName.trim(),
         email: invite.email.toLowerCase(),
         password: data.password,
-        jobTitle: data.jobTitle?.trim() || invite.jobTitle || 'Team Member',
-        role: legacyRoleFor(role.id),
+        jobTitle: data.jobTitle?.trim() || invite.jobTitle || (isOwner ? 'Organization Owner' : 'Team Member'),
+        role: isOwner ? 'executive' : legacyRoleFor(role.id),
         organizationId: org.id,
         registrationCompleted: true,
         organizationSetupCompleted: true,
         isActive: true,
+        // Signing in with the emailed temporary password proves the email
         emailVerifiedAt: nowIso,
         lastLoginAt: nowIso,
-        avatarColor: '#2563eb',
         avatarInitials: initials,
         createdAt: nowIso,
       };
 
-      // The member gets the invitation's role, and its projects become project_member rows
+      // The invitation's role; for a Project User Access role its projects become project_member rows
       const account: DemoUserAccount = {
         id: userId,
         name: newUser.fullName,
@@ -1356,13 +1143,12 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         roleId: role.id,
         roleName: role.name,
         isSuperAdmin: false,
-        isOwner: false,
+        isOwner,
         dashboardAccess: role.dashboardAccess,
         projectAccess: role.projectAccess,
         myTasksAccess: role.myTasksAccess,
         teamAccess: role.teamAccess,
         assignedProjectIds: role.projectAccess === 'user' ? invite.projectIds ?? [] : [],
-        avatarColor: '#2563eb',
         avatarInitials: initials,
       };
       const nextAccounts = [...demoAccounts.filter((a) => a.email.toLowerCase() !== account.email), account];
@@ -1375,33 +1161,36 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
       setUsers(nextUsers);
       safeStorageSet(STORAGE_KEYS.USERS, nextUsers);
 
-      const nextWorkspaces = workspaces.map((w) =>
-        w.id === org.id ? { ...w, memberCount: (w.memberCount || 0) + 1 } : w
-      );
+      const joinedOrg = { ...org, memberCount: (org.memberCount || 0) + 1 };
+      const nextWorkspaces = [joinedOrg, ...workspaces.filter((w) => w.id !== org.id)];
       setWorkspaces(nextWorkspaces);
       safeStorageSet(STORAGE_KEYS.WORKSPACES, nextWorkspaces);
 
-      if (local) {
-        saveInvitations(
-          invitations.map((i) =>
-            i.id === local.id
-              ? { ...i, status: 'accepted' as const, acceptedAt: nowIso, acceptedByUserId: userId, updatedAt: nowIso }
-              : i
-          )
-        );
+      // An Owner invitation makes them the organisation's Owner (organization.owner_user_id)
+      if (isOwner) {
+        saveOrgs(superAdminOrgs.map((o) => (o.id === orgRecord.id ? { ...o, ownerUserId: userId, updatedAt: nowIso } : o)));
       }
+
+      // Accepted: the temporary password is emptied so it can never be used again
+      saveInvitations(
+        invitations.map((i) =>
+          i.id === invite.id
+            ? { ...i, status: 'accepted' as const, acceptedAt: nowIso, acceptedByUserId: userId, tempPasswordHash: undefined, updatedAt: nowIso }
+            : i
+        )
+      );
+      setFirstLoginInvitationId(null);
+      safeStorageRemove(FIRST_LOGIN_KEY);
 
       setCurrentUser(newUser);
       setIsAuthenticated(true);
-      setSelectedWorkspace(org);
-      setPendingSignupUserState(null);
-      safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
-      safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, org);
+      setSelectedWorkspace(joinedOrg);
+      safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, joinedOrg);
       safeStorageSet(STORAGE_KEYS.SESSION_ACTIVE, true);
       safeStorageSet(STORAGE_KEYS.USER, newUser);
-      return { success: true };
+      return { success: true, rbacUser: account, requiresOrganizationSetup: isOwner && !orgRecord.setupCompletedAt };
     },
-    [invitations, users, workspaces, selectedWorkspace, saveInvitations, roles, demoAccounts]
+    [firstLoginInvitation, emailInUse, roles, superAdminOrgs, workspaces, demoAccounts, users, invitations, saveInvitations, saveOrgs]
   );
 
   // ── Logout ─────────────────────────────────────────────────────────────────
@@ -1409,80 +1198,15 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     setIsAuthenticated(false);
     setCurrentUser(null);
     setCurrentRbacUserState(null);
-    setPendingSignupUserState(null);
     setAuthMessageState(null);
     safeStorageRemove(STORAGE_KEYS.SESSION_ACTIVE);
     safeStorageRemove(STORAGE_KEYS.USER);
     safeStorageRemove(RBAC_STORAGE_KEYS.CURRENT_USER);
     safeStorageRemove(STORAGE_KEYS.PENDING_SIGNUP);
     safeStorageRemove(STORAGE_KEYS.AUTH_SUCCESS_MSG);
+    setFirstLoginInvitationId(null);
+    safeStorageRemove(FIRST_LOGIN_KEY);
   }, []);
-
-  const register = useCallback(
-    (fullName: string, email: string, companyName?: string) => {
-      signUp({
-        fullName,
-        email,
-        password: 'DemoPassword2026!',
-        jobTitle: companyName ? `${companyName} Lead` : 'Team Member',
-      });
-    },
-    [signUp]
-  );
-
-  const selectWorkspace = useCallback(
-    (workspaceId: string) => {
-      const ws = workspaces.find((w) => w.id === workspaceId);
-      if (ws) {
-        setSelectedWorkspace(ws);
-        safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, ws);
-        setCompletedSteps((prev) => (prev.includes('workspace') ? prev : [...prev, 'workspace']));
-      }
-    },
-    [workspaces]
-  );
-
-  const createWorkspace = useCallback(
-    (
-      name: string,
-      type: string,
-      companySize: string,
-      description?: string,
-      accentColor?: string
-    ): DemoWorkspace => {
-      const generatedSlug = slugify(name) || `ws-${Date.now().toString(36)}`;
-      const initials =
-        name
-          .split(' ')
-          .map((w) => w[0])
-          .slice(0, 2)
-          .join('')
-          .toUpperCase() || 'WS';
-
-      const newWs: DemoWorkspace = {
-        id: `ws-${Date.now().toString(36)}`,
-        name,
-        type,
-        companySize,
-        description: description || 'Custom team workspace on Flash Sign.',
-        slug: generatedSlug,
-        memberCount: 1,
-        activeProjectCount: 1,
-        accentColor: accentColor || '#00c2a8',
-        initials,
-      };
-
-      const updated = [newWs, ...workspaces];
-      setWorkspaces(updated);
-      setSelectedWorkspace(newWs);
-      safeStorageSet(STORAGE_KEYS.WORKSPACES, updated);
-      safeStorageSet(STORAGE_KEYS.SELECTED_WORKSPACE, newWs);
-
-      setCompletedSteps((prev) => (prev.includes('workspace') ? prev : [...prev, 'workspace']));
-      return newWs;
-    },
-    [workspaces]
-  );
 
   const updateProfile = useCallback((updates: Partial<DemoUser>) => {
     setCurrentUser((prev) => {
@@ -1530,7 +1254,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     setPreferences(DEFAULT_PREFERENCES);
     setIsAuthenticated(true);
     setCompletedSteps(['workspace']);
-    setPendingSignupUserState(null);
     setAuthMessageState(null);
     setInvitations(INITIAL_DEMO_INVITATIONS);
 
@@ -1539,7 +1262,8 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     setDemoAccounts(DEMO_ACCOUNTS);
     setCurrentRbacUserState(DEMO_ACCOUNTS[1]);
     setSuperAdminOrgs(INITIAL_SUPER_ADMIN_ORGS);
-    setSuperAdminOrgInvitations(INITIAL_SUPER_ADMIN_INVITATIONS);
+    setFirstLoginInvitationId(null);
+    safeStorageRemove(FIRST_LOGIN_KEY);
     setOrganizationFeatures(INITIAL_ORGANIZATION_FEATURES);
     setNotificationSettingsByUser({});
     setSessions([]);
@@ -1561,7 +1285,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
     safeStorageSet(RBAC_STORAGE_KEYS.DEMO_ACCOUNTS, DEMO_ACCOUNTS);
     safeStorageSet(RBAC_STORAGE_KEYS.CURRENT_USER, DEMO_ACCOUNTS[1]);
     safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_ORGS, INITIAL_SUPER_ADMIN_ORGS);
-    safeStorageSet(RBAC_STORAGE_KEYS.SUPER_ADMIN_INVITATIONS, INITIAL_SUPER_ADMIN_INVITATIONS);
   }, []);
 
   return (
@@ -1577,7 +1300,6 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         isAuthenticated,
         isHydrated,
         completedSteps,
-        pendingSignupUser,
         authMessage,
         invitations,
 
@@ -1595,15 +1317,10 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         // Super Admin
         superAdmins,
         superAdminOrgs,
-        superAdminOrgInvitations,
         createSuperAdminOrg,
         updateSuperAdminOrg,
         updateSuperAdminOrgStatus,
         deleteSuperAdminOrg,
-        inviteSuperAdminOrg,
-        updateSuperAdminOrgInvite,
-        resendSuperAdminOrgInvite,
-        revokeSuperAdminOrgInvite,
 
         // Organisation record & features
         currentOrganizationRecord,
@@ -1618,19 +1335,15 @@ export function DemoAuthProvider({ children }: { children: React.ReactNode }) {
         revokeSession,
         revokeOtherSessions,
 
-        signUp,
-        createOrganization,
         login,
         logout,
         clearAuthMessage,
         sendInvitation,
         resendInvitation,
         revokeInvitation,
-        acceptInvitation,
-        setPendingSignupUser,
-        register,
-        selectWorkspace,
-        createWorkspace,
+        updateInvitation,
+        firstLoginInvitation,
+        completeFirstLogin,
         updateProfile,
         updatePreferences,
         markStepComplete,

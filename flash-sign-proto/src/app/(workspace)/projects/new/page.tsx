@@ -59,7 +59,7 @@ const SPACES = [
 
 export default function CreateProjectPage() {
   const router = useRouter();
-  const { users, addProject, addActivity, addMilestone, addEpic, addStory } = useApp();
+  const { members: users, addProject, addActivity, addMilestone, addEpic, addStory } = useApp();
   const currentUser = useCurrentUser();
   const { currentRbacUser } = useDemoAuth();
 

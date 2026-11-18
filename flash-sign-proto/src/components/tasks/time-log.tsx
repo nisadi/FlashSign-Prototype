@@ -20,7 +20,7 @@ const field = 'px-2.5 py-1.5 text-xs bg-paper border border-line rounded-lg outl
  * log hours worked without the timer (e.g. without an agent), and every time entry.
  */
 export function TimeLog({ task, subtasks, now }: { task: Task; subtasks: Task[]; now: number }) {
-  const { users, workSessions, demoRole, logManualTime } = useApp();
+  const { users, members, workSessions, demoRole, logManualTime } = useApp();
   const me = useCurrentUser();
   const today = new Date(now).toISOString().slice(0, 10);
   const [open, setOpen] = useState(false);
@@ -106,7 +106,7 @@ export function TimeLog({ task, subtasks, now }: { task: Task; subtasks: Task[];
             )}
             {forOthers && (
               <select value={personId} onChange={e => setPersonId(e.target.value)} className={field} aria-label="Person">
-                {users.map(u => <option key={u.id} value={u.id}>{u.id === me?.id ? `${u.name} (me)` : u.name}</option>)}
+                {members.map(u => <option key={u.id} value={u.id}>{u.id === me?.id ? `${u.name} (me)` : u.name}</option>)}
               </select>
             )}
           </div>

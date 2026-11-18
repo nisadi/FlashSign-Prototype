@@ -35,7 +35,9 @@ const TASK_DIST = [
 ];
 
 export default function DashboardPage() {
-  const { projects, tasks, documents, approvals, agentRuns, users, milestones } = useApp();
+  const { projects, tasks, documents, approvals, workSessions, users, milestones } = useApp();
+  // work_session rows an AI coding agent started and hasn't stopped yet
+  const agentsWorking = workSessions.filter(w => !w.endedAt && w.source !== 'web' && w.source !== 'manual');
   const currentUser = useCurrentUser();
   const roleConfig = useRoleConfig();
   const { currentRbacUser } = useDemoAuth();
@@ -106,11 +108,11 @@ export default function DashboardPage() {
           iconColor="var(--waiting)"
         />
         <StatCard
-          label="AI Runs Today"
-          value={agentRuns.filter(r => r.status === 'running' || r.status === 'needs_review').length}
+          label="Agents Working Now"
+          value={agentsWorking.length}
           icon={Bot}
           iconColor="#ab47bc"
-          delta="2 need review"
+          delta={`${new Set(agentsWorking.map(w => w.userId)).size} people's agents`}
         />
       </div>
 

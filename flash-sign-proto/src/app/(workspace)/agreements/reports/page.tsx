@@ -2,9 +2,8 @@
 
 import React, { useMemo } from 'react';
 import Link from 'next/link';
-import { BarChart3, Send, CheckCircle2, Timer, DollarSign, Activity, Hourglass } from 'lucide-react';
+import { BarChart3, Send, CheckCircle2, Timer, Activity, Hourglass } from 'lucide-react';
 import { useApp } from '@/context/app-context';
-import { FEATURES } from '@/lib/features';
 import { StatCard } from '@/components/shared/ui';
 import { DemoNoticeBanner } from '@/components/documents/demo-notice-banner';
 
@@ -22,7 +21,7 @@ function countBy<T>(items: T[], key: (item: T) => string) {
 }
 
 export default function AgreementReportsPage() {
-  const { signatureRequests, contracts, documentItems } = useApp();
+  const { signatureRequests, documentItems } = useApp();
 
   const kpis = useMemo(() => {
     const sent = signatureRequests.filter(s => s.status !== 'draft');
@@ -30,24 +29,19 @@ export default function AgreementReportsPage() {
     const durations = completed
       .filter(s => s.sentAt && s.completedAt)
       .map(s => (new Date(s.completedAt!).getTime() - new Date(s.sentAt!).getTime()) / DAY_MS);
-    const activeValue = contracts
-      .filter(c => c.status === 'active')
-      .reduce((sum, c) => sum + (c.contractValue ?? c.value ?? 0), 0);
 
     return {
       sent: sent.length,
       inProgress: sent.filter(s => ['sent', 'viewed', 'partially_signed', 'awaiting_review'].includes(s.status)).length,
       completionRate: sent.length ? Math.round((completed.length / sent.length) * 100) : 0,
       avgDays: durations.length ? (durations.reduce((a, b) => a + b, 0) / durations.length).toFixed(1) : '—',
-      activeValue,
     };
-  }, [signatureRequests, contracts]);
+  }, [signatureRequests]);
 
   const breakdowns = useMemo(() => [
     { title: 'Signature requests', href: '/signatures/all', rows: countBy(signatureRequests, s => s.status) },
-    ...(FEATURES.contracts ? [{ title: 'Contracts', href: '/contracts/all', rows: countBy(contracts, c => c.status) }] : []),
     { title: 'Documents', href: '/documents/all', rows: countBy(documentItems, d => d.status) },
-  ], [signatureRequests, contracts, documentItems]);
+  ], [signatureRequests, documentItems]);
 
   const recentEvents = useMemo(() => {
     return signatureRequests
@@ -69,7 +63,7 @@ export default function AgreementReportsPage() {
           <div>
             <h1 className="text-2xl font-bold text-ink">Agreement Reports</h1>
             <p className="text-sm text-muted">
-              Signing performance{FEATURES.contracts ? ', contract value,' : ''} and document status at a glance
+              Signing performance and document status at a glance
             </p>
           </div>
         </div>
@@ -79,15 +73,11 @@ export default function AgreementReportsPage() {
           <StatCard label="Requests sent" value={kpis.sent} icon={Send} iconColor="#00c2a8" />
           <StatCard label="Completion rate" value={`${kpis.completionRate}%`} icon={CheckCircle2} iconColor="#10b981" />
           <StatCard label="Avg. days to complete" value={kpis.avgDays} icon={Timer} iconColor="#f59e0b" />
-          {FEATURES.contracts ? (
-            <StatCard label="Active contract value" value={`$${kpis.activeValue.toLocaleString()}`} icon={DollarSign} iconColor="#3b82f6" />
-          ) : (
-            <StatCard label="Waiting on signers" value={kpis.inProgress} icon={Hourglass} iconColor="#3b82f6" />
-          )}
+          <StatCard label="Waiting on signers" value={kpis.inProgress} icon={Hourglass} iconColor="#3b82f6" />
         </div>
 
         {/* Status breakdowns */}
-        <div className={`grid grid-cols-1 gap-4 ${FEATURES.contracts ? 'lg:grid-cols-3' : 'lg:grid-cols-2'}`}>
+        <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
           {breakdowns.map(({ title, href, rows }) => {
             const max = Math.max(1, ...rows.map(r => r.count));
             return (

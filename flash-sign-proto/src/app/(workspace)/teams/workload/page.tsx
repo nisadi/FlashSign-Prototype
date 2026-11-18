@@ -13,7 +13,7 @@ import { ReassignTaskDialog } from '@/components/collaboration/reassign-task-dia
 import type { Task, User } from '@/types';
 
 export default function WorkloadOverviewPage() {
-  const { users, projects, tasks } = useApp();
+  const { members: users, projects, tasks } = useApp();
 
   const [period, setPeriod] = useState<'week' | 'month'>('week');
   const [selectedProject, setSelectedProject] = useState('all');

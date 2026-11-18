@@ -4,14 +4,14 @@ import React, { useState, useMemo } from 'react';
 import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import {
-  Users, ArrowLeft, Mail, Clock, Globe, Briefcase, CheckSquare,
+  Users, ArrowLeft, Mail, Briefcase, CheckSquare,
   FolderKanban, Calendar, Edit3, ArrowRight, CheckCircle2,
   AlertCircle, Activity, Plus,
 } from 'lucide-react';
 import { useApp } from '@/context/app-context';
 import { MemberAvatar } from '@/components/collaboration/member-avatar';
 import { AvailabilityBadge } from '@/components/collaboration/collaboration-badges';
-import { CreateMemberDialog } from '@/components/collaboration/create-member-dialog';
+import { EditMemberDialog } from '@/components/collaboration/edit-member-dialog';
 import type { AvailabilityStatus, Task } from '@/types';
 import { Modal } from '@/components/shared/modal';
 import { notify } from '@/components/shared/toaster';
@@ -130,14 +130,6 @@ export default function MemberProfilePage() {
                   <span className="flex items-center gap-1">
                     <Mail className="w-3.5 h-3.5" />
                     <span>{member.email}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Globe className="w-3.5 h-3.5" />
-                    <span>{member.timeZone || 'EST'}</span>
-                  </span>
-                  <span className="flex items-center gap-1">
-                    <Clock className="w-3.5 h-3.5" />
-                    <span>{member.workingHours || '09:00 - 17:00 EST'}</span>
                   </span>
                 </div>
               </div>
@@ -312,7 +304,6 @@ export default function MemberProfilePage() {
 
               <div className="text-xs text-muted space-y-1">
                 <p>Status: <strong className="text-ink capitalize">{loadPercentage > 85 ? 'High Workload' : 'Balanced'}</strong></p>
-                <p>Schedule: <span className="text-ink">{member.workingHours || '09:00 - 17:00 EST'}</span></p>
               </div>
             </div>
 
@@ -341,10 +332,11 @@ export default function MemberProfilePage() {
       </div>
 
       {/* Edit Profile Dialog */}
-      <CreateMemberDialog
+      <EditMemberDialog
+        key={member.id}
         open={editDialogOpen}
         onOpenChange={setEditDialogOpen}
-        memberToEdit={member}
+        member={member}
       />
 
       {/* Assign Task Modal */}

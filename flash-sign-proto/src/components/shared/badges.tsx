@@ -1,7 +1,7 @@
 'use client';
 
 import { cn } from '@/lib/utils';
-import type { TaskStatus, TaskPriority, ProjectStatus, ProjectHealth, DocumentStatus, AgentRunStatus } from '@/types';
+import type { TaskStatus, TaskPriority, ProjectStatus, ProjectHealth, DocumentStatus } from '@/types';
 import {
   Circle, Clock, CheckCircle2, XCircle, AlertCircle,
   ArrowUp, ArrowRight, ArrowDown, Minus, Flame,
@@ -99,25 +99,6 @@ export function DocStatusBadge({ status }: { status: DocumentStatus }) {
   const config = DOC_STATUS_CONFIG[status];
   return (
     <span className={cn('inline-flex items-center px-2 py-0.5 rounded-full text-xs font-medium border', config.className)}>
-      {config.label}
-    </span>
-  );
-}
-
-// ── Agent Run Status ──────────────────────────────────────────────────────────
-const AGENT_STATUS_CONFIG: Record<AgentRunStatus, { label: string; className: string; dot: string }> = {
-  queued:       { label: 'Queued',       className: 'bg-gray-100 text-gray-600',    dot: 'bg-gray-400' },
-  running:      { label: 'Running',      className: 'bg-blue-50 text-blue-700',     dot: 'bg-blue-500 animate-pulse' },
-  completed:    { label: 'Completed',    className: 'bg-emerald-50 text-emerald-700', dot: 'bg-emerald-500' },
-  failed:       { label: 'Failed',       className: 'bg-red-50 text-red-700',       dot: 'bg-red-500' },
-  needs_review: { label: 'Needs Review', className: 'bg-amber-50 text-amber-700',   dot: 'bg-amber-500' },
-};
-
-export function AgentRunStatusBadge({ status }: { status: AgentRunStatus }) {
-  const config = AGENT_STATUS_CONFIG[status];
-  return (
-    <span className={cn('inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-xs font-medium', config.className)}>
-      <span className={cn('w-1.5 h-1.5 rounded-full', config.dot)} />
       {config.label}
     </span>
   );

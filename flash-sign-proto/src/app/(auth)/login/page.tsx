@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import { useForm } from 'react-hook-form';
@@ -24,6 +24,7 @@ import {
   Zap,
 } from 'lucide-react';
 import type { DemoUserAccount } from '@/lib/rbac';
+import { avatarColorFor } from '@/lib/avatar';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -33,7 +34,6 @@ export default function LoginPage() {
     clearAuthMessage,
     demoAccounts,
     switchDemoAccount,
-    pendingSignupUser,
   } = useDemoAuth();
 
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -54,15 +54,6 @@ export default function LoginPage() {
       rememberMe: true,
     },
   });
-
-  useEffect(() => {
-    if (pendingSignupUser?.email && pendingSignupUser?.organizationSetupCompleted) {
-      setValue('email', pendingSignupUser.email, { shouldValidate: true });
-      if (pendingSignupUser.password) {
-        setValue('password', pendingSignupUser.password, { shouldValidate: true });
-      }
-    }
-  }, [pendingSignupUser, setValue]);
 
   const handle1ClickLogin = async (account: DemoUserAccount) => {
     setLoggingInId(account.id);
@@ -93,8 +84,9 @@ export default function LoginPage() {
     setIsSubmitting(false);
 
     if (!result.success) {
-      if (result.requiresOrgSetup) {
-        router.push('/onboarding/create-organization');
+      // First login: the temporary password from an invitation email worked
+      if (result.requiresPasswordSetup) {
+        router.push('/set-password');
         return;
       }
       setErrorMessage(result.error || 'Invalid email or password. Please try again.');
@@ -102,7 +94,10 @@ export default function LoginPage() {
     }
 
     // Direct route based on authenticated account
-    if (result.rbacUser?.isSuperAdmin) {
+    if (result.requiresOrganizationSetup) {
+      // The Owner hasn't finished "Complete your organisation" (organization.setup_completed_at)
+      router.push('/onboarding/complete-organization');
+    } else if (result.rbacUser?.isSuperAdmin) {
       router.push('/super-admin');
     } else if (result.rbacUser?.dashboardAccess.defaultDashboard === 'my-status') {
       router.push('/projects/home');
@@ -193,7 +188,7 @@ export default function LoginPage() {
                     <div className="flex items-center gap-2.5 min-w-0">
                       <div
                         className="w-8 h-8 rounded-full text-white text-xs font-bold flex items-center justify-center shrink-0 shadow-2xs"
-                        style={{ backgroundColor: account.avatarColor }}
+                        style={{ backgroundColor: avatarColorFor(account.id) }}
                       >
                         {account.avatarInitials}
                       </div>
@@ -314,6 +309,10 @@ export default function LoginPage() {
             {errors.password && (
               <p className="text-xs text-[var(--danger)] mt-1">{errors.password.message}</p>
             )}
+            <p className="text-[11px] text-[var(--muted)] mt-1">
+              Invited? Sign in with the temporary password from your invitation email; you&apos;ll set your own next.
+              (Demo invitations use <span className="font-mono">Welcome-2026</span>.)
+            </p>
           </div>
 
           {/* Submit button */}

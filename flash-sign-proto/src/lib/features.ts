@@ -9,7 +9,7 @@ import { FEATURE_DEFINITIONS, type FeatureKey } from '@/lib/rbac';
  * the active organisation's switches in here with `setActiveOrganizationFeatures`. A feature with
  * no organization_feature row uses its default from FEATURE_DEFINITIONS.
  *
- * `FEATURES.contracts` etc. keep working everywhere they are read; they now return the active
+ * `FEATURES.aiAgents` etc. keep working everywhere they are read; they now return the active
  * organisation's value.
  */
 const DEFAULTS = Object.fromEntries(FEATURE_DEFINITIONS.map(f => [f.key, f.defaultEnabled])) as Record<FeatureKey, boolean>;
@@ -22,10 +22,6 @@ export function setActiveOrganizationFeatures(features: Record<FeatureKey, boole
 }
 
 export const FEATURES = {
-  /** Contracts as a separate record type under Documents. */
-  get contracts(): boolean {
-    return active.contracts;
-  },
   /** AI Agent Hub (Phase 2). */
   get aiAgents(): boolean {
     return active.ai_agents;

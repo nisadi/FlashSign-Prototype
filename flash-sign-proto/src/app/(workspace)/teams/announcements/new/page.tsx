@@ -10,15 +10,6 @@ import { useDemoAuth } from '@/context/demo-auth-context';
 import { canManageTeam } from '@/lib/rbac';
 import { AccessDenied } from '@/components/shared/access-denied';
 
-const AUDIENCE_OPTIONS = [
-  { id: 'all', label: 'Entire Organization' },
-  { id: 'engineering', label: 'Engineering' },
-  { id: 'design', label: 'Product Design' },
-  { id: 'operations', label: 'Operations & DevOps' },
-  { id: 'quality', label: 'Quality Assurance' },
-  { id: 'legal', label: 'Legal & Compliance' },
-];
-
 export default function CreateAnnouncementPage() {
   const router = useRouter();
   const { addAnnouncement, currentUserId } = useApp();
@@ -26,7 +17,6 @@ export default function CreateAnnouncementPage() {
 
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
-  const [audience, setAudience] = useState('all');
   const [priority, setPriority] = useState<AnnouncementPriority>('normal');
   const [publishedDate, setPublishedDate] = useState('2026-10-21');
   const [isPinned, setIsPinned] = useState(false);
@@ -67,7 +57,6 @@ export default function CreateAnnouncementPage() {
     addAnnouncement({
       title: trimmedTitle,
       content: trimmedContent,
-      audience,
       priority,
       isPinned,
       authorId: currentUserId,
@@ -133,21 +122,6 @@ export default function CreateAnnouncementPage() {
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div>
-                <label className="block font-semibold text-ink mb-1">Audience Target</label>
-                <select
-                  value={audience}
-                  onChange={e => setAudience(e.target.value)}
-                  className="w-full px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-                >
-                  {AUDIENCE_OPTIONS.map(opt => (
-                    <option key={opt.id} value={opt.id}>
-                      {opt.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
               <div>
                 <label className="block font-semibold text-ink mb-1">Priority</label>
                 <select

@@ -25,17 +25,11 @@ export default function AnnouncementsPage() {
 
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState<'all' | 'unread' | 'important' | 'pinned'>('all');
-  const [audienceFilter, setAudienceFilter] = useState('all');
 
   const [createDialogOpen, setCreateDialogOpen] = useState(false);
   const [announcementToEdit, setAnnouncementToEdit] = useState<Announcement | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [deleteConfirmAnn, setDeleteConfirmAnn] = useState<Announcement | null>(null);
-
-  // Audiences
-  const audienceOptions = useMemo(() => {
-    return Array.from(new Set(announcements.map(a => a.audience)));
-  }, [announcements]);
 
   const filteredAnnouncements = useMemo(() => {
     return announcements
@@ -51,9 +45,7 @@ export default function AnnouncementsPage() {
         else if (filter === 'important') matchesTab = a.priority === 'important';
         else if (filter === 'pinned') matchesTab = a.isPinned;
 
-        const matchesAudience = audienceFilter === 'all' || a.audience === audienceFilter;
-
-        return matchesSearch && matchesTab && matchesAudience;
+        return matchesSearch && matchesTab;
       })
       .sort((a, b) => {
         // Pinned first, then by published date descending
@@ -61,7 +53,7 @@ export default function AnnouncementsPage() {
         if (!a.isPinned && b.isPinned) return 1;
         return new Date(b.publishedDate).getTime() - new Date(a.publishedDate).getTime();
       });
-  }, [announcements, search, filter, audienceFilter, currentUserId]);
+  }, [announcements, search, filter, currentUserId]);
 
   // Only team managers create, edit, pin and delete; everyone else reads on My Status
   if (currentRbacUser && !canManageTeam(currentRbacUser)) {
@@ -128,19 +120,6 @@ export default function AnnouncementsPage() {
               />
             </div>
 
-            {/* Audience filter */}
-            <select
-              value={audienceFilter}
-              onChange={e => setAudienceFilter(e.target.value)}
-              className="px-3 py-2 rounded-lg bg-paper border border-line text-ink focus:outline-hidden focus:border-flash text-xs"
-            >
-              <option value="all">All Audiences</option>
-              {audienceOptions.map(aud => (
-                <option key={aud} value={aud}>
-                  Audience: {aud}
-                </option>
-              ))}
-            </select>
           </div>
 
           {/* Filter Pills */}
@@ -197,9 +176,6 @@ export default function AnnouncementsPage() {
                           </span>
                         )}
                         <AnnouncementPriorityBadge priority={ann.priority} />
-                        <span className="px-2 py-0.5 rounded-md text-[10px] font-semibold bg-mist/60 text-muted border border-line capitalize">
-                          Audience: {ann.audience}
-                        </span>
                         {isUnread && (
                           <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-flash/20 text-flash-deep border border-flash/40">
                             Unread

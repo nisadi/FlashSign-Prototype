@@ -4,24 +4,24 @@
 import React, { useState } from 'react';
 import { Stamp, Plus, Pencil, Trash2, Upload, ShieldCheck, Lock } from 'lucide-react';
 import { useApp, useCurrentUser } from '@/context/app-context';
-import { ROLE_CONFIGS, canManageDocuments } from '@/lib/permissions';
-import type { CompanySeal, DemoRole } from '@/types';
+import { canManageDocuments } from '@/lib/permissions';
+import type { CompanySeal } from '@/types';
+import { useDemoAuth } from '@/context/demo-auth-context';
+import { OWNER_ROLE_ID } from '@/lib/invitations';
 import { cn } from '@/lib/utils';
 import { SettingsCard, SettingsToggle, SaveButton, inputClass } from '@/components/settings/settings-layout';
 
 const MAX_SEAL_BYTES = 500 * 1024;
 const SEAL_TYPES = ['image/png', 'image/svg+xml', 'image/jpeg'];
 
-// Integration accounts never sign, so they can't hold a seal
-const SEAL_ROLES = (Object.keys(ROLE_CONFIGS) as DemoRole[]).filter(r => r !== 'integration_service');
-
-type SealForm = Pick<CompanySeal, 'name' | 'description' | 'image' | 'allowedRoles' | 'isActive'>;
+type SealForm = Pick<CompanySeal, 'name' | 'description' | 'image' | 'allowedRoleIds' | 'isActive'>;
 
 const EMPTY_FORM: SealForm = {
   name: '',
   description: '',
   image: '',
-  allowedRoles: ['ceo', 'document_manager'],
+  // company_seal_role: starts with the Organization Owner role
+  allowedRoleIds: [OWNER_ROLE_ID],
   isActive: true,
 };
 
@@ -32,6 +32,9 @@ export function CompanySeals() {
   const { companySeals, addCompanySeal, updateCompanySeal, deleteCompanySeal, demoRole } = useApp();
   const user = useCurrentUser();
   const canManage = canManageDocuments(demoRole);
+  // The organisation's own roles (role rows); a seal is given to roles by id
+  const { roles } = useDemoAuth();
+  const roleName = (id: string) => roles.find(r => r.id === id)?.name ?? 'Deleted role';
 
   // null = closed, 'new' = adding, otherwise the id being edited
   const [editing, setEditing] = useState<string | null>(null);
@@ -45,7 +48,7 @@ export function CompanySeals() {
   };
 
   const openEdit = (seal: CompanySeal) => {
-    setForm({ name: seal.name, description: seal.description ?? '', image: seal.image, allowedRoles: seal.allowedRoles, isActive: seal.isActive });
+    setForm({ name: seal.name, description: seal.description ?? '', image: seal.image, allowedRoleIds: seal.allowedRoleIds, isActive: seal.isActive });
     setImageError(null);
     setEditing(seal.id);
   };
@@ -60,13 +63,13 @@ export function CompanySeals() {
     reader.readAsDataURL(file);
   };
 
-  const toggleRole = (role: DemoRole) =>
+  const toggleRole = (roleId: string) =>
     setForm(f => ({
       ...f,
-      allowedRoles: f.allowedRoles.includes(role) ? f.allowedRoles.filter(r => r !== role) : [...f.allowedRoles, role],
+      allowedRoleIds: f.allowedRoleIds.includes(roleId) ? f.allowedRoleIds.filter(r => r !== roleId) : [...f.allowedRoleIds, roleId],
     }));
 
-  const canSave = form.name.trim() && form.image && form.allowedRoles.length > 0;
+  const canSave = form.name.trim() && form.image && form.allowedRoleIds.length > 0;
 
   const handleSave = () => {
     if (!canSave || !editing) return;
@@ -116,9 +119,9 @@ export function CompanySeals() {
               {seal.description && <p className="text-muted">{seal.description}</p>}
               <p className="flex items-center gap-1.5 flex-wrap text-muted">
                 <ShieldCheck className="w-3.5 h-3.5" /> Can be applied by:
-                {seal.allowedRoles.map(r => (
-                  <span key={r} className="px-1.5 py-0.5 rounded bg-paper-elevated border border-line text-ink">
-                    {ROLE_CONFIGS[r as DemoRole]?.label ?? r}
+                {seal.allowedRoleIds.map(id => (
+                  <span key={id} className="px-1.5 py-0.5 rounded bg-paper-elevated border border-line text-ink">
+                    {roleName(id)}
                   </span>
                 ))}
               </p>
@@ -193,25 +196,25 @@ export function CompanySeals() {
           <div>
             <span className="block font-semibold text-ink mb-1.5">Who can apply this seal</span>
             <div className="flex flex-wrap gap-2">
-              {SEAL_ROLES.map(role => {
-                const on = form.allowedRoles.includes(role);
+              {roles.map(role => {
+                const on = form.allowedRoleIds.includes(role.id);
                 return (
                   <button
-                    key={role}
+                    key={role.id}
                     type="button"
                     aria-pressed={on}
-                    onClick={() => toggleRole(role)}
+                    onClick={() => toggleRole(role.id)}
                     className={cn(
                       'px-2.5 py-1 rounded-lg border font-medium transition-colors',
                       on ? 'bg-ink text-white border-ink' : 'bg-paper-elevated text-muted border-line hover:text-ink'
                     )}
                   >
-                    {ROLE_CONFIGS[role].label}
+                    {role.name}
                   </button>
                 );
               })}
             </div>
-            {form.allowedRoles.length === 0 && <p className="mt-1 text-danger">Choose at least one role.</p>}
+            {form.allowedRoleIds.length === 0 && <p className="mt-1 text-danger">Choose at least one role.</p>}
           </div>
 
           <SettingsToggle
